@@ -1,0 +1,557 @@
+{
+ "version": "1.0",
+ "date": "2026-09-19",
+ "spec": "engine_spec_v1_3.md",
+ "tolerance": {
+  "tm": 0.05,
+  "beta": 0.002,
+  "load": 0
+ },
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down).",
+ "barbell": [
+  {
+   "name": "fs_cal_up",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 9,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 105.917,
+    "T": 95.325,
+    "gap": 0.036,
+    "step": 3.325,
+    "tm": 95.325,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_pos3_load": null,
+   "next_loads": {
+    "1": 77.5,
+    "2": 80.0,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "fs_cal_bias",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 7,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 100.75,
+    "T": 90.675,
+    "gap": -0.014,
+    "step": 0,
+    "tm": 92.0,
+    "beta": 1.015,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "fs_cal_10",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 10,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 108.5,
+    "T": 97.65,
+    "gap": 0.061,
+    "step": 4.6,
+    "tm": 96.6,
+    "beta": 0.989,
+    "single": false
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 87.5
+   }
+  },
+  {
+   "name": "fs_cal_biggap_up",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 11,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 111.083,
+    "T": 99.975,
+    "gap": 0.087,
+    "step": 4.6,
+    "tm": 96.6,
+    "beta": 0.966,
+    "single": true
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 87.5
+   }
+  },
+  {
+   "name": "fs_cal_biggap_down",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 4,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 93.0,
+    "T": 83.7,
+    "gap": -0.09,
+    "step": 0,
+    "tm": 92.0,
+    "beta": 1.099,
+    "single": true
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "fs_failure_rir",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 3,
+    "rir": 1
+   },
+   "expect": {
+    "rule": "failure",
+    "tm": 89.7,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "fs_failure_missed",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 3,
+    "rir": 2,
+    "missed": true
+   },
+   "expect": {
+    "rule": "failure",
+    "tm": 89.7,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "fs_position1",
+   "input": {
+    "tm": 92.0,
+    "pos": 1,
+    "load": 72.5,
+    "reps": 4,
+    "rir": 3,
+    "presc": 4
+   },
+   "expect": {
+    "rule": "position1",
+    "tm": 92.0,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "matched_normal",
+   "input": {
+    "tm": 95.3,
+    "pos": 2,
+    "load": 80,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "matched",
+    "E": 106.667,
+    "T": 96.0,
+    "gap": 0.007,
+    "step": 0.35,
+    "tm": 95.65,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "matched_biggap_up",
+   "input": {
+    "tm": 94.0,
+    "pos": 2,
+    "load": 80,
+    "reps": 10,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "biggap",
+    "E": 112.0,
+    "T": 100.8,
+    "gap": 0.072,
+    "step": 4.7,
+    "tm": 98.7,
+    "beta": 1.0,
+    "single": true
+   },
+   "next_loads": {
+    "1": 80.0,
+    "2": 85.0,
+    "3": 90.0
+   }
+  },
+  {
+   "name": "matched_biggap_down",
+   "input": {
+    "tm": 94.0,
+    "pos": 2,
+    "load": 80,
+    "reps": 3,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "biggap",
+    "E": 93.333,
+    "T": 84.0,
+    "gap": -0.106,
+    "step": -4.7,
+    "tm": 89.3,
+    "beta": 1.0,
+    "single": true
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "matched_beta_bias",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.014
+   },
+   "expect": {
+    "rule": "matched",
+    "E": 103.333,
+    "T": 94.302,
+    "gap": 0.025,
+    "step": 1.151,
+    "tm": 93.151,
+    "beta": 1.014,
+    "single": false
+   },
+   "next_loads": {
+    "1": 75.0,
+    "2": 80.0,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "dl_cal",
+   "input": {
+    "tm": 145.2,
+    "pos": 2,
+    "load": 122.5,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.025
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 163.333,
+    "T": 147.0,
+    "gap": 0.012,
+    "step": 1.8,
+    "tm": 147.0,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_loads": {
+    "1": 117.5,
+    "2": 125.0,
+    "3": 132.5
+   }
+  }
+ ],
+ "rounding": [
+  {
+   "raw": 78.2,
+   "expect": 77.5
+  },
+  {
+   "raw": 123.4,
+   "expect": 122.5
+  },
+  {
+   "raw": 86.25,
+   "expect": 85.0
+  },
+  {
+   "raw": 83.7,
+   "expect": 82.5
+  },
+  {
+   "raw": 86.94,
+   "expect": 87.5
+  },
+  {
+   "raw": 130.68,
+   "expect": 130.0
+  },
+  {
+   "raw": 132.3,
+   "expect": 132.5
+  }
+ ],
+ "audit_rescale": {
+  "tm_before": 96.0,
+  "single": 102.5,
+  "betas_before": {
+   "2": 1.0,
+   "3": 1.02
+  },
+  "expect": {
+   "tm": 99.194,
+   "betas": {
+    "2": 1.033,
+    "3": 1.054
+   }
+  }
+ },
+ "downward_trigger": {
+  "steps": [
+   -1.2,
+   -0.8
+  ],
+  "expect": "next session position 1, 2 sets; restores after one non-negative step"
+ },
+ "rdl": [
+  {
+   "session": 1,
+   "reps": 13,
+   "expect_delta": 10
+  },
+  {
+   "session": 4,
+   "reps": 13,
+   "expect_delta": 5
+  },
+  {
+   "session": 2,
+   "reps": 10,
+   "expect_delta": 5
+  },
+  {
+   "session": 2,
+   "reps": 9,
+   "expect_delta": 2.5
+  },
+  {
+   "session": 2,
+   "reps": 6,
+   "expect_delta": 0
+  },
+  {
+   "session": 2,
+   "reps": 5,
+   "expect_delta": -5
+  }
+ ],
+ "accessory": [
+  {
+   "slot": "db_push_press_strength",
+   "history_last_set_reps": [
+    9,
+    8
+   ],
+   "expect": "hold (streak broken)"
+  },
+  {
+   "slot": "db_push_press_strength",
+   "history_last_set_reps": [
+    9,
+    9
+   ],
+   "expect": "+2 kg/hand"
+  },
+  {
+   "slot": "weighted_pull_up",
+   "history_last_set_reps": [
+    7,
+    8
+   ],
+   "expect": "+2.5 kg"
+  },
+  {
+   "slot": "bulgarian_split_squat",
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "-2 kg/hand (below prescribed twice)"
+  },
+  {
+   "slot": "hack_squat",
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "site_flag_last_48h": true,
+   "expect": "hold (L8 freeze)"
+  }
+ ],
+ "trap_bar_jump": [
+  {
+   "fs_tm": 92.0,
+   "bar_kg": 24,
+   "est_1rm": 102.2,
+   "expect_load": 24,
+   "why": "band 9.2-18.4 below bar; bar under 30% ceiling 30.7"
+  },
+  {
+   "fs_tm": 140.0,
+   "bar_kg": 24,
+   "est_1rm": 155.6,
+   "expect_load": 24,
+   "why": "band 14-28 contains the bar; start at the bar (lowest loadable value inside the band)"
+  }
+ ],
+ "cmj": {
+  "series": [
+   38.2,
+   37.6,
+   38.9,
+   38.0,
+   37.4,
+   38.5,
+   38.1,
+   37.9
+  ],
+  "mean": 38.075,
+  "te": 0.62,
+  "drop": 1.718,
+  "threshold": 36.357,
+  "rule": "flag if value < mean - max(2.77*TE, 0.03*mean); TE = sample SD of consecutive differences / sqrt(2); before 8 points: flag if value < running mean * 0.95",
+  "cases": [
+   {
+    "value": 36.3,
+    "expect_flag": true
+   },
+   {
+    "value": 36.5,
+    "expect_flag": false
+   }
+  ]
+ },
+ "flare_ladder": {
+  "site": "patellar",
+  "cut_first_slot": "hack_squat",
+  "pre_flare_kg": 100,
+  "cut": 0.4,
+  "load_by_clear_site_exposures_since_flag": {
+   "0-2": 60,
+   "3-5": 70,
+   "6-8": 80,
+   "9-11": 90,
+   "12+": 100
+  },
+  "plyometrics": "out until slot is back at 100 and clear; then contacts restart at 50% of pre-flare",
+  "second_consecutive_flag_or_over_5_or_night_pain": "engine stops prescribing for the site and shows refer-to-project"
+ },
+ "gap": [
+  {
+   "days": 10,
+   "expect": "same TM and position; depth-jump contacts halved; no rep-out on tempo slots"
+  },
+  {
+   "days": 15,
+   "expect": "audit single both lifts"
+  }
+ ],
+ "golden_sessions": "Week 2 Day 1 and Day 2 as written in training_log_2026_w01_w02_r3.md must be reproduced by prescribe() from initial_state_v1.json and programme_config_v1.json."
+}

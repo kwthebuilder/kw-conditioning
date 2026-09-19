@@ -1,0 +1,87 @@
+{
+ "schema": 1,
+ "as_of": "2026-09-19",
+ "lifts": {
+  "front_squat": {
+   "tm": 92.0,
+   "beta": {
+    "2": null,
+    "3": null
+   },
+   "next_position": 2,
+   "sessions_logged": 1,
+   "neg_streak": 0,
+   "single_scheduled": false
+  },
+  "deadlift": {
+   "tm": 145.2,
+   "beta": {
+    "2": null,
+    "3": null
+   },
+   "next_position": 2,
+   "sessions_logged": 1,
+   "neg_streak": 0,
+   "single_scheduled": false
+  }
+ },
+ "rdl": {
+  "load_kg": 100,
+  "sessions_logged": 0
+ },
+ "accessories": {
+  "db_pp_strength": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "pull_up": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "landmine_press": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "cs_row": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "bss": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "hack_squat": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "abductor_hsr": {
+   "load": null,
+   "streak_up": 0,
+   "streak_down": 0
+  }
+ },
+ "depth_jump": {
+  "height_cm": null,
+  "ladder_due": true
+ },
+ "trap_bar_jump": {
+  "load_kg": 24,
+  "heights": []
+ },
+ "cmj": {
+  "series": [],
+  "baseline": null
+ },
+ "flare": {
+  "patellar": null,
+  "gluteal": null
+ },
+ "pending_precuts": [],
+ "log": []
+}
