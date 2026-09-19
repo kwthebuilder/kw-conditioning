@@ -61,11 +61,12 @@ describe('load override: the overridden load is what update reads', () => {
 });
 
 describe('training-max override drives the next prescription', () => {
-  it('sets the TM unrounded, keeps β, records it, and the next loads follow', () => {
+  it('sets the TM unrounded, scales β by new ÷ old (A.18), records it, and the next loads follow', () => {
     const state = stateWith('deadlift', { tm: 145.2, beta: { '2': 1.01 }, next_position: 2 });
     const r = overrideTm(state, 'deadlift', 150.3, M1_DATE, 'after physio review');
     expect(r.state.lifts.deadlift.tm).toBe(150.3);
-    expect(r.state.lifts.deadlift.beta['2']).toBe(1.01);
+    expect(r.state.lifts.deadlift.beta['2']).toBeCloseTo(1.01 * (150.3 / 145.2), 12);
+    expect(r.state.lifts.deadlift.beta['3']).toBeNull();
     expect(r.state.overrides).toEqual([{ kind: 'tm', date: M1_DATE, lift: 'deadlift', from: 145.2, to: 150.3, note: 'after physio review' }]);
     expect(state.lifts.deadlift.tm).toBe(145.2);
     const p = prescribeLift(r.state, cfg, 'deadlift', M1_DATE);
@@ -83,7 +84,7 @@ describe('training-max override drives the next prescription', () => {
 });
 
 describe('singles are a suggestion, never forced', () => {
-  it('a scheduled single leaves the normal prescription intact and keeps suggesting until taken', () => {
+  it('a scheduled single leaves the normal prescription intact and is cleared when skipped (A.17)', () => {
     const s = stateWith('front_squat', { tm: 92, next_position: 2 });
     s.lifts.front_squat.single_scheduled = true;
     const p = prescribeLift(s, cfg, 'front_squat', M1_DATE);
@@ -93,12 +94,22 @@ describe('singles are a suggestion, never forced', () => {
     expect(p.par).toBe(cfg.wave.positions['2'].par);
     expect(p.tm).toBe(92);
     expect(p.notes.join(' ')).toMatch(/suggested/);
-    // Skipped: the session updates as normal and the suggestion persists.
+    // Skipped: the session updates as normal and the suggestion is cleared.
     const log: BarbellLog = { lift: 'front_squat', date: M1_DATE, mode: 'wave', position: 2, prescribed: { load: p.load, reps: p.reps, sets: p.sets }, last_set: { load: p.load, reps: 9, rir: 2 }, missed: false };
     const r = updateLift(s, cfg, log);
     expect(r.outcome.rule).toBe('calibration');
+    expect(r.state.lifts.front_squat.single_scheduled).toBe(false);
+    expect(r.explanation.steps.some((x) => x.rule === 'single_skipped')).toBe(true);
+    expect(prescribeLift(r.state, cfg, 'front_squat', M1_DATE)).not.toHaveProperty('single_suggested');
+  });
+
+  it('a skipped single that itself produces a new big gap stays scheduled', () => {
+    const s = stateWith('front_squat', { tm: 94, beta: { '2': 1 }, next_position: 2 });
+    s.lifts.front_squat.single_scheduled = true;
+    const log: BarbellLog = { lift: 'front_squat', date: M1_DATE, mode: 'wave', position: 2, prescribed: { load: 80, reps: 3, sets: 3 }, last_set: { load: 80, reps: 10, rir: 2 }, missed: false };
+    const r = updateLift(s, cfg, log);
+    expect(r.outcome.rule).toBe('biggap');
     expect(r.state.lifts.front_squat.single_scheduled).toBe(true);
-    expect(prescribeLift(r.state, cfg, 'front_squat', M1_DATE)).toMatchObject({ single_suggested: { reason: 'big_gap', taken: false } });
   });
 
   it('a skipped boundary suggestion is not repeated after the first session in the mesocycle', () => {

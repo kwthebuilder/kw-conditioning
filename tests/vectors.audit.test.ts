@@ -88,11 +88,10 @@ describe('when a single opens the session (2.8, Q4 ruling)', () => {
     const p = prescribeLift(s, PROGRAMME_CONFIG, 'deadlift', m('M2').start);
     expect(p.kind === 'lift' && p.single_suggested).toBeUndefined();
   });
-  it('a gap over 14 days does', () => {
+  it('a long gap does not (A.15: no gap-based single)', () => {
     const s = stateWith('front_squat', { tm: 100 });
     s.lifts.front_squat.last_logged = '2026-09-21';
-    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-05')).not.toHaveProperty('single_suggested');
-    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-06')).toMatchObject({ single_suggested: { reason: 'gap', taken: false } });
+    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-20')).not.toHaveProperty('single_suggested');
   });
   it('INTENSIVE has no barbell mode, so refer to project', () => {
     const s = stateWith('front_squat', { tm: 100 });

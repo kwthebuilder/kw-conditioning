@@ -83,11 +83,6 @@ function ensureAccessory(state: State, id: SlotId): AccessoryState {
   return fresh;
 }
 
-export interface ProgressionContext {
-  /** L8 / §3: the slot's site was flagged in the last 48 h, so no upward step. */
-  site_flagged?: boolean;
-}
-
 // ---------------------------------------------------------------------
 // prescribe
 // ---------------------------------------------------------------------
@@ -125,13 +120,7 @@ export function prescribeProgression(state: State, config: ProgrammeConfig, id: 
 // update
 // ---------------------------------------------------------------------
 
-export function updateProgression(
-  state: State,
-  config: ProgrammeConfig,
-  log: SlotLog,
-  rule: ProgressionRule,
-  ctx: ProgressionContext = {},
-): SlotUpdateResult {
+export function updateProgression(state: State, config: ProgrammeConfig, log: SlotLog, rule: ProgressionRule): SlotUpdateResult {
   const slot = slotOf(config, log.slot);
   const increment = parseIncrement(slot);
   const next = structuredClone(state);
@@ -192,9 +181,6 @@ export function updateProgression(
     if (frozen) {
       outcome.withheld = 'freeze';
       steps.push(explainStep('freeze', `Step up earned but week ${week} is past week ${config.freeze.no_upward_steps_after_week}: no upward steps. Load holds at ${kg(acc.load)}.`, { week }));
-    } else if (ctx.site_flagged) {
-      outcome.withheld = 'site_flag';
-      steps.push(explainStep('site_flag', `Step up earned but the site was flagged in the last 48 h: load holds at ${kg(acc.load)} (L8).`, {}));
     } else {
       direction = 'up';
       acc.streak_up = 0;
@@ -253,6 +239,6 @@ export function prescribeAccessory(state: State, config: ProgrammeConfig, id: Sl
   return prescribeProgression(state, config, id, ruleForClassC(slotOf(config, id)));
 }
 
-export function updateAccessory(state: State, config: ProgrammeConfig, log: SlotLog, ctx: ProgressionContext = {}): SlotUpdateResult {
-  return updateProgression(state, config, log, ruleForClassC(slotOf(config, log.slot)), ctx);
+export function updateAccessory(state: State, config: ProgrammeConfig, log: SlotLog): SlotUpdateResult {
+  return updateProgression(state, config, log, ruleForClassC(slotOf(config, log.slot)));
 }

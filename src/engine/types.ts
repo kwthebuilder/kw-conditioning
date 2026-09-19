@@ -21,7 +21,8 @@ export interface BarbellLog {
   override?: LoadOverride;
 }
 
-export type SingleReason = 'boundary' | 'gap' | 'big_gap';
+/** A.15: a big-gap flag, or entering M2, M3 or M4. */
+export type SingleReason = 'boundary' | 'big_gap';
 
 export interface RampSet {
   load: number;
@@ -160,8 +161,8 @@ export interface SlotOutcome {
   streak_up: number;
   streak_down: number;
   pending?: 'up' | 'down';
-  /** An earned upward step was withheld (week-22 freeze or site flag). */
-  withheld?: 'freeze' | 'site_flag';
+  /** An earned upward step was withheld by the week-22 freeze. */
+  withheld?: 'freeze';
 }
 
 export interface SlotUpdateResult {

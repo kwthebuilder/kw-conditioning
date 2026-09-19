@@ -25,7 +25,6 @@ export {
   incrementText,
   ruleForClassC,
   type ProgressionRule,
-  type ProgressionContext,
 } from './accessory';
 // Classes D, E, F: fixed prescriptions
 export { prescribeFixed, contactsFor } from './fixed';

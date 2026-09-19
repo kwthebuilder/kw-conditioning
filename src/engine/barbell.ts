@@ -6,7 +6,7 @@
  * Pure: no clock, no randomness, no I/O. Dates come in on the log.
  */
 import type { LiftId, LiftState, Mesocycle, Position, ProgrammeConfig, State } from '../config/types';
-import { daysBetween, mesocycleOn, programmeWeek } from './calendar';
+import { mesocycleOn, programmeWeek } from './calendar';
 import { roundLoad } from './rounding';
 import type {
   BarbellLog,
@@ -42,8 +42,6 @@ const FAILURE_CUT = 0.025;
 /** 2.7: consecutive negative steps that trigger the downward session. */
 const DOWNWARD_STREAK = 2;
 const DOWNWARD_SETS = 2;
-/** 2.8: gap that forces an audit single. */
-const AUDIT_GAP_DAYS = 14;
 /** 2.9 M2 band. */
 const BAND_LOW = 0.87;
 const BAND_HIGH = 0.9;
@@ -56,7 +54,6 @@ const BOUNDARY_AUDIT_MESOCYCLES = new Set<string>(['M2', 'M3', 'M4']);
 const SINGLE_REASON_TEXT: Record<SingleReason, string> = {
   big_gap: 'Last session disagreed with the TM by 7% or more.',
   boundary: 'First session of a new mesocycle.',
-  gap: 'More than 14 days since the last session on this lift.',
 };
 
 // ---------------------------------------------------------------------
@@ -113,11 +110,11 @@ function downwardActive(ls: LiftState): boolean {
 // prescribe
 // ---------------------------------------------------------------------
 
-function singleReason(ls: LiftState, meso: Mesocycle, date: string): SingleReason | undefined {
+/** A.15: big-gap flag, or entering M2, M3 or M4. No gap-based single. */
+function singleReason(ls: LiftState, meso: Mesocycle): SingleReason | undefined {
   if (ls.single_scheduled) return 'big_gap';
   const last = ls.last_mesocycle ?? 'M1';
   if (BOUNDARY_AUDIT_MESOCYCLES.has(meso.id) && last !== meso.id) return 'boundary';
-  if (ls.last_logged !== undefined && daysBetween(ls.last_logged, date) > AUDIT_GAP_DAYS) return 'gap';
   return undefined;
 }
 
@@ -151,7 +148,7 @@ export function prescribeLift(
     };
   }
 
-  const reason = singleReason(ls, meso, date);
+  const reason = singleReason(ls, meso);
   const taken = reason !== undefined && singleLoad !== undefined;
   const notes: string[] = [];
   const tm = reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
@@ -471,11 +468,18 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
     );
   }
 
+  // A.17: a suggested single that was not taken is cleared, not carried.
+  const skippedSingle = log.single === undefined && ls.single_scheduled;
   const tmBefore = ls.tm;
   const work = log.mode === 'wave' ? evaluateWave(ls, config, log.lift, log, frozen) : evaluateHeld(ls, log, frozen);
   ls.tm = tmBefore + work.step;
   steps.push(...work.steps);
-  if (work.scheduleSingle) ls.single_scheduled = true;
+  if (work.scheduleSingle) {
+    ls.single_scheduled = true;
+  } else if (skippedSingle) {
+    ls.single_scheduled = false;
+    steps.push(explainStep('single_skipped', 'The suggested ramp single was skipped, so the suggestion is cleared.', { single_scheduled: false }));
+  }
 
   // Streak (A.6) and downward trigger bookkeeping (2.7, Q2 ruling).
   if (log.mode === 'wave') {

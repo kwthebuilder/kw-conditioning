@@ -1,12 +1,12 @@
 /**
  * Class B streak slots: hack squat and gluteal abductor HSR (§3).
  * Last set to RIR 2 at tempo. up_at reps in two consecutive sessions →
- * one increment up; under down_below in two → one increment down. No
- * upward step if the site was flagged in the last 48 h (L8).
+ * one increment up; under down_below in two → one increment down.
  * Hack squat steps 5 kg (Q6 ruling); the cable slot shows "one plate".
+ * A.19: no site-flag input; tissue handling is outside the engine.
  */
 import type { ProgrammeConfig, Slot, SlotId, State } from '../config/types';
-import { prescribeProgression, slotOf, updateProgression, type ProgressionContext, type ProgressionRule } from './accessory';
+import { prescribeProgression, slotOf, updateProgression, type ProgressionRule } from './accessory';
 import type { SlotLog, SlotPrescription, SlotUpdateResult } from './types';
 
 function need<T>(slot: Slot, key: string, v: T | undefined): T {
@@ -34,6 +34,6 @@ export function prescribeTempo(state: State, config: ProgrammeConfig, id: SlotId
   return p;
 }
 
-export function updateTempo(state: State, config: ProgrammeConfig, log: SlotLog, ctx: ProgressionContext = {}): SlotUpdateResult {
-  return updateProgression(state, config, log, ruleForClassB(slotOf(config, log.slot)), ctx);
+export function updateTempo(state: State, config: ProgrammeConfig, log: SlotLog): SlotUpdateResult {
+  return updateProgression(state, config, log, ruleForClassB(slotOf(config, log.slot)));
 }

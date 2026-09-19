@@ -26,7 +26,7 @@ function seeded(slot: SlotId, load = SEED_LOAD): State {
   return s;
 }
 
-function run(state: State, slot: SlotId, reps: number, opts: { site_flagged?: boolean } = {}): SlotUpdateResult {
+function run(state: State, slot: SlotId, reps: number): SlotUpdateResult {
   const cls = cfg.slots[slot]!.cls;
   const log: SlotLog = {
     slot,
@@ -35,7 +35,7 @@ function run(state: State, slot: SlotId, reps: number, opts: { site_flagged?: bo
     sets_done: 3,
     last_set: { reps, rir: cfg.slots[slot]!.rir_cap ?? 2 },
   };
-  return cls === 'B' ? updateTempo(state, cfg, log, opts) : updateAccessory(state, cfg, log, opts);
+  return cls === 'B' ? updateTempo(state, cfg, log) : updateAccessory(state, cfg, log);
 }
 
 /** "+2 kg/hand" → up 2 per hand; "-2 kg/hand (…)" → down; "hold (…)" → hold. */
@@ -49,21 +49,21 @@ function parseExpect(text: string): { direction: 'up' | 'down' | 'hold'; kg?: nu
 describe('accessory vectors (§3 streak slots, §4 double progression)', () => {
   for (const v of TEST_VECTORS.accessory) {
     const slot = VECTOR_SLOT_ALIAS[v.slot] ?? v.slot;
-    it(`${v.slot} ${JSON.stringify(v.history_last_set_reps)}${v.site_flag_last_48h ? ' + site flag' : ''} → ${v.expect}`, () => {
+    // A.19 removed the site-flag input; a v1 case that depends on it is skipped until vectors v1.1 lands.
+    const test = v.site_flag_last_48h ? it.skip : it;
+    test(`${v.slot} ${JSON.stringify(v.history_last_set_reps)} → ${v.expect}`, () => {
       expect(cfg.slots[slot], `config has ${slot}`).toBeDefined();
       const want = parseExpect(v.expect);
       let state = seeded(slot);
       let last: SlotUpdateResult | undefined;
-      v.history_last_set_reps.forEach((reps, i) => {
-        const isLast = i === v.history_last_set_reps.length - 1;
-        last = run(state, slot, reps, isLast && v.site_flag_last_48h ? { site_flagged: true } : {});
+      for (const reps of v.history_last_set_reps) {
+        last = run(state, slot, reps);
         state = last.state;
-      });
+      }
       const out = last!.outcome;
       expect(out.direction).toBe(want.direction);
       if (want.direction === 'hold') {
         expect(out.load_after).toBe(SEED_LOAD);
-        if (v.site_flag_last_48h) expect(out.withheld).toBe('site_flag');
       } else {
         const inc = parseIncrement(cfg.slots[slot]!);
         expect(inc.kind).toBe('kg');

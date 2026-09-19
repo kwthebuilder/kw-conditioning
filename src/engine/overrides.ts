@@ -44,12 +44,22 @@ export function overrideTm(state: State, lift: LiftId, tm: number, date: string,
   const next = structuredClone(state);
   const ls = next.lifts[lift];
   const from = ls.tm;
+  const ratio = tm / from;
+  // A.18: an override is a level change, so the mapping scales with it, as after a single (2.8).
+  const betaText: string[] = [];
+  for (const p of ['2', '3'] as const) {
+    const b = ls.beta[p];
+    if (b !== null) {
+      ls.beta[p] = b * ratio;
+      betaText.push(`β${p} ${b.toFixed(3)} → ${(b * ratio).toFixed(3)}`);
+    }
+  }
   ls.tm = tm;
   const rec = { kind: 'tm' as const, date, lift, from, to: tm };
   (next.overrides ??= []).push(note !== undefined ? { ...rec, note } : rec);
-  const text = `${lift} training max set by hand: ${f1(from)} → ${f1(tm)} kg${note ? ` (${note})` : ''}. β values are unchanged; the next prescription uses ${f1(tm)}.`;
+  const text = `${lift} training max set by hand: ${f1(from)} → ${f1(tm)} kg${note ? ` (${note})` : ''}. Every β scales by ${ratio.toFixed(3)}${betaText.length ? ` (${betaText.join(', ')})` : ''}; the next prescription uses ${f1(tm)}.`;
   return {
     state: next,
-    explanation: { summary: text, steps: [explainStep('override_tm', text, { from, to: tm })] },
+    explanation: { summary: text, steps: [explainStep('override_tm', text, { from, to: tm, ratio })] },
   };
 }
