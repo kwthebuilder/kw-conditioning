@@ -18,7 +18,10 @@ npm run preview   # serve dist/ on the LAN
 ```
 spec/            read-only contracts: engine spec, vectors, config, initial state, golden log
 src/
-  engine/        pure module: no DOM, storage, clock, randomness or network. Phase 1+.
+  engine/        pure module: no DOM, storage, clock, randomness or network
+    barbell.ts   class A: prescribeLift / updateLift (phase 1)
+    rounding.ts  nearest 2.5 kg, ties down
+    calendar.ts  mesocycle and programme week by date
   config/        types derived from spec/*.json, validators, and the bundled loader
   storage/       device store, export, import. Phase 4.
   ui/            screens. Phase 5. Phase 0 holds the placeholder page.

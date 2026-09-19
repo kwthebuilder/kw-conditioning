@@ -215,7 +215,7 @@ const position = oneOf(POSITIONS);
 
 function liftState(v: unknown, path: string): LiftState {
   const o = obj(v, path);
-  return {
+  const ls: LiftState = {
     tm: req(o, 'tm', path, num),
     beta: req(o, 'beta', path, exactKeys(['2', '3'] as const, (b, p) => nullable(b, p, num))),
     next_position: req(o, 'next_position', path, position),
@@ -223,6 +223,21 @@ function liftState(v: unknown, path: string): LiftState {
     neg_streak: req(o, 'neg_streak', path, int),
     single_scheduled: req(o, 'single_scheduled', path, bool),
   };
+  const lastLogged = optional(o, 'last_logged', path, isoDate);
+  if (lastLogged !== undefined) ls.last_logged = lastLogged;
+  const lastMeso = optional(o, 'last_mesocycle', path, mesocycleId);
+  if (lastMeso !== undefined) ls.last_mesocycle = lastMeso;
+  const band = optional(o, 'band', path, (x, p) => {
+    const b = obj(x, p);
+    return {
+      pct: req(b, 'pct', p, oneOf([0.87, 0.9] as const)),
+      high_rir_streak: req(b, 'high_rir_streak', p, int),
+    };
+  });
+  if (band !== undefined) ls.band = band;
+  const ff = optional(o, 'forced_failures', path, int);
+  if (ff !== undefined) ls.forced_failures = ff;
+  return ls;
 }
 
 function accessoryState(v: unknown, path: string): AccessoryState {

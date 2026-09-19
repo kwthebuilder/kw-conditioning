@@ -34,6 +34,16 @@ export interface LiftState {
   sessions_logged: number;
   neg_streak: number;
   single_scheduled: boolean;
+  // Phase 1 additions. All optional so initial_state_v1.json parses unchanged;
+  // absent means: never logged, mesocycle M1, band 87%, no forced failures.
+  /** Date of the last logged session on this lift (audit-after-gap, 2.8). */
+  last_logged?: IsoDate;
+  /** Mesocycle of the last logged session (boundary audit, 2.8). Absent = M1. */
+  last_mesocycle?: MesocycleId;
+  /** M2 contrast band (2.9). Absent = 87%, streak 0. */
+  band?: { pct: 0.87 | 0.9; high_rir_streak: number };
+  /** Failure signals on consecutive forced position-1 sessions (2.7, Q2 ruling). */
+  forced_failures?: number;
 }
 
 export interface RdlState {
