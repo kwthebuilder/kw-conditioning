@@ -51,8 +51,13 @@ const BAND_PROMOTE_RIR = 3;
 const BAND_PROMOTE_SESSIONS = 2;
 /** 2.9 M3/M4 and taper. */
 const PRIMER_PCT = 0.9;
-/** Boundary audit singles fire only on entering these (Q4 ruling). */
+/** Boundary audit singles are suggested only on entering these (Q4 ruling). */
 const BOUNDARY_AUDIT_MESOCYCLES = new Set<string>(['M2', 'M3', 'M4']);
+const SINGLE_REASON_TEXT: Record<SingleReason, string> = {
+  big_gap: 'Last session disagreed with the TM by 7% or more.',
+  boundary: 'First session of a new mesocycle.',
+  gap: 'More than 14 days since the last session on this lift.',
+};
 
 // ---------------------------------------------------------------------
 // small helpers
@@ -147,10 +152,11 @@ export function prescribeLift(
   }
 
   const reason = singleReason(ls, meso, date);
+  const taken = reason !== undefined && singleLoad !== undefined;
   const notes: string[] = [];
-  const tm = singleLoad !== undefined && reason ? tmFromSingle(singleLoad) : ls.tm;
-  if (reason && singleLoad === undefined) {
-    notes.push('Loads below are from the current TM; they are recomputed from the single once it is logged.');
+  const tm = reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
+  if (reason && !taken) {
+    notes.push(`${SINGLE_REASON_TEXT[reason]} A ramp single at RIR 2 is suggested before the work sets. Skip it and the session runs as normal.`);
   }
   const step = roundStep(config);
   const base: Omit<LiftPrescription, 'pct' | 'load' | 'sets' | 'reps' | 'amrap' | 'ramp'> = {
@@ -160,7 +166,7 @@ export function prescribeLift(
     tm,
     notes,
   };
-  if (reason) base.single = { reason, rir: 2 };
+  if (reason) base.single_suggested = { reason, rir: 2, taken };
 
   switch (meso.barbell_mode) {
     case 'wave': {
@@ -168,13 +174,13 @@ export function prescribeLift(
       const position: Position = forced ? 1 : ls.next_position;
       const wp = config.wave.positions[String(position) as '1' | '2' | '3'];
       const load = roundLoad(tm * wp.pct, step);
-      const amrap = wp.amrap && !reason;
+      const amrap = wp.amrap && !taken;
       const ramp: RampSet[] = config.wave.ramp.map(([frac, reps]) => ({
         load: roundLoad(load * frac, step),
         reps,
       }));
       if (forced) notes.push(`Downward trigger: two consecutive negative steps, so position 1 with ${DOWNWARD_SETS} sets.`);
-      if (reason && wp.amrap) notes.push('Session opened with a single: straight sets, no rep-out.');
+      if (taken && wp.amrap) notes.push('Session opened with a single: straight sets, no rep-out.');
       const p: LiftPrescription = {
         ...base,
         position,
@@ -509,6 +515,18 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
   ls.last_logged = log.date;
   const meso = mesocycleOn(config, log.date);
   if (meso) ls.last_mesocycle = meso.id;
+
+  if (log.override) {
+    const rec = { kind: 'load' as const, date: log.date, slot: log.lift, from: log.override.from, to: log.prescribed.load };
+    (next.overrides ??= []).push(log.override.note !== undefined ? { ...rec, note: log.override.note } : rec);
+    steps.push(
+      explainStep(
+        'override',
+        `Load overridden by the athlete: ${f1(log.override.from)} → ${f1(log.prescribed.load)} kg${log.override.note ? ` (${log.override.note})` : ''}. The update reads the load lifted.`,
+        { from: log.override.from, to: log.prescribed.load },
+      ),
+    );
+  }
 
   const posKey = isRepOutPosition(log.position) ? (String(log.position) as '2' | '3') : null;
   const outcome: BarbellOutcome = {

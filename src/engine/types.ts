@@ -1,7 +1,7 @@
 /**
  * Engine-only types. Config and state types live in src/config/types.
  */
-import type { BarbellMode, IsoDate, LiftId, Position, State } from '../config/types';
+import type { BarbellMode, IsoDate, LiftId, Position, SlotId, State } from '../config/types';
 
 /** What the athlete logged for one barbell lift in one session. */
 export interface BarbellLog {
@@ -17,6 +17,8 @@ export interface BarbellLog {
   last_set: { load: number; reps: number; rir: number };
   /** §11 toggle: an earlier set fell short of the prescribed reps. */
   missed: boolean;
+  /** Echo of a load override on the prescription, recorded into state.overrides. */
+  override?: LoadOverride;
 }
 
 export type SingleReason = 'boundary' | 'gap' | 'big_gap';
@@ -26,14 +28,25 @@ export interface RampSet {
   reps: number;
 }
 
+/** A manual load override applied to a prescription, echoed on the log (phase 2). */
+export interface LoadOverride {
+  from: number;
+  note?: string;
+}
+
 export interface LiftPrescription {
   kind: 'lift';
   lift: LiftId;
   mode: BarbellMode;
   /** Unrounded TM the loads were computed from. */
   tm: number;
-  /** The session opens with a ramp single at RIR 2 (A.8). */
-  single?: { reason: SingleReason; rir: 2 };
+  /**
+   * A ramp single at RIR 2 is suggested (2.8), never forced. `taken` is
+   * true when the prescription was recomputed from a logged single.
+   */
+  single_suggested?: { reason: SingleReason; rir: 2; taken: boolean };
+  /** Set when the athlete overrode the load. */
+  override?: LoadOverride;
   /** Wave mode only. */
   position?: Position;
   pct: number;
@@ -98,4 +111,144 @@ export interface UpdateResult {
   state: State;
   outcome: BarbellOutcome;
   explanation: Explanation;
+}
+
+// ---------------------------------------------------------------------
+// Phase 2: classes B and C (progression slots)
+// ---------------------------------------------------------------------
+
+/** How a slot steps: a kg figure, or text such as "one plate" shown to the athlete. */
+export type Increment = { kind: 'kg'; kg: number; per_hand: boolean } | { kind: 'text'; text: string };
+
+/** What the athlete logs on a class B or C slot. */
+export interface SlotLog {
+  slot: SlotId;
+  date: IsoDate;
+  /** Load as lifted: kg, or kg per hand on dumbbell slots. */
+  load: number;
+  sets_done: number;
+  last_set: { reps: number; rir: number; tempo_break?: boolean };
+  override?: LoadOverride;
+}
+
+export interface SlotPrescription {
+  kind: 'slot';
+  slot: SlotId;
+  cls: 'B' | 'C';
+  name: string;
+  /** null on the first session: the athlete sets it (A.11). */
+  load: number | null;
+  start_hint_kg?: number;
+  reps: number;
+  rir_cap: number;
+  increment: Increment;
+  /** A text-increment step is owed: "go up one plate" until a heavier load is logged. */
+  pending?: 'up' | 'down';
+  notes: string[];
+  override?: LoadOverride;
+}
+
+export type SlotDirection = 'set' | 'up' | 'down' | 'hold';
+
+export interface SlotOutcome {
+  direction: SlotDirection;
+  load_before: number | null;
+  load_after: number | null;
+  /** Numeric step applied this session, if any. */
+  delta_kg?: number;
+  increment: Increment;
+  streak_up: number;
+  streak_down: number;
+  pending?: 'up' | 'down';
+  /** An earned upward step was withheld (week-22 freeze or site flag). */
+  withheld?: 'freeze' | 'site_flag';
+}
+
+export interface SlotUpdateResult {
+  state: State;
+  outcome: SlotOutcome;
+  explanation: Explanation;
+}
+
+// ---------------------------------------------------------------------
+// Phase 2: RDL (class B table)
+// ---------------------------------------------------------------------
+
+export interface RdlLog {
+  slot: 'rdl';
+  date: IsoDate;
+  load: number;
+  sets_done: number;
+  last_set: { reps: number; rir: number; tempo_break?: boolean };
+  override?: LoadOverride;
+}
+
+export interface RdlPrescription {
+  kind: 'rdl';
+  slot: 'rdl';
+  name: string;
+  load: number;
+  rep_range: [number, number];
+  rir_cap: number;
+  /** Last set to RIR 2 or tempo break, always. */
+  amrap: true;
+  /** 1-based number of the session about to be logged. */
+  session_number: number;
+  /** The +10 kg row is still available (L10: first three sessions). */
+  wide_window: boolean;
+  notes: string[];
+  override?: LoadOverride;
+}
+
+export interface RdlOutcome {
+  delta_kg: number;
+  load_before: number;
+  load_after: number;
+  session_number: number;
+  /** Table row that fired: [reps_at_or_above, delta, note?]. */
+  row: (number | string)[] | null;
+  withheld?: 'freeze';
+}
+
+export interface RdlUpdateResult {
+  state: State;
+  outcome: RdlOutcome;
+  explanation: Explanation;
+}
+
+// ---------------------------------------------------------------------
+// Phase 2: classes D, E, F (fixed prescriptions, no logic)
+// ---------------------------------------------------------------------
+
+export interface FixedPrescription {
+  kind: 'fixed';
+  slot: SlotId;
+  cls: 'D' | 'E' | 'F';
+  name: string;
+  /** What to do, read from the config. */
+  text: string;
+  /** Trap-bar jump: the bar. */
+  load_kg?: number;
+  /** Class E: contacts for this mesocycle and week. */
+  contacts?: number;
+  notes: string[];
+}
+
+export interface FixedLog {
+  slot: SlotId;
+  date: IsoDate;
+  done: boolean;
+  /** Optional reading: height, reps, distance. Stored, not interpreted. */
+  value?: number;
+  note?: string;
+}
+
+// ---------------------------------------------------------------------
+// Phase 2: CMJ, stored only
+// ---------------------------------------------------------------------
+
+export interface CmjSummary {
+  count: number;
+  last: number | null;
+  mean: number | null;
 }

@@ -20,6 +20,12 @@ spec/            read-only contracts: engine spec, vectors, config, initial stat
 src/
   engine/        pure module: no DOM, storage, clock, randomness or network
     barbell.ts   class A: prescribeLift / updateLift (phase 1)
+    rdl.ts       class B RDL table
+    tempo.ts     class B hack squat and abductor HSR streaks
+    accessory.ts class C double progression and the shared streak engine
+    fixed.ts     classes D, E, F as fixed text and numbers from the config
+    cmj.ts       CMJ values and running mean
+    overrides.ts manual load and training-max overrides
     rounding.ts  nearest 2.5 kg, ties down
     calendar.ts  mesocycle and programme week by date
   config/        types derived from spec/*.json, validators, and the bundled loader

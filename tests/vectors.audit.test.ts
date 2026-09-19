@@ -18,7 +18,7 @@ describe('audit_rescale vector (2.8, A.8)', () => {
     const p = prescribeLift(state, PROGRAMME_CONFIG, 'front_squat', M1_DATE, v.single);
     expect(p.kind).toBe('lift');
     if (p.kind !== 'lift') return;
-    expect(p.single?.reason).toBe('big_gap');
+    expect(p.single_suggested?.reason).toBe('big_gap');
     expect(p.amrap).toBe(false);
     expect(closeTo(p.tm, v.expect.tm, tol.tm)).toBe(true);
     expect(p.load).toBe(roundLoad(tmFromSingle(v.single) * p.pct, PROGRAMME_CONFIG.equipment.barbell_round_kg));
@@ -67,32 +67,32 @@ describe('when a single opens the session (2.8, Q4 ruling)', () => {
     const s = stateWith('front_squat', { tm: 100 });
     s.lifts.front_squat.single_scheduled = true;
     const p = prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', M1_DATE);
-    expect(p.kind === 'lift' && p.single?.reason).toBe('big_gap');
+    expect(p.kind === 'lift' && p.single_suggested?.reason).toBe('big_gap');
   });
   it('entering M2, M3 and M4 does; M1, TAPER do not', () => {
     for (const [id, expected] of [['M2', 'boundary'], ['M3', 'boundary'], ['M4', 'boundary'], ['TAPER', undefined]] as const) {
       const s = stateWith('deadlift', { tm: 150 });
       s.lifts.deadlift.last_logged = m(id).start; // no >14 day gap
       const p = prescribeLift(s, PROGRAMME_CONFIG, 'deadlift', m(id).start);
-      expect(p.kind === 'lift' ? p.single?.reason : 'refer', id).toBe(expected);
+      expect(p.kind === 'lift' ? p.single_suggested?.reason : 'refer', id).toBe(expected);
     }
     const s = stateWith('deadlift', { tm: 150 });
     const p = prescribeLift(s, PROGRAMME_CONFIG, 'deadlift', M1_DATE);
     expect(p.kind).toBe('lift');
-    expect(p).not.toHaveProperty('single');
+    expect(p).not.toHaveProperty('single_suggested');
   });
   it('not twice in the same mesocycle', () => {
     const s = stateWith('deadlift', { tm: 150 });
     s.lifts.deadlift.last_mesocycle = 'M2';
     s.lifts.deadlift.last_logged = m('M2').start;
     const p = prescribeLift(s, PROGRAMME_CONFIG, 'deadlift', m('M2').start);
-    expect(p.kind === 'lift' && p.single).toBeUndefined();
+    expect(p.kind === 'lift' && p.single_suggested).toBeUndefined();
   });
   it('a gap over 14 days does', () => {
     const s = stateWith('front_squat', { tm: 100 });
     s.lifts.front_squat.last_logged = '2026-09-21';
-    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-05')).not.toHaveProperty('single');
-    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-06')).toMatchObject({ single: { reason: 'gap' } });
+    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-05')).not.toHaveProperty('single_suggested');
+    expect(prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', '2026-10-06')).toMatchObject({ single_suggested: { reason: 'gap', taken: false } });
   });
   it('INTENSIVE has no barbell mode, so refer to project', () => {
     const s = stateWith('front_squat', { tm: 100 });

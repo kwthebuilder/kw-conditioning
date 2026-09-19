@@ -52,10 +52,21 @@ export interface RdlState {
 }
 
 export interface AccessoryState {
+  /** kg, or kg per hand for dumbbell slots; null until the first log sets it (A.11). */
   load: number | null;
   streak_up: number;
   streak_down: number;
+  /**
+   * Phase 2: a step earned on a slot whose increment is text ("one plate").
+   * The prescription says "go up one plate" until a heavier load is logged.
+   */
+  pending?: 'up' | 'down';
 }
+
+/** Phase 2: a manual override, carried in the export. */
+export type OverrideRecord =
+  | { kind: 'tm'; date: IsoDate; lift: LiftId; from: number; to: number; note?: string }
+  | { kind: 'load'; date: IsoDate; slot: SlotId; from: number; to: number; note?: string };
 
 export interface DepthJumpState {
   height_cm: number | null;
@@ -92,6 +103,8 @@ export interface State {
   pending_precuts: unknown[];
   /** Empty in the initial state; element shape is a phase 3/4 concern. */
   log: unknown[];
+  /** Phase 2: manual overrides of loads and training maxes. Absent = none. */
+  overrides?: OverrideRecord[];
 }
 
 // ---------------------------------------------------------------------

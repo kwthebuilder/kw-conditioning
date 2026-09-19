@@ -5,10 +5,32 @@
  * import from src/ui, src/storage, the DOM, Date.now, Math.random, or
  * the network. Dates are passed in.
  *
- * Phase 1: per-lift building blocks for class A. Phase 3 composes them
- * into prescribe(state, config, date) → session and update(state, log).
+ * Phases 1 and 2: per-slot building blocks. Phase 3 composes them into
+ * prescribe(state, config, date) → session and update(state, log).
  */
 export { roundLoad } from './rounding';
 export { daysBetween, mesocycleOn, programmeWeek } from './calendar';
+// Class A
 export { prescribeLift, updateLift, tmFromSingle, rawEstimate, failureSignal, SEED_FACTOR } from './barbell';
+// Class B
+export { prescribeRdl, updateRdl, rdlRow, WIDE_WINDOW_SESSIONS } from './rdl';
+export { prescribeTempo, updateTempo, ruleForClassB } from './tempo';
+// Class C (and the shared streak engine)
+export {
+  prescribeAccessory,
+  updateAccessory,
+  prescribeProgression,
+  updateProgression,
+  parseIncrement,
+  incrementText,
+  ruleForClassC,
+  type ProgressionRule,
+  type ProgressionContext,
+} from './accessory';
+// Classes D, E, F: fixed prescriptions
+export { prescribeFixed, contactsFor } from './fixed';
+// CMJ, stored only
+export { recordCmj, cmjSummary } from './cmj';
+// Manual overrides
+export { overrideLoad, overrideTm } from './overrides';
 export type * from './types';

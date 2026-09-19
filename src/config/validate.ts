@@ -28,6 +28,7 @@ import type {
   LiftState,
   Mesocycle,
   MesocycleId,
+  OverrideRecord,
   Position,
   ProgrammeConfig,
   RdlTableRow,
@@ -242,18 +243,37 @@ function liftState(v: unknown, path: string): LiftState {
 
 function accessoryState(v: unknown, path: string): AccessoryState {
   const o = obj(v, path);
-  return {
+  const a: AccessoryState = {
     load: req(o, 'load', path, (x, p) => nullable(x, p, num)),
     streak_up: req(o, 'streak_up', path, int),
     streak_down: req(o, 'streak_down', path, int),
   };
+  const pending = optional(o, 'pending', path, oneOf(['up', 'down'] as const));
+  if (pending !== undefined) a.pending = pending;
+  return a;
+}
+
+function overrideRecord(v: unknown, path: string): OverrideRecord {
+  const o = obj(v, path);
+  const kind = req(o, 'kind', path, oneOf(['tm', 'load'] as const));
+  const date = req(o, 'date', path, isoDate);
+  const from = req(o, 'from', path, num);
+  const to = req(o, 'to', path, num);
+  const note = optional(o, 'note', path, str);
+  const rec: OverrideRecord =
+    kind === 'tm'
+      ? { kind, date, lift: req(o, 'lift', path, oneOf(LIFT_IDS)), from, to }
+      : { kind, date, slot: req(o, 'slot', path, str), from, to };
+  if (note !== undefined) rec.note = note;
+  return rec;
 }
 
 const flareSite = (v: unknown, path: string): FlareSiteState => nullable(v, path, obj);
 
 export function parseState(input: unknown, path = 'state'): State {
   const o = obj(input, path);
-  return {
+  const overrides = optional(o, 'overrides', path, listOf(overrideRecord));
+  const state: State = {
     schema: req(o, 'schema', path, oneOf([1] as const)),
     as_of: req(o, 'as_of', path, isoDate),
     lifts: req(o, 'lifts', path, exactKeys(LIFT_IDS, liftState)),
@@ -284,6 +304,8 @@ export function parseState(input: unknown, path = 'state'): State {
     pending_precuts: req(o, 'pending_precuts', path, arr),
     log: req(o, 'log', path, arr),
   };
+  if (overrides !== undefined) state.overrides = overrides;
+  return state;
 }
 
 // ---------------------------------------------------------------------
