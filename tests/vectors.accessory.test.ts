@@ -6,19 +6,14 @@ import type { SlotLog, SlotUpdateResult } from '../src/engine';
 import { M1_DATE } from './helpers';
 
 const cfg = PROGRAMME_CONFIG;
-
-/**
- * Pending SPEC_QUESTIONS.md Q1: the vectors name three accessory slots
- * differently from the config. The engine uses config ids only; this map
- * binds the vectors until vectors v1.1 lands. Ruled to stay for phase 2.
- */
-const VECTOR_SLOT_ALIAS: Record<string, SlotId> = {
-  db_push_press_strength: 'db_pp_strength',
-  weighted_pull_up: 'pull_up',
-  bulgarian_split_squat: 'bss',
-};
-
 const SEED_LOAD = 30;
+
+/** First day of a programme week. */
+function dateOfWeek(week: number): string {
+  const d = new Date(cfg.mesocycles[0]!.start + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + (week - 1) * 7);
+  return d.toISOString().slice(0, 10);
+}
 
 function seeded(slot: SlotId, load = SEED_LOAD): State {
   const s = structuredClone(INITIAL_STATE);
@@ -26,11 +21,11 @@ function seeded(slot: SlotId, load = SEED_LOAD): State {
   return s;
 }
 
-function run(state: State, slot: SlotId, reps: number): SlotUpdateResult {
+function run(state: State, slot: SlotId, reps: number, date = M1_DATE): SlotUpdateResult {
   const cls = cfg.slots[slot]!.cls;
   const log: SlotLog = {
     slot,
-    date: M1_DATE,
+    date,
     load: state.accessories[slot]!.load ?? SEED_LOAD,
     sets_done: 3,
     last_set: { reps, rir: cfg.slots[slot]!.rir_cap ?? 2 },
@@ -38,42 +33,71 @@ function run(state: State, slot: SlotId, reps: number): SlotUpdateResult {
   return cls === 'B' ? updateTempo(state, cfg, log) : updateAccessory(state, cfg, log);
 }
 
-/** "+2 kg/hand" → up 2 per hand; "-2 kg/hand (…)" → down; "hold (…)" → hold. */
-function parseExpect(text: string): { direction: 'up' | 'down' | 'hold'; kg?: number; perHand?: boolean } {
+type Want = { direction: 'hold' } | { direction: 'up' | 'down'; kg: number; perHand: boolean } | { direction: 'prompt'; text: string };
+
+/** "+2 kg/hand" → up 2 per hand; "-2 kg/hand (…)" → down; "hold (…)" → hold; "prompt 'go up one plate'; …" → text prompt. */
+function parseExpect(text: string): Want {
   if (/^hold/.test(text)) return { direction: 'hold' };
+  const prompt = /^prompt '([^']+)'/.exec(text);
+  if (prompt) return { direction: 'prompt', text: prompt[1]! };
   const m = /^([+-])(\d+(?:\.\d+)?) kg(\/hand)?/.exec(text);
   if (!m) throw new Error(`cannot read expect "${text}"`);
   return { direction: m[1] === '+' ? 'up' : 'down', kg: Number(m[2]), perHand: m[3] !== undefined };
 }
 
-describe('accessory vectors (§3 streak slots, §4 double progression)', () => {
+describe('accessory vectors (§3 streak slots, §4 double progression, A.10 freeze)', () => {
   for (const v of TEST_VECTORS.accessory) {
-    const slot = VECTOR_SLOT_ALIAS[v.slot] ?? v.slot;
-    // A.19 removed the site-flag input; a v1 case that depends on it is skipped until vectors v1.1 lands.
-    const test = v.site_flag_last_48h ? it.skip : it;
-    test(`${v.slot} ${JSON.stringify(v.history_last_set_reps)} → ${v.expect}`, () => {
+    const slot = v.slot;
+    const date = v.programme_week !== undefined ? dateOfWeek(v.programme_week) : M1_DATE;
+    it(`${slot} ${JSON.stringify(v.history_last_set_reps)}${v.programme_week ? ` in week ${v.programme_week}` : ''} → ${v.expect}`, () => {
       expect(cfg.slots[slot], `config has ${slot}`).toBeDefined();
       const want = parseExpect(v.expect);
       let state = seeded(slot);
       let last: SlotUpdateResult | undefined;
       for (const reps of v.history_last_set_reps) {
-        last = run(state, slot, reps);
+        last = run(state, slot, reps, date);
         state = last.state;
       }
       const out = last!.outcome;
-      expect(out.direction).toBe(want.direction);
-      if (want.direction === 'hold') {
-        expect(out.load_after).toBe(SEED_LOAD);
-      } else {
-        const inc = parseIncrement(cfg.slots[slot]!);
-        expect(inc.kind).toBe('kg');
-        if (inc.kind !== 'kg') return;
-        expect(inc.kg).toBe(want.kg);
-        expect(inc.per_hand).toBe(want.perHand);
-        expect(out.delta_kg).toBe(want.direction === 'up' ? want.kg : -want.kg!);
-        expect(out.load_after).toBe(SEED_LOAD + out.delta_kg!);
-        expect(out.streak_up).toBe(0);
-        expect(out.streak_down).toBe(0);
+      switch (want.direction) {
+        case 'hold': {
+          expect(out.direction).toBe('hold');
+          expect(out.load_after).toBe(SEED_LOAD);
+          if (v.programme_week !== undefined && v.programme_week > cfg.freeze.no_upward_steps_after_week) {
+            expect(out.withheld).toBe('freeze');
+          }
+          break;
+        }
+        case 'prompt': {
+          // Text increment: the step is owed, the load is unchanged, the prescription carries the prompt.
+          expect(out.direction).toBe('up');
+          expect(out.pending).toBe('up');
+          expect(out.load_after).toBe(SEED_LOAD);
+          expect(out.delta_kg).toBeUndefined();
+          const p = cfg.slots[slot]!.cls === 'B' ? prescribeTempo(state, cfg, slot) : prescribeAccessory(state, cfg, slot);
+          expect(p.pending).toBe('up');
+          expect(p.notes.join(' ').toLowerCase()).toContain(want.text.toLowerCase().replace('one plate', incrementText(out.increment).toLowerCase()));
+          // The prompt stays until a heavier load is logged, then streaks reset.
+          const again = run(state, slot, 5, date);
+          expect(again.outcome.pending).toBe('up');
+          const heavier: SlotLog = { slot, date, load: SEED_LOAD + 5, sets_done: 3, last_set: { reps: 8, rir: 2 } };
+          const cleared = cfg.slots[slot]!.cls === 'B' ? updateTempo(again.state, cfg, heavier) : updateAccessory(again.state, cfg, heavier);
+          expect(cleared.outcome.pending).toBeUndefined();
+          expect(cleared.outcome).toMatchObject({ load_after: SEED_LOAD + 5, streak_up: 0, streak_down: 0 });
+          break;
+        }
+        default: {
+          expect(out.direction).toBe(want.direction);
+          const inc = parseIncrement(cfg.slots[slot]!);
+          expect(inc.kind).toBe('kg');
+          if (inc.kind !== 'kg') return;
+          expect(inc.kg).toBe(want.kg);
+          expect(inc.per_hand).toBe(want.perHand);
+          expect(out.delta_kg).toBe(want.direction === 'up' ? want.kg : -want.kg);
+          expect(out.load_after).toBe(SEED_LOAD + out.delta_kg!);
+          expect(out.streak_up).toBe(0);
+          expect(out.streak_down).toBe(0);
+        }
       }
       expect(last!.explanation.steps.length).toBeGreaterThan(0);
     });
@@ -81,33 +105,13 @@ describe('accessory vectors (§3 streak slots, §4 double progression)', () => {
 });
 
 describe('increments', () => {
-  it('reads kg and kg/hand from the config text, hack squat is 5 kg by ruling, cable slots are text', () => {
+  it('reads kg and kg/hand from the config text; non-numeric text stays text', () => {
     expect(parseIncrement(cfg.slots.pull_up!)).toEqual({ kind: 'kg', kg: 2.5, per_hand: false });
     expect(parseIncrement(cfg.slots.db_pp_strength!)).toEqual({ kind: 'kg', kg: 2, per_hand: true });
     expect(parseIncrement(cfg.slots.hack_squat!)).toEqual({ kind: 'kg', kg: 5, per_hand: false });
-    expect(parseIncrement(cfg.slots.abductor_hsr!).kind).toBe('text');
+    expect(parseIncrement(cfg.slots.abductor_hsr!)).toEqual({ kind: 'text', text: cfg.slots.abductor_hsr!.increment });
     expect(parseIncrement(cfg.slots.cs_row!)).toEqual({ kind: 'text', text: cfg.slots.cs_row!.increment });
-    expect(incrementText(parseIncrement(cfg.slots.abductor_hsr!))).toBe('one plate');
-  });
-
-  it('a text-increment slot owes "go up one plate" until a heavier load is logged', () => {
-    const slot = 'abductor_hsr';
-    let s = seeded(slot, 20);
-    const upAt = cfg.slots[slot]!.up_at!;
-    s = run(s, slot, upAt).state;
-    const r = run(s, slot, upAt);
-    expect(r.outcome).toMatchObject({ direction: 'up', pending: 'up', load_after: 20 });
-    expect(r.outcome.delta_kg).toBeUndefined();
-    const p = prescribeTempo(r.state, cfg, slot);
-    expect(p.pending).toBe('up');
-    expect(p.load).toBe(20);
-    expect(p.notes.join(' ')).toContain('Go up one plate');
-    // Heavier load logged: pending cleared, streaks reset, new load recorded.
-    const heavier: SlotLog = { slot, date: M1_DATE, load: 25, sets_done: 3, last_set: { reps: 8, rir: 2 } };
-    const r2 = updateTempo(r.state, cfg, heavier);
-    expect(r2.outcome).toMatchObject({ load_before: 20, load_after: 25, streak_up: 0, streak_down: 0 });
-    expect(r2.outcome.pending).toBeUndefined();
-    expect(prescribeTempo(r2.state, cfg, slot).pending).toBeUndefined();
+    expect(incrementText(parseIncrement(cfg.slots.abductor_hsr!))).toBe(cfg.slots.abductor_hsr!.increment);
   });
 });
 
@@ -139,19 +143,6 @@ describe('progression rules', () => {
     let t = seeded(b, 60);
     t = run(t, b, cfg.slots[b]!.down_below! - 1).state;
     expect(run(t, b, cfg.slots[b]!.down_below! - 1).outcome).toMatchObject({ direction: 'down', delta_kg: -5, load_after: 55 });
-    // reps between down_below and up_at hold
     expect(run(seeded(b, 60), b, cfg.slots[b]!.down_below!).outcome.direction).toBe('hold');
-  });
-
-  it('withholds upward steps after the freeze week (A.10)', () => {
-    const slot = 'pull_up';
-    const first = new Date(cfg.mesocycles[0]!.start + 'T00:00:00Z');
-    first.setUTCDate(first.getUTCDate() + cfg.freeze.no_upward_steps_after_week * 7);
-    const date = first.toISOString().slice(0, 10);
-    let s = seeded(slot, 10);
-    const log = (st: State): SlotLog => ({ slot, date, load: st.accessories[slot]!.load!, sets_done: 3, last_set: { reps: cfg.slots[slot]!.up_at!, rir: 2 } });
-    s = updateAccessory(s, cfg, log(s)).state;
-    const r = updateAccessory(s, cfg, log(s));
-    expect(r.outcome).toMatchObject({ direction: 'hold', withheld: 'freeze', load_after: 10 });
   });
 });

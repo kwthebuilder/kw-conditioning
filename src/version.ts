@@ -5,4 +5,4 @@
  * vector versions are read from the files by the loader.
  */
 export const APP_VERSION: string = __APP_VERSION__;
-export const SPEC_NAME = 'engine_spec_v1_3' as const;
+export const SPEC_NAME = 'engine_spec_v1_4' as const;

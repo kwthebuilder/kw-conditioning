@@ -70,17 +70,20 @@ export type OverrideRecord =
 
 export interface DepthJumpState {
   height_cm: number | null;
-  ladder_due: boolean;
+  /** v1 only; dropped in initial_state_v1_1 with the ladder logic. */
+  ladder_due?: boolean;
 }
 
 export interface TrapBarJumpState {
   load_kg: number;
-  heights: number[];
+  /** v1 only; dropped in v1.1 with the height progression. */
+  heights?: number[];
 }
 
 export interface CmjState {
   series: number[];
-  baseline: number | null;
+  /** v1 only; dropped in v1.1 with the CMJ rule. */
+  baseline?: number | null;
 }
 
 /**
@@ -98,9 +101,10 @@ export interface State {
   depth_jump: DepthJumpState;
   trap_bar_jump: TrapBarJumpState;
   cmj: CmjState;
-  flare: Record<Site, FlareSiteState>;
-  /** Empty in the initial state; element shape is a phase 2 concern. */
-  pending_precuts: unknown[];
+  /** v1 only; dropped in v1.1 with the flare ladder. */
+  flare?: Record<Site, FlareSiteState>;
+  /** v1 only; dropped in v1.1 with the time pre-cuts. */
+  pending_precuts?: unknown[];
   /** Empty in the initial state; element shape is a phase 3/4 concern. */
   log: unknown[];
   /** Phase 2: manual overrides of loads and training maxes. Absent = none. */
@@ -156,6 +160,7 @@ export interface Slot {
   id: SlotId;
   name: string;
   cls: SlotClass;
+  /** Descriptive only in v1.1 (config scope_note). */
   sites?: Site[];
   group?: CutGroup;
   alt?: SlotId | string;
@@ -163,10 +168,8 @@ export interface Slot {
   progress?: string;
   regression?: string;
   never_zero?: boolean;
-  removed_by?: string[];
-  cmj_flag?: string;
   when?: string;
-  first_cut_on?: string[];
+  note?: string;
 
   // class A (barbell)
   tm_seed?: number;
@@ -238,8 +241,8 @@ export interface ProgrammeConfig {
   version: string;
   date: IsoDate;
   governs: string;
+  scope_note?: string;
   budget_min: { normal: number; audit: number };
-  cut_order: CutGroup[];
   equipment: {
     barbell_round_kg: number;
     trap_bar_kg: number;
@@ -251,14 +254,13 @@ export interface ProgrammeConfig {
   instruments: Record<string, string>;
   athlete: { body_mass_kg: number };
   mesocycles: Mesocycle[];
-  boundary_events: string[];
+  /** A.15: boundary singles are suggested only on entering these. */
+  boundary_singles_on_entering: MesocycleId[];
   freeze: {
     no_upward_steps_after_week: number;
     depth_jump_height_frozen_after_week: number;
   };
   wave: WaveConfig;
-  contact_caps: { session: number; week: Partial<Record<MesocycleId, number>> };
-  sites: Record<Site, { cut_first: SlotId }>;
   slots: Record<SlotId, Slot>;
   templates: Record<TemplateId, Template>;
 }
@@ -311,9 +313,14 @@ export interface AuditRescaleVector {
   expect: { tm: number; betas: { '2': number; '3': number } };
 }
 
-export interface DownwardTriggerVector {
-  steps: number[];
+export interface DownwardTriggerCase {
+  name: string;
+  sequence?: string;
   expect: string;
+}
+
+export interface DownwardTriggerVector {
+  cases: DownwardTriggerCase[];
 }
 
 export interface RdlVector {
@@ -323,44 +330,31 @@ export interface RdlVector {
 }
 
 export interface AccessoryVector {
-  slot: string;
+  slot: SlotId;
   history_last_set_reps: number[];
-  site_flag_last_48h?: boolean;
+  /** Programme week the last session falls in; absent = M1. */
+  programme_week?: number;
   expect: string;
 }
 
-export interface TrapBarJumpVector {
-  fs_tm: number;
-  bar_kg: number;
-  est_1rm: number;
-  expect_load: number;
-  why: string;
+export interface SinglesVector {
+  boundary: { fires_on_entering: MesocycleId[]; never: string[]; skippable: boolean };
+  single_day_work_sets: {
+    input: { tm_before: number; single: number; pos: Position; work_last_set: { load: number; reps: number; rir: number } };
+    expect: { tm: number; rule_for_work_sets: string };
+  };
+  big_gap: string;
 }
 
-export interface CmjVector {
-  series: number[];
-  mean: number;
-  te: number;
-  drop: number;
-  threshold: number;
-  rule: string;
-  cases: { value: number; expect_flag: boolean }[];
-}
-
-export interface FlareLadderVector {
-  site: Site;
-  cut_first_slot: SlotId;
-  pre_flare_kg: number;
-  cut: number;
-  load_by_clear_site_exposures_since_flag: Record<string, number>;
-  plyometrics: string;
-  second_consecutive_flag_or_over_5_or_night_pain: string;
-}
-
-export interface GapVector {
-  days: number;
-  expect: string;
-}
+export type OverrideVector =
+  | { name: 'load_override'; prescribed_load: number; athlete_changes_to: number; log: { load: number; reps: number; rir: number }; expect: string }
+  | {
+      name: 'tm_override';
+      lift: LiftId;
+      tm_before: number;
+      athlete_sets: number;
+      expect: { tm: number; betas: string; next_loads: Record<'1' | '2' | '3', number>; export: string };
+    };
 
 export interface TestVectors {
   version: string;
@@ -374,9 +368,7 @@ export interface TestVectors {
   downward_trigger: DownwardTriggerVector;
   rdl: RdlVector[];
   accessory: AccessoryVector[];
-  trap_bar_jump: TrapBarJumpVector[];
-  cmj: CmjVector;
-  flare_ladder: FlareLadderVector;
-  gap: GapVector[];
   golden_sessions: string;
+  singles: SinglesVector;
+  override: OverrideVector[];
 }

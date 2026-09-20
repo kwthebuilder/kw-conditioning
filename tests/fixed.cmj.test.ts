@@ -13,10 +13,10 @@ describe('fixed prescriptions for classes D, E, F (no logic)', () => {
     expect(p.text).toContain(cfg.slots.trap_bar_jump!.name);
   });
 
-  it('depth-jump contacts follow the config map by mesocycle, low end of a range, week map in M4', () => {
+  it('depth-jump contacts follow the config map by mesocycle, week map in M4', () => {
     const map = cfg.slots.depth_jump!.contacts as Record<string, unknown>;
     expect(contactsFor(cfg, 'depth_jump', start('M1'))).toBe(map.M1);
-    expect(contactsFor(cfg, 'depth_jump', start('M2'))).toBe((map.M2 as [number, number])[0]);
+    expect(contactsFor(cfg, 'depth_jump', start('M2'))).toBe(map.M2);
     expect(contactsFor(cfg, 'depth_jump', start('M2'))).toBe(6);
     expect(contactsFor(cfg, 'depth_jump', start('M3'))).toBe(map.M3);
     const m4 = map.M4 as Record<string, number>;
@@ -53,7 +53,7 @@ describe('CMJ: stored, running mean shown, no flag', () => {
     const b = recordCmj(a.state, 37.6);
     expect(b.summary).toEqual({ count: 2, last: 37.6, mean: (38.2 + 37.6) / 2 });
     expect(b.state.cmj.series).toEqual([38.2, 37.6]);
-    expect(b.state.cmj.baseline).toBeNull();
+    expect(b.state.cmj).not.toHaveProperty('baseline');
     expect(INITIAL_STATE.cmj.series).toEqual([]);
   });
 

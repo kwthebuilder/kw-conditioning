@@ -34,7 +34,7 @@ describe('load override: the overridden load is what update reads', () => {
     expect(outcome.E).toBeCloseTo(rawEstimate(p2.load, 8, 2), 9);
     expect(after.overrides).toEqual([{ kind: 'load', date: M1_DATE, slot: 'front_squat', from: p.load, to: p2.load, note: 'bar felt light' }]);
     expect(explanation.steps.some((s) => s.rule === 'override')).toBe(true);
-    expect(state.overrides).toBeUndefined();
+    expect(state.overrides).toEqual([]); // input untouched
   });
 
   it('RDL and accessories: same contract', () => {

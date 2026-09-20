@@ -11,19 +11,10 @@ import { programmeWeek } from './calendar';
 import { explainStep, f1, kg } from './explain';
 import type { ExplanationStep, Increment, SlotDirection, SlotLog, SlotOutcome, SlotPrescription, SlotUpdateResult } from './types';
 
-/**
- * Increment sizes ruled outside the config (SPEC_QUESTIONS.md Q6).
- * Anything else with a text increment shows "go up one plate".
- */
-const RULED_INCREMENTS: Record<string, Increment> = {
-  hack_squat: { kind: 'kg', kg: 5, per_hand: false },
-};
 const DEFAULT_TEXT_INCREMENT = 'one plate';
 
-/** "2 kg/hand" → 2 per hand; "2.5 kg" → 2.5; anything else is text. */
+/** "2 kg/hand" → 2 per hand; "2.5 kg" → 2.5; anything else is text shown as "go up <text>". */
 export function parseIncrement(slot: Slot): Increment {
-  const ruled = RULED_INCREMENTS[slot.id];
-  if (ruled) return ruled;
   if (slot.increment === undefined) return { kind: 'text', text: DEFAULT_TEXT_INCREMENT };
   const m = /^(\d+(?:\.\d+)?)\s*kg(\/hand)?$/i.exec(slot.increment.trim());
   if (m && m[1] !== undefined) return { kind: 'kg', kg: Number(m[1]), per_hand: m[2] !== undefined };

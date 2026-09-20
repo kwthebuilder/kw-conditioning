@@ -16,25 +16,24 @@ import type {
   BarbellVector,
   BarbellVectorExpect,
   BarbellVectorInput,
-  CmjVector,
   ContactSpec,
   Contacts,
   CutGroup,
   DownwardTriggerVector,
-  FlareLadderVector,
   FlareSiteState,
-  GapVector,
   LiftId,
   LiftState,
   Mesocycle,
   MesocycleId,
   OverrideRecord,
+  OverrideVector,
   Position,
   ProgrammeConfig,
   RdlTableRow,
   RdlVector,
   RoundingVector,
   SessionTemplate,
+  SinglesVector,
   Site,
   Slot,
   SlotClass,
@@ -45,7 +44,6 @@ import type {
   TemplateId,
   TemplateItem,
   TestVectors,
-  TrapBarJumpVector,
   WaveConfig,
   WavePosition,
 } from './types';
@@ -284,26 +282,30 @@ export function parseState(input: unknown, path = 'state'): State {
     accessories: req(o, 'accessories', path, mapOf(accessoryState)),
     depth_jump: req(o, 'depth_jump', path, (v, p) => {
       const d = obj(v, p);
-      return {
-        height_cm: req(d, 'height_cm', p, (x, q) => nullable(x, q, num)),
-        ladder_due: req(d, 'ladder_due', p, bool),
-      };
+      const dj: State['depth_jump'] = { height_cm: req(d, 'height_cm', p, (x, q) => nullable(x, q, num)) };
+      const due = optional(d, 'ladder_due', p, bool);
+      if (due !== undefined) dj.ladder_due = due;
+      return dj;
     }),
     trap_bar_jump: req(o, 'trap_bar_jump', path, (v, p) => {
       const t = obj(v, p);
-      return { load_kg: req(t, 'load_kg', p, num), heights: req(t, 'heights', p, listOf(num)) };
+      const out: State['trap_bar_jump'] = { load_kg: req(t, 'load_kg', p, num) };
+      const heights = optional(t, 'heights', p, listOf(num));
+      if (heights !== undefined) out.heights = heights;
+      return out;
     }),
     cmj: req(o, 'cmj', path, (v, p) => {
       const c = obj(v, p);
-      return {
-        series: req(c, 'series', p, listOf(num)),
-        baseline: req(c, 'baseline', p, (x, q) => nullable(x, q, num)),
-      };
+      const out: State['cmj'] = { series: req(c, 'series', p, listOf(num)) };
+      if ('baseline' in c) out.baseline = nullable(c.baseline, `${p}.baseline`, num);
+      return out;
     }),
-    flare: req(o, 'flare', path, exactKeys(SITES, flareSite)),
-    pending_precuts: req(o, 'pending_precuts', path, arr),
     log: req(o, 'log', path, arr),
   };
+  const flare = optional(o, 'flare', path, exactKeys(SITES, flareSite));
+  if (flare !== undefined) state.flare = flare;
+  const precuts = optional(o, 'pending_precuts', path, arr);
+  if (precuts !== undefined) state.pending_precuts = precuts;
   if (overrides !== undefined) state.overrides = overrides;
   return state;
 }
@@ -392,10 +394,8 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
   opt('progress', str);
   opt('regression', str);
   opt('never_zero', bool);
-  opt('removed_by', listOf(str));
-  opt('cmj_flag', str);
   opt('when', str);
-  opt('first_cut_on', listOf(str));
+  opt('note', str);
   opt('tm_seed', num);
   opt('cal_cap', num);
   opt('reps', int);
@@ -423,7 +423,7 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
 
   const known = new Set<string>([
     'id', 'name', 'cls', 'sites', 'group', 'alt', 'swap', 'progress', 'regression', 'never_zero',
-    'removed_by', 'cmj_flag', 'when', 'first_cut_on', 'tm_seed', 'cal_cap', 'reps', 'rir_cap',
+    'when', 'note', 'tm_seed', 'cal_cap', 'reps', 'rir_cap',
     'up_at', 'down_below', 'streak', 'increment', 'start_hint_kg', 'start_kg', 'rep_range', 'table',
     'band_pct_fs_tm', 'ceiling_pct_est_1rm', 'increment_kg', 'start_pct_dl_tm', 'contacts', 'landings',
   ]);
@@ -500,7 +500,6 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
     date: req(o, 'date', path, isoDate),
     governs: req(o, 'governs', path, str),
     budget_min: req(o, 'budget_min', path, exactKeys(['normal', 'audit'] as const, num)),
-    cut_order: req(o, 'cut_order', path, listOf(cutGroup)),
     equipment: req(o, 'equipment', path, (v, p) => {
       const e = obj(v, p);
       return {
@@ -515,7 +514,7 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
     instruments: req(o, 'instruments', path, mapOf(str)),
     athlete: req(o, 'athlete', path, exactKeys(['body_mass_kg'] as const, num)),
     mesocycles: req(o, 'mesocycles', path, listOf(mesocycle)),
-    boundary_events: req(o, 'boundary_events', path, listOf(str)),
+    boundary_singles_on_entering: req(o, 'boundary_singles_on_entering', path, listOf(mesocycleId)),
     freeze: req(
       o,
       'freeze',
@@ -523,14 +522,6 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
       exactKeys(['no_upward_steps_after_week', 'depth_jump_height_frozen_after_week'] as const, int),
     ),
     wave: req(o, 'wave', path, wave),
-    contact_caps: req(o, 'contact_caps', path, (v, p) => {
-      const c = obj(v, p);
-      const week: Partial<Record<MesocycleId, number>> = {};
-      const w = req(c, 'week', p, obj);
-      for (const k of Object.keys(w)) week[mesocycleId(k, `${p}.week.${k}`)] = int(w[k], `${p}.week.${k}`);
-      return { session: req(c, 'session', p, int), week };
-    }),
-    sites: req(o, 'sites', path, exactKeys(SITES, (v, p) => ({ cut_first: req(obj(v, p), 'cut_first', p, str) }))),
     slots: req(o, 'slots', path, (v, p) => {
       const s = obj(v, p);
       const out: Record<string, Slot> = {};
@@ -539,6 +530,8 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
     }),
     templates: req(o, 'templates', path, exactKeys(TEMPLATE_IDS, template)),
   };
+  const scopeNote = optional(o, 'scope_note', path, str);
+  if (scopeNote !== undefined) cfg.scope_note = scopeNote;
 
   // Referential checks inside the config file.
   for (const [i, m] of cfg.mesocycles.entries()) {
@@ -546,9 +539,9 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
       fail(`${path}.mesocycles[${i}].template`, `unknown template "${m.template}"`);
     }
   }
-  for (const s of SITES) {
-    const id = cfg.sites[s].cut_first;
-    if (!(id in cfg.slots)) fail(`${path}.sites.${s}.cut_first`, `unknown slot "${id}"`);
+  const mesoIds = new Set(cfg.mesocycles.map((m) => m.id));
+  for (const [i, id] of cfg.boundary_singles_on_entering.entries()) {
+    if (!mesoIds.has(id)) fail(`${path}.boundary_singles_on_entering[${i}]`, `unknown mesocycle "${id}"`);
   }
   for (const [tid, t] of Object.entries(cfg.templates)) {
     const sessions: [string, SessionTemplate][] = t.both_days
@@ -641,7 +634,20 @@ function auditRescale(v: unknown, path: string): AuditRescaleVector {
 
 const downwardTrigger = (v: unknown, path: string): DownwardTriggerVector => {
   const o = obj(v, path);
-  return { steps: req(o, 'steps', path, listOf(num)), expect: req(o, 'expect', path, str) };
+  return {
+    cases: req(
+      o,
+      'cases',
+      path,
+      listOf((x, p) => {
+        const c = obj(x, p);
+        const out: DownwardTriggerVector['cases'][number] = { name: req(c, 'name', p, str), expect: req(c, 'expect', p, str) };
+        const seq = optional(c, 'sequence', p, str);
+        if (seq !== undefined) out.sequence = seq;
+        return out;
+      }),
+    ),
+  };
 };
 
 const rdlVector = (v: unknown, path: string): RdlVector => {
@@ -660,60 +666,78 @@ function accessoryVector(v: unknown, path: string): AccessoryVector {
     history_last_set_reps: req(o, 'history_last_set_reps', path, listOf(int)),
     expect: req(o, 'expect', path, str),
   };
-  const flag = optional(o, 'site_flag_last_48h', path, bool);
-  if (flag !== undefined) out.site_flag_last_48h = flag;
+  const week = optional(o, 'programme_week', path, int);
+  if (week !== undefined) out.programme_week = week;
   return out;
 }
 
-const trapBarJumpVector = (v: unknown, path: string): TrapBarJumpVector => {
+function singlesVector(v: unknown, path: string): SinglesVector {
   const o = obj(v, path);
   return {
-    fs_tm: req(o, 'fs_tm', path, num),
-    bar_kg: req(o, 'bar_kg', path, num),
-    est_1rm: req(o, 'est_1rm', path, num),
-    expect_load: req(o, 'expect_load', path, num),
-    why: req(o, 'why', path, str),
+    boundary: req(o, 'boundary', path, (x, p) => {
+      const b = obj(x, p);
+      return {
+        fires_on_entering: req(b, 'fires_on_entering', p, listOf(mesocycleId)),
+        never: req(b, 'never', p, listOf(str)),
+        skippable: req(b, 'skippable', p, bool),
+      };
+    }),
+    single_day_work_sets: req(o, 'single_day_work_sets', path, (x, p) => {
+      const s = obj(x, p);
+      return {
+        input: req(s, 'input', p, (y, q) => {
+          const i = obj(y, q);
+          return {
+            tm_before: req(i, 'tm_before', q, num),
+            single: req(i, 'single', q, num),
+            pos: req(i, 'pos', q, position),
+            work_last_set: req(i, 'work_last_set', q, (z, r) => {
+              const w = obj(z, r);
+              return { load: req(w, 'load', r, num), reps: req(w, 'reps', r, int), rir: req(w, 'rir', r, int) };
+            }),
+          };
+        }),
+        expect: req(s, 'expect', p, (y, q) => {
+          const e = obj(y, q);
+          return { tm: req(e, 'tm', q, num), rule_for_work_sets: req(e, 'rule_for_work_sets', q, str) };
+        }),
+      };
+    }),
+    big_gap: req(o, 'big_gap', path, str),
   };
-};
+}
 
-function cmjVector(v: unknown, path: string): CmjVector {
+function overrideVector(v: unknown, path: string): OverrideVector {
   const o = obj(v, path);
-  return {
-    series: req(o, 'series', path, listOf(num)),
-    mean: req(o, 'mean', path, num),
-    te: req(o, 'te', path, num),
-    drop: req(o, 'drop', path, num),
-    threshold: req(o, 'threshold', path, num),
-    rule: req(o, 'rule', path, str),
-    cases: req(
-      o,
-      'cases',
-      path,
-      listOf((x, p) => {
-        const c = obj(x, p);
-        return { value: req(c, 'value', p, num), expect_flag: req(c, 'expect_flag', p, bool) };
+  const name = req(o, 'name', path, oneOf(['load_override', 'tm_override'] as const));
+  if (name === 'load_override') {
+    return {
+      name,
+      prescribed_load: req(o, 'prescribed_load', path, num),
+      athlete_changes_to: req(o, 'athlete_changes_to', path, num),
+      log: req(o, 'log', path, (x, p) => {
+        const l = obj(x, p);
+        return { load: req(l, 'load', p, num), reps: req(l, 'reps', p, int), rir: req(l, 'rir', p, int) };
       }),
-    ),
-  };
-}
-
-function flareLadder(v: unknown, path: string): FlareLadderVector {
-  const o = obj(v, path);
+      expect: req(o, 'expect', path, str),
+    };
+  }
   return {
-    site: req(o, 'site', path, site),
-    cut_first_slot: req(o, 'cut_first_slot', path, str),
-    pre_flare_kg: req(o, 'pre_flare_kg', path, num),
-    cut: req(o, 'cut', path, num),
-    load_by_clear_site_exposures_since_flag: req(o, 'load_by_clear_site_exposures_since_flag', path, mapOf(num)),
-    plyometrics: req(o, 'plyometrics', path, str),
-    second_consecutive_flag_or_over_5_or_night_pain: req(o, 'second_consecutive_flag_or_over_5_or_night_pain', path, str),
+    name,
+    lift: req(o, 'lift', path, oneOf(LIFT_IDS)),
+    tm_before: req(o, 'tm_before', path, num),
+    athlete_sets: req(o, 'athlete_sets', path, num),
+    expect: req(o, 'expect', path, (x, p) => {
+      const e = obj(x, p);
+      return {
+        tm: req(e, 'tm', p, num),
+        betas: req(e, 'betas', p, str),
+        next_loads: req(e, 'next_loads', p, exactKeys(['1', '2', '3'] as const, num)),
+        export: req(e, 'export', p, str),
+      };
+    }),
   };
 }
-
-const gapVector = (v: unknown, path: string): GapVector => {
-  const o = obj(v, path);
-  return { days: req(o, 'days', path, int), expect: req(o, 'expect', path, str) };
-};
 
 export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors {
   const o = obj(input, path);
@@ -729,11 +753,9 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
     downward_trigger: req(o, 'downward_trigger', path, downwardTrigger),
     rdl: req(o, 'rdl', path, listOf(rdlVector)),
     accessory: req(o, 'accessory', path, listOf(accessoryVector)),
-    trap_bar_jump: req(o, 'trap_bar_jump', path, listOf(trapBarJumpVector)),
-    cmj: req(o, 'cmj', path, cmjVector),
-    flare_ladder: req(o, 'flare_ladder', path, flareLadder),
-    gap: req(o, 'gap', path, listOf(gapVector)),
     golden_sessions: req(o, 'golden_sessions', path, str),
+    singles: req(o, 'singles', path, singlesVector),
+    override: req(o, 'override', path, listOf(overrideVector)),
   };
 }
 

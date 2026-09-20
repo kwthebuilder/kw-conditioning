@@ -49,8 +49,6 @@ const BAND_PROMOTE_RIR = 3;
 const BAND_PROMOTE_SESSIONS = 2;
 /** 2.9 M3/M4 and taper. */
 const PRIMER_PCT = 0.9;
-/** Boundary audit singles are suggested only on entering these (Q4 ruling). */
-const BOUNDARY_AUDIT_MESOCYCLES = new Set<string>(['M2', 'M3', 'M4']);
 const SINGLE_REASON_TEXT: Record<SingleReason, string> = {
   big_gap: 'Last session disagreed with the TM by 7% or more.',
   boundary: 'First session of a new mesocycle.',
@@ -110,11 +108,11 @@ function downwardActive(ls: LiftState): boolean {
 // prescribe
 // ---------------------------------------------------------------------
 
-/** A.15: big-gap flag, or entering M2, M3 or M4. No gap-based single. */
-function singleReason(ls: LiftState, meso: Mesocycle): SingleReason | undefined {
+/** A.15: big-gap flag, or entering a mesocycle listed in config.boundary_singles_on_entering. */
+function singleReason(ls: LiftState, config: ProgrammeConfig, meso: Mesocycle): SingleReason | undefined {
   if (ls.single_scheduled) return 'big_gap';
   const last = ls.last_mesocycle ?? 'M1';
-  if (BOUNDARY_AUDIT_MESOCYCLES.has(meso.id) && last !== meso.id) return 'boundary';
+  if (config.boundary_singles_on_entering.includes(meso.id) && last !== meso.id) return 'boundary';
   return undefined;
 }
 
@@ -148,7 +146,7 @@ export function prescribeLift(
     };
   }
 
-  const reason = singleReason(ls, meso);
+  const reason = singleReason(ls, config, meso);
   const taken = reason !== undefined && singleLoad !== undefined;
   const notes: string[] = [];
   const tm = reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
