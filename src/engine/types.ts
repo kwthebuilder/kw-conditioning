@@ -337,6 +337,7 @@ export type SessionResult = Session | SessionRefer;
 export type AnyLog =
   | ({ kind: 'barbell' } & BarbellLog)
   | ({ kind: 'single' } & SingleLog)
+  | { kind: 'single_skipped'; date: IsoDate; lift: LiftId }
   | ({ kind: 'rdl' } & RdlLog)
   | ({ kind: 'slot' } & SlotLog)
   | ({ kind: 'fixed' } & FixedLog)

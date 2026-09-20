@@ -35,6 +35,14 @@ export function update(state: State, log: AnyLog, config: ProgrammeConfig): Engi
       r = { state: u.state, explanation: u.explanation, outcome: null };
       break;
     }
+    case 'single_skipped': {
+      // A.17: skipping clears the flag and changes nothing else.
+      const next = structuredClone(state);
+      const was = next.lifts[log.lift].single_scheduled;
+      next.lifts[log.lift].single_scheduled = false;
+      r = plain(next, `${config.slots[log.lift]?.name ?? log.lift}: suggested single skipped${was ? '; the suggestion is cleared' : ''}.`);
+      break;
+    }
     case 'rdl': {
       const u = updateRdl(state, config, log);
       r = { state: u.state, explanation: u.explanation, outcome: u.outcome };

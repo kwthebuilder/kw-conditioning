@@ -53,6 +53,18 @@ describe('update(): one door for state (A.23)', () => {
     expect(r2.state.log.map((e) => (e as LogEntry).kind)).toEqual(['single', 'barbell']);
   });
 
+  it('single_skipped clears the flag and changes nothing else (A.17)', () => {
+    const s = stateWith('front_squat', { tm: 94, beta: { '2': 1 }, next_position: 2 });
+    s.lifts.front_squat.single_scheduled = true;
+    const r = update(s, { kind: 'single_skipped', date: M1_DATE, lift: 'front_squat' }, cfg);
+    expect(r.state.lifts.front_squat.single_scheduled).toBe(false);
+    const plain = structuredClone(s);
+    plain.lifts.front_squat.single_scheduled = false;
+    expect({ ...r.state, log: [] }).toEqual(plain);
+    expect(lastEntry(r.state).kind).toBe('single_skipped');
+    expect(prescribe(r.state, cfg, M1_DATE, 1)).toMatchObject({ singles_suggested: [] });
+  });
+
   it('a boundary single logged through the door is recorded with its reason', () => {
     const m2 = cfg.mesocycles.find((m) => m.id === 'M2')!;
     const s = stateWith('deadlift', { tm: 150 });

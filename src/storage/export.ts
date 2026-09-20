@@ -41,6 +41,8 @@ function logLine(log: AnyLog, config: ProgrammeConfig): string {
     }
     case 'single':
       return `${name(log.lift)}: single ${f1(log.load)} @ RIR ${log.rir}`;
+    case 'single_skipped':
+      return `${name(log.lift)}: suggested single skipped`;
     case 'rdl':
     case 'slot':
       return `${name(log.slot)}: ${log.sets_done} sets, last set ${setText(log.load, log.last_set.reps, log.last_set.rir, log.override)}${log.last_set.tempo_break ? ', tempo broke' : ''}`;

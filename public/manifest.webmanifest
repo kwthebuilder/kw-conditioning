@@ -1,0 +1,15 @@
+{
+  "name": "Acro Base S&C",
+  "short_name": "Acro S&C",
+  "description": "Phone-first, offline programme giver for a two-day-a-week strength programme.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#1b1b1b",
+  "icons": [
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
