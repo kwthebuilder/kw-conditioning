@@ -31,7 +31,7 @@ src/
     rounding.ts  nearest 2.5 kg, ties down
     calendar.ts  mesocycle and programme week by date
   config/        types derived from spec/*.json, validators, and the bundled loader
-  storage/       device store, export, import. Phase 4.
+  storage/       device store (store.ts), markdown export (export.ts), exact import (import.ts)
   ui/            screens. Phase 5. Phase 0 holds the placeholder page.
   version.ts     app version (from package.json) and spec name
 tests/           vitest suites
