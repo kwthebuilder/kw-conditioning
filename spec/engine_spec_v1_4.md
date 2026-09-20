@@ -1,7 +1,23 @@
-# Engine Specification v1.3
+# Engine Specification v1.4
 
-**Version 1.3 | 19 September 2026 | Supersedes `engine_spec_v1_2.md`**
-**Status:** approved; this is the build specification. Machine-readable companions, which win over prose on any numeric conflict: `engine_test_vectors_v1.json`, `programme_config_v1.json`, `initial_state_v1.json`. Build governed by `app_build_plan_v1.md`.
+**Version 1.4 | 19 September 2026 | Supersedes `engine_spec_v1_3.md`**
+**Status:** approved; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_1.json`, `programme_config_v1_1.json`, `initial_state_v1_1.json`.
+
+**v1.4 change note: scope cut at the athlete's direction.** The app is a straightforward programme giver. It shows the session for the date, computes loads from logged sets, and lets the athlete edit anything. Judgement (tissue, fatigue, time, gaps) belongs to the athlete, with the project chat on call.
+
+| In the app | Not in the app (sections kept below as coaching reference only) |
+|---|---|
+| §2 barbell engine, as built in phase 1, with the rulings in A.14 to A.17 | §5 height and clean-session progressions for ballistic slots |
+| §3 RDL table; hack squat and abductor streak rule | §6 ladder logic, contact caps, halving |
+| §4 accessory double progression | §7 Nordic auto-progression |
+| §10 rounding | §8 every flag: CMJ, tissue, catch, time, gaps |
+| Week-22 freeze on upward steps | §9 flare ladder |
+| Manual override of any load and of each TM (A.18) | L8 site freezes on upward steps |
+| Boundary and big-gap singles as skippable suggestions | |
+| CMJ value stored, running mean shown, no rule | |
+| Export after every session; exact import | |
+
+Classes D, E and F are fixed prescriptions read from the config and logged as done / not done with an optional number.
 
 **v1.3 change note.** No change to progression logic. (1) Equipment and instruments fixed: trap bar 24 kg (athlete-reported, to be confirmed), so the trap-bar jump runs at the empty bar; RSI and CMJ from My Jump Lab. (2) CMJ baseline restarts at week 2 (week 1 value lost); flag rule written exactly. (3) Delivery changed from a Claude artifact to a standalone app built in Claude Code; §12 rewritten. (4) Appendix A added: implementation rulings that remove every ambiguity the prose left, so the builder never has to interpret. Structure (order, selection, mesocycles, taper) stays with `programme_design_rationale_v3_1.md`. The engine moves numbers inside that structure and nothing else.
 
@@ -221,3 +237,9 @@ Evidenced direction (grades as cited): L3 class bases, L4 premises, L8 judging t
 11. **Accessories:** the first logged session sets the load; streak counters reset on any load change. A site flag in the last 48 h blocks upward steps on every slot mapped to that site in the config.
 12. **Flags are evaluated at session open**, before `prescribe`, from four yes/no inputs plus the CMJ value; their consequences are shown on the session, not applied silently.
 13. **The engine never edits config and never invents a slot.** Anything it cannot compute from state and config is shown as "refer to project".
+14. **Downward trigger restore.** The forced position 1 session (2 sets), completed without a failure signal, resets the streak. If position 1 was already due, the forced session is that session and the pointer advances to 2; otherwise the pointer stays where it was. A failure signal in a forced session cuts 2.5% and forces one more; a second returns "refer to project".
+15. **Boundary singles** are suggested only on entering M2, M3 and M4. Never for the taper or the intensive. An absent `last_mesocycle` means M1.
+16. **Single days.** When a session opens with a single, the work sets are straight sets: no rep-out, no calibration, no matched or big-gap update. The failure signal still applies and the position advances.
+17. **Singles are suggestions.** Boundary and big-gap singles are shown with their reason and can be skipped. Skipping clears the flag and changes nothing else. The >14-day gap single is dropped from the app.
+18. **Overrides.** Every prescribed load is editable before logging; `update` reads the load performed. Each TM is editable; a manual TM change multiplies that lift's β values by new ÷ old, exactly as a single does. Every override is recorded with an optional note and appears in the export.
+19. **Out-of-scope rules are not to be implemented**, even partially. Appendix rulings 8 (time budget clause), 11 (site-flag clause), 12 and 13 (flag clauses) lapse with them.

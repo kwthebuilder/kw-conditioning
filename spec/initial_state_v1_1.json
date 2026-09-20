@@ -11,7 +11,9 @@
    "next_position": 2,
    "sessions_logged": 1,
    "neg_streak": 0,
-   "single_scheduled": false
+   "single_scheduled": false,
+   "last_mesocycle": "M1",
+   "last_logged": "2026-09-14"
   },
   "deadlift": {
    "tm": 145.2,
@@ -22,7 +24,9 @@
    "next_position": 2,
    "sessions_logged": 1,
    "neg_streak": 0,
-   "single_scheduled": false
+   "single_scheduled": false,
+   "last_mesocycle": "M1",
+   "last_logged": "2026-09-17"
   }
  },
  "rdl": {
@@ -67,21 +71,14 @@
   }
  },
  "depth_jump": {
-  "height_cm": null,
-  "ladder_due": true
+  "height_cm": null
  },
  "trap_bar_jump": {
-  "load_kg": 24,
-  "heights": []
+  "load_kg": 24
  },
  "cmj": {
-  "series": [],
-  "baseline": null
+  "series": []
  },
- "flare": {
-  "patellar": null,
-  "gluteal": null
- },
- "pending_precuts": [],
- "log": []
+ "log": [],
+ "overrides": []
 }

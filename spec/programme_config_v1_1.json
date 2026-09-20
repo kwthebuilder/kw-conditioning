@@ -1,16 +1,11 @@
 {
- "version": "1.0",
+ "version": "1.1",
  "date": "2026-09-19",
- "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_3.md",
+ "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_4.md",
  "budget_min": {
   "normal": 75,
   "audit": 85
  },
- "cut_order": [
-  "prehab",
-  "pull",
-  "accessory_hinge_or_single_leg"
- ],
  "equipment": {
   "barbell_round_kg": 2.5,
   "trap_bar_kg": 24,
@@ -94,11 +89,6 @@
    "barbell_mode": null
   }
  ],
- "boundary_events": [
-  "audit_single_each_lift_first_session",
-  "rsi_ladder",
-  "cmj_rebaseline"
- ],
  "freeze": {
   "no_upward_steps_after_week": 22,
   "depth_jump_height_frozen_after_week": 22
@@ -140,23 +130,6 @@
    ]
   ]
  },
- "contact_caps": {
-  "session": 12,
-  "week": {
-   "M1": 24,
-   "M2": 24,
-   "M3": 36,
-   "M4": 36
-  }
- },
- "sites": {
-  "patellar": {
-   "cut_first": "hack_squat"
-  },
-  "gluteal": {
-   "cut_first": "rdl"
-  }
- },
  "slots": {
   "depth_jump": {
    "id": "depth_jump",
@@ -167,10 +140,7 @@
    ],
    "contacts": {
     "M1": 6,
-    "M2": [
-     6,
-     9
-    ],
+    "M2": 6,
     "M3": 9,
     "M4": {
      "20-22": 12,
@@ -179,11 +149,7 @@
     "TAPER": 6
    },
    "alt": "skater_bound",
-   "removed_by": [
-    "tissue_flag",
-    "catch_heavy_acro"
-   ],
-   "cmj_flag": "cut one set"
+   "note": "Fixed prescription. Athlete edits contacts by judgement; the design intent for late M2 is 8, see rationale."
   },
   "rsi_ladder": {
    "id": "rsi_ladder",
@@ -258,11 +224,7 @@
    "id": "landmine_cpp",
    "name": "1-arm landmine clean and push press",
    "cls": "D",
-   "increment_kg": 2.5,
-   "first_cut_on": [
-    "time",
-    "elbow flag"
-   ]
+   "increment_kg": 2.5
   },
   "front_squat": {
    "id": "front_squat",
@@ -334,7 +296,8 @@
    "rir_cap": 2,
    "up_at": 10,
    "down_below": 7,
-   "streak": 2
+   "streak": 2,
+   "increment": "5 kg"
   },
   "abductor_hsr": {
    "id": "abductor_hsr",
@@ -348,7 +311,8 @@
    "up_at": 10,
    "down_below": 7,
    "streak": 2,
-   "never_zero": true
+   "never_zero": true,
+   "increment": "one stack plate"
   },
   "db_pp_strength": {
    "id": "db_pp_strength",
@@ -1053,5 +1017,11 @@
     ]
    }
   }
- }
+ },
+ "boundary_singles_on_entering": [
+  "M2",
+  "M3",
+  "M4"
+ ],
+ "scope_note": "v1.1: classes D, E, F are fixed prescriptions with no engine logic. Fields such as 'sites', 'group', 'progress' on slots are descriptive only."
 }

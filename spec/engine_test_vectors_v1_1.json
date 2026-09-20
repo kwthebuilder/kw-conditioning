@@ -1,13 +1,13 @@
 {
- "version": "1.0",
+ "version": "1.1",
  "date": "2026-09-19",
- "spec": "engine_spec_v1_3.md",
+ "spec": "engine_spec_v1_4.md",
  "tolerance": {
   "tm": 0.05,
   "beta": 0.002,
   "load": 0
  },
- "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down).",
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides.",
  "barbell": [
   {
    "name": "fs_cal_up",
@@ -404,11 +404,22 @@
   }
  },
  "downward_trigger": {
-  "steps": [
-   -1.2,
-   -0.8
-  ],
-  "expect": "next session position 1, 2 sets; restores after one non-negative step"
+  "cases": [
+   {
+    "name": "due_position_1",
+    "sequence": "negative step at pos 2, negative step at pos 3",
+    "expect": "next session is position 1 with 2 sets; it counts as the due position 1; next after that is position 2 with 3 sets; streak 0"
+   },
+   {
+    "name": "due_position_3",
+    "sequence": "negative at pos 3, clean pos 1, negative at pos 2",
+    "expect": "next session is a forced position 1 with 2 sets; pointer stays at 3; session after is position 3 with 3 sets; streak 0"
+   },
+   {
+    "name": "failure_in_forced_session",
+    "expect": "TM x 0.975, one more forced session; a second failure returns 'refer to project'"
+   }
+  ]
  },
  "rdl": [
   {
@@ -444,7 +455,7 @@
  ],
  "accessory": [
   {
-   "slot": "db_push_press_strength",
+   "slot": "db_pp_strength",
    "history_last_set_reps": [
     9,
     8
@@ -452,7 +463,7 @@
    "expect": "hold (streak broken)"
   },
   {
-   "slot": "db_push_press_strength",
+   "slot": "db_pp_strength",
    "history_last_set_reps": [
     9,
     9
@@ -460,7 +471,7 @@
    "expect": "+2 kg/hand"
   },
   {
-   "slot": "weighted_pull_up",
+   "slot": "pull_up",
    "history_last_set_reps": [
     7,
     8
@@ -468,7 +479,7 @@
    "expect": "+2.5 kg"
   },
   {
-   "slot": "bulgarian_split_squat",
+   "slot": "bss",
    "history_last_set_reps": [
     7,
     7
@@ -481,77 +492,86 @@
     10,
     10
    ],
-   "site_flag_last_48h": true,
-   "expect": "hold (L8 freeze)"
-  }
- ],
- "trap_bar_jump": [
-  {
-   "fs_tm": 92.0,
-   "bar_kg": 24,
-   "est_1rm": 102.2,
-   "expect_load": 24,
-   "why": "band 9.2-18.4 below bar; bar under 30% ceiling 30.7"
+   "expect": "+5 kg"
   },
   {
-   "fs_tm": 140.0,
-   "bar_kg": 24,
-   "est_1rm": 155.6,
-   "expect_load": 24,
-   "why": "band 14-28 contains the bar; start at the bar (lowest loadable value inside the band)"
+   "slot": "abductor_hsr",
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "expect": "prompt 'go up one plate'; prompt stays until a heavier load is logged, then streaks reset"
+  },
+  {
+   "slot": "pull_up",
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "programme_week": 23,
+   "expect": "hold (no upward steps after week 22)"
   }
  ],
- "cmj": {
-  "series": [
-   38.2,
-   37.6,
-   38.9,
-   38.0,
-   37.4,
-   38.5,
-   38.1,
-   37.9
-  ],
-  "mean": 38.075,
-  "te": 0.62,
-  "drop": 1.718,
-  "threshold": 36.357,
-  "rule": "flag if value < mean - max(2.77*TE, 0.03*mean); TE = sample SD of consecutive differences / sqrt(2); before 8 points: flag if value < running mean * 0.95",
-  "cases": [
-   {
-    "value": 36.3,
-    "expect_flag": true
+ "golden_sessions": "Week 2 Day 1 and Day 2 as written in training_log_2026_w01_w02_r3.md must be reproduced by prescribe() from initial_state_v1.json and programme_config_v1.json.",
+ "singles": {
+  "boundary": {
+   "fires_on_entering": [
+    "M2",
+    "M3",
+    "M4"
+   ],
+   "never": [
+    "M1 (absent last_mesocycle means M1)",
+    "TAPER",
+    "INTENSIVE"
+   ],
+   "skippable": true
+  },
+  "single_day_work_sets": {
+   "input": {
+    "tm_before": 96.0,
+    "single": 102.5,
+    "pos": 2,
+    "work_last_set": {
+     "load": 85,
+     "reps": 3,
+     "rir": 3
+    }
    },
-   {
-    "value": 36.5,
-    "expect_flag": false
+   "expect": {
+    "tm": 99.194,
+    "rule_for_work_sets": "straight sets: no rep-out, no calibration, no matched or big-gap update; failure signal still applies; position advances"
    }
-  ]
- },
- "flare_ladder": {
-  "site": "patellar",
-  "cut_first_slot": "hack_squat",
-  "pre_flare_kg": 100,
-  "cut": 0.4,
-  "load_by_clear_site_exposures_since_flag": {
-   "0-2": 60,
-   "3-5": 70,
-   "6-8": 80,
-   "9-11": 90,
-   "12+": 100
   },
-  "plyometrics": "out until slot is back at 100 and clear; then contacts restart at 50% of pre-flare",
-  "second_consecutive_flag_or_over_5_or_night_pain": "engine stops prescribing for the site and shows refer-to-project"
+  "big_gap": "sets single_scheduled; shown as a suggestion the athlete can skip; skipping clears the flag and changes nothing else"
  },
- "gap": [
+ "override": [
   {
-   "days": 10,
-   "expect": "same TM and position; depth-jump contacts halved; no rep-out on tempo slots"
+   "name": "load_override",
+   "prescribed_load": 77.5,
+   "athlete_changes_to": 80,
+   "log": {
+    "load": 80,
+    "reps": 7,
+    "rir": 2
+   },
+   "expect": "update() reads 80 kg; export records prescribed 77.5, performed 80, optional note"
   },
   {
-   "days": 15,
-   "expect": "audit single both lifts"
+   "name": "tm_override",
+   "lift": "front_squat",
+   "tm_before": 92.0,
+   "athlete_sets": 95.0,
+   "expect": {
+    "tm": 95.0,
+    "betas": "each multiplied by 95.0/92.0",
+    "next_loads": {
+     "1": 75.0,
+     "2": 80.0,
+     "3": 85.0
+    },
+    "export": "records manual TM change with optional note"
+   }
   }
- ],
- "golden_sessions": "Week 2 Day 1 and Day 2 as written in training_log_2026_w01_w02_r3.md must be reproduced by prescribe() from initial_state_v1.json and programme_config_v1.json."
+ ]
 }
