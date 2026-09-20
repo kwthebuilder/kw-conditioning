@@ -65,7 +65,7 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, 
   return el;
 }
 
-const f1 = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+const kg = (n: number): string => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 function numberInput(label: string, opts: { value?: number | null; step?: number; placeholder?: string; required?: boolean; integer?: boolean }): { wrap: HTMLElement; input: HTMLInputElement } {
   const input = h('input', {
@@ -98,6 +98,28 @@ function requireFilled(inputs: HTMLInputElement[]): boolean {
 }
 
 // ---------------------------------------------------------------------
+// copy
+// ---------------------------------------------------------------------
+
+const WARMUP_NAMES: Record<string, string> = {
+  warmup: 'Warm-up',
+  warmup_glute_shoulder: 'Warm-up: glutes and shoulders',
+};
+
+const MODE_NAMES: Record<string, string> = {
+  wave: 'wave',
+  band_87_90: 'contrast doubles',
+  primer_2x2_90: 'heavy doubles',
+  single_1x2_90: 'taper',
+};
+
+function prettyDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!));
+  return dt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+// ---------------------------------------------------------------------
 // logged-today lookup
 // ---------------------------------------------------------------------
 
@@ -126,47 +148,72 @@ function doneLine(app: App, ctx: Ctx, key: string, entry: LogEntry): HTMLElement
   return h(
     'div',
     { class: 'done' },
-    h('button', { class: 'ghost', onclick: () => ctx.toggleOpen(key) }, `✓ ${entry.summary}${open ? ' ▾' : ' ▸'}`),
+    h('button', { onclick: () => ctx.toggleOpen(key) }, `✓ ${entry.summary}`),
     open && steps ? h('ul', { class: 'steps' }, ...steps.map((s) => h('li', {}, s))) : null,
   );
 }
 
 function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescription): HTMLElement {
   const lift = item.slot as LiftId;
-  const head = h('div', { class: 'row' }, h('h2', { class: 'grow' }, item.name), h('button', { class: 'ghost', onclick: () => ctx.editTm(lift) }, `TM ${app.state.lifts[lift].tm.toFixed(1)} ✎`));
+  const tm = app.state.lifts[lift].tm;
+  const title = h(
+    'div',
+    { class: 'title' },
+    h('h2', {}, item.name),
+    h('button', { class: 'quiet tm', onclick: () => ctx.editTm(lift) }, 'TM ', h('b', {}, `${tm.toFixed(1)} kg`)),
+  );
   const logged = loggedSlot(app.state, app.date, lift);
-  if (logged) return h('div', { class: 'item' }, head, doneLine(app, ctx, lift, logged));
-  if (p.kind === 'refer') return h('div', { class: 'item' }, head, h('p', { class: 'refer' }, `Refer to project: ${p.reason}`));
+  if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, lift, logged));
+  if (p.kind === 'refer') return h('div', { class: 'item' }, title, h('p', { class: 'refer' }, `Ask the coach: ${p.reason}`));
 
-  const children: Child[] = [head];
-  for (const n of p.notes) children.push(h('p', { class: 'note' }, n));
+  const children: Child[] = [title];
 
   // Suggested single, not yet taken.
-  if (p.single_suggested && !p.single_suggested.taken && !singleLoggedToday(app.state, app.date, lift)) {
+  const suggest = p.single_suggested && !p.single_suggested.taken && !singleLoggedToday(app.state, app.date, lift);
+  if (suggest && p.single_suggested) {
+    const why = p.single_suggested.reason === 'boundary' ? 'new block' : 'last session disagreed with the TM';
     const single = numberInput('single kg', { step: 2.5, required: true, placeholder: 'kg' });
     children.push(
       h(
         'div',
-        { class: 'row' },
-        single.wrap,
-        h('button', {
-          onclick: () => {
-            const load = readNumber(single.input);
-            if (!requireFilled([single.input]) || load === null) return;
-            ctx.commit({ kind: 'single', lift, date: app.date, load, rir: 2 });
-          },
-        }, 'Log single'),
-        h('button', { onclick: () => ctx.commit({ kind: 'single_skipped', date: app.date, lift }) }, 'Skip'),
+        { class: 'callout warn' },
+        h('div', {}, h('strong', {}, 'Ramp single suggested'), ` (${why}). Work up to one clean rep at RIR 2, log it, and today's sets are recomputed. Or skip it.`),
+        h(
+          'div',
+          { class: 'row' },
+          single.wrap,
+          h('button', {
+            class: 'primary',
+            onclick: () => {
+              const load = readNumber(single.input);
+              if (!requireFilled([single.input]) || load === null) return;
+              ctx.commit({ kind: 'single', lift, date: app.date, load, rir: 2 });
+            },
+          }, 'Log single'),
+          h('button', { class: 'subtle', onclick: () => ctx.commit({ kind: 'single_skipped', date: app.date, lift }) }, 'Skip'),
+        ),
       ),
     );
   }
+  if (p.single_suggested?.taken) children.push(h('div', { class: 'callout info' }, 'Single logged. Straight sets today from the new training max.'));
+  const forced = p.notes.some((n) => n.startsWith('Downward trigger'));
+  if (forced) children.push(h('div', { class: 'callout info' }, 'Two sessions down in a row: light day, position 1, two sets.'));
 
-  if (p.ramp.length) children.push(h('p', { class: 'note' }, `Ramp: ${p.ramp.map((r) => `${f1(r.load)} × ${r.reps}`).join(' · ')}`));
-  const line = `${p.sets} × ${p.reps} at ${f1(p.load)} kg (${Math.round(p.pct * 100)}% of TM ${p.tm.toFixed(1)})` + (p.amrap ? `. Last set rep-out to RIR 2${p.par !== undefined ? `, par ${p.par}` : ''}.` : '.');
-  children.push(h('p', {}, line));
+  children.push(
+    h(
+      'div',
+      { class: 'rx' },
+      h('span', { class: 'big' }, kg(p.load)),
+      h('span', { class: 'unit' }, 'kg'),
+      h('span', { class: 'sets' }, `${p.sets} × ${p.reps}`),
+      h('span', { class: 'unit' }, `${Math.round(p.pct * 100)}% of TM`),
+    ),
+  );
+  children.push(h('p', { class: 'sub' }, p.amrap ? `Last set: as many clean reps as you can, stop at RIR 2.${p.par !== undefined ? ` Par ${p.par}.` : ''}` : 'Straight sets.'));
+  if (p.ramp.length) children.push(h('p', { class: 'ramp' }, 'Ramp ', ...p.ramp.map((r) => h('span', {}, `${kg(r.load)} × ${r.reps}`))));
 
   const load = numberInput('load kg', { value: p.load, step: 2.5 });
-  const reps = numberInput('reps', { value: p.amrap ? null : p.reps, integer: true, required: p.amrap, placeholder: p.amrap ? 'rep-out' : '' });
+  const reps = numberInput('reps', { value: p.amrap ? null : p.reps, integer: true, required: p.amrap, placeholder: p.amrap ? '–' : '' });
   const rir = numberInput('RIR', { value: 2, integer: true, step: 1 });
   const missed = h('input', { type: 'checkbox' });
   const log = h('button', {
@@ -190,27 +237,39 @@ function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescr
       ctx.commit(entry);
     },
   }, 'Log');
-  children.push(h('div', { class: 'row' }, load.wrap, reps.wrap, rir.wrap, h('label', { class: 'f' }, 'missed a set', missed), log));
+  children.push(h('div', { class: 'row' }, load.wrap, reps.wrap, rir.wrap, h('span', { class: 'spacer' }), log));
+  children.push(h('label', { class: 'f check' }, missed, 'Missed a rep on an earlier set'));
   return h('div', { class: 'item' }, ...children);
 }
 
 function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescription | SlotPrescription): HTMLElement {
-  const head = h('h2', {}, item.name);
+  const title = h('div', { class: 'title' }, h('h2', {}, item.name));
   const logged = loggedSlot(app.state, app.date, item.slot);
-  if (logged) return h('div', { class: 'item' }, head, doneLine(app, ctx, item.slot, logged));
-  const children: Child[] = [head];
-  for (const n of p.notes) children.push(h('p', { class: 'note' }, n));
+  if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
+  const children: Child[] = [title];
   const sets = item.template.sets ?? 3;
-  const line =
-    p.kind === 'rdl'
-      ? `${sets} × ${p.rep_range[0]}-${p.rep_range[1]} at ${f1(p.load)} kg. Last set to RIR ${p.rir_cap} or tempo break.`
-      : `${sets} × ${p.reps}${item.template.per_side ? '/side' : ''}${p.load !== null ? ` at ${f1(p.load)} kg` : ''}. Last set to RIR ${p.rir_cap}.`;
-  children.push(h('p', {}, line));
+  const side = item.template.per_side ? '/side' : '';
+  const rx = h('div', { class: 'rx' });
+  if (p.kind === 'rdl') {
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} × ${p.rep_range[0]}–${p.rep_range[1]}`));
+  } else if (p.load !== null) {
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} × ${p.reps}${side}`));
+  } else {
+    rx.append(h('span', { class: 'sets' }, `${sets} × ${p.reps}${side}`), h('span', { class: 'unit' }, p.start_hint_kg !== undefined ? `pick a load, try ${p.start_hint_kg} kg` : 'pick a load'));
+  }
+  children.push(rx);
+  const tempoSlot = p.kind === 'rdl' || p.cls === 'B';
+  children.push(h('p', { class: 'sub' }, `${tempoSlot ? '3 s lowering. ' : ''}Last set: as many clean reps as you can, stop at RIR ${p.rir_cap}${tempoSlot ? ' or when the tempo breaks' : ''}.`));
+  if (p.kind === 'slot' && p.pending) {
+    const inc = p.increment.kind === 'kg' ? `${p.increment.kg} kg${p.increment.per_hand ? ' per hand' : ''}` : p.increment.text;
+    children.push(h('div', { class: 'callout info' }, h('strong', {}, `Go ${p.pending} ${inc}`), ' this session. Log whatever you lift.'));
+  }
+
   const prefill = p.kind === 'rdl' ? p.load : (p.load ?? p.start_hint_kg ?? null);
   const load = numberInput('load kg', { value: prefill, step: p.kind === 'rdl' ? 2.5 : 0.5, required: true, placeholder: 'kg' });
-  const reps = numberInput('reps', { value: null, integer: true, required: true, placeholder: 'rep-out' });
+  const reps = numberInput('reps', { value: null, integer: true, required: true, placeholder: '–' });
   const rir = numberInput('RIR', { value: p.rir_cap, integer: true, step: 1 });
-  const tempo = p.kind === 'rdl' || p.cls === 'B' ? h('input', { type: 'checkbox' }) : null;
+  const tempo = tempoSlot ? h('input', { type: 'checkbox' }) : null;
   const log = h('button', {
     class: 'primary',
     onclick: () => {
@@ -219,8 +278,8 @@ function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescr
       const r = readNumber(reps.input)!;
       const ri = readNumber(rir.input)!;
       const last = { reps: r, rir: ri, ...(tempo && tempo.checked ? { tempo_break: true } : {}) };
-      const prescribedLoad = p.kind === 'rdl' ? p.load : p.load;
-      const override = prescribedLoad !== null && prescribedLoad !== undefined && l !== prescribedLoad ? { from: prescribedLoad } : undefined;
+      const prescribedLoad = p.load;
+      const override = prescribedLoad !== null && l !== prescribedLoad ? { from: prescribedLoad } : undefined;
       const entry: AnyLog =
         p.kind === 'rdl'
           ? { kind: 'rdl', slot: 'rdl', date: app.date, load: l, sets_done: sets, last_set: last, ...(override ? { override } : {}) }
@@ -228,23 +287,31 @@ function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescr
       ctx.commit(entry);
     },
   }, 'Log');
-  children.push(h('div', { class: 'row' }, load.wrap, reps.wrap, rir.wrap, tempo ? h('label', { class: 'f' }, 'tempo broke', tempo) : null, log));
+  children.push(h('div', { class: 'row' }, load.wrap, reps.wrap, rir.wrap, h('span', { class: 'spacer' }), log));
+  if (tempo) children.push(h('label', { class: 'f check' }, tempo, 'Tempo broke on the last set'));
   return h('div', { class: 'item' }, ...children);
 }
 
 function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescription): HTMLElement {
-  const head = h('h2', {}, item.name);
+  const title = h('div', { class: 'title' }, h('h2', {}, item.name));
   const logged = loggedSlot(app.state, app.date, item.slot);
-  if (logged) return h('div', { class: 'item' }, head, doneLine(app, ctx, item.slot, logged));
+  if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
   const t = item.template;
-  const bits: string[] = [];
-  if (t.sets !== undefined) bits.push(`${t.sets} × ${t.reps ?? t.secs !== undefined ? `${t.reps ?? ''}${t.secs !== undefined ? `${t.secs} s` : ''}` : '?'}${t.per_side ? '/side' : ''}`);
-  else if (t.reps !== undefined) bits.push(`${t.reps} reps${t.per_side ? '/side' : ''}`);
-  if (p.contacts !== undefined) bits.push(`${p.contacts} contacts`);
-  if (p.load_kg !== undefined) bits.push(`${f1(p.load_kg)} kg`);
-  if (t.variant) bits.push(t.variant);
+  const side = t.per_side ? '/side' : '';
+  const rx = h('div', { class: 'rx' });
+  if (p.load_kg !== undefined) rx.append(h('span', { class: 'big' }, kg(p.load_kg)), h('span', { class: 'unit' }, 'kg'));
+  if (t.sets !== undefined && t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} × ${t.reps}${side}`));
+  else if (t.sets !== undefined && t.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} × ${t.secs} s${side}`));
+  else if (t.sets !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets`));
+  else if (t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.reps} reps${side}`));
+  if (p.contacts !== undefined) rx.append(h('span', { class: 'sets' }, `${p.contacts} contacts`));
+  if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
   const isLadder = item.slot === 'rsi_ladder';
-  const value = numberInput(isLadder ? 'winning height cm' : 'number (optional)', { value: null, step: 1, integer: !isLadder });
+  const subs: string[] = [];
+  if (t.variant) subs.push(t.variant[0]!.toUpperCase() + t.variant.slice(1));
+  if (isLadder) subs.push('20, 30, 40 cm, three jumps each. Best RSI wins, then three more at that height.');
+  if (item.slot === 'trap_bar_jump') subs.push('Empty bar.');
+  const value = numberInput(isLadder ? 'best height cm' : 'number, optional', { value: null, step: 1, integer: !isLadder });
   const done = (didIt: boolean) => () => {
     const v = readNumber(value.input);
     const entry: AnyLog = { kind: 'fixed', slot: item.slot, date: app.date, done: didIt };
@@ -255,11 +322,10 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
   return h(
     'div',
     { class: 'item' },
-    head,
-    h('p', {}, bits.join(' · ') || p.text),
-    bits.length ? h('p', { class: 'note' }, p.text) : null,
-    ...p.notes.map((n) => h('p', { class: 'note' }, n)),
-    h('div', { class: 'row' }, value.wrap, h('button', { class: 'primary', onclick: done(true) }, 'Done'), h('button', { onclick: done(false) }, 'Skip')),
+    title,
+    rx,
+    subs.length ? h('p', { class: 'sub' }, subs.join(' ')) : null,
+    h('div', { class: 'row' }, value.wrap, h('span', { class: 'spacer' }), h('button', { class: 'subtle', onclick: done(false) }, 'Skip'), h('button', { class: 'primary', onclick: done(true) }, 'Done')),
   );
 }
 
@@ -277,34 +343,45 @@ function itemView(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
   }
 }
 
-function blockView(app: App, ctx: Ctx, b: SessionBlock): HTMLElement {
-  const tags: string[] = [];
-  if (b.min !== undefined) tags.push(`${b.min} min`);
-  if (b.superset) tags.push('alternate');
-  if (b.contrast) tags.push(`contrast${b.rounds ? `, rounds ${Array.isArray(b.rounds) ? b.rounds.join('-') : b.rounds}` : ''}`);
+function blockView(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElement {
+  const onlyWarmup = b.items.every((it) => it.kind === 'warmup');
+  if (onlyWarmup) {
+    return h('section', { class: 'card' }, ...b.items.map((it) => (it.kind === 'warmup' ? h('div', { class: 'title' }, h('h2', {}, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null) : null)));
+  }
+  let kicker = `Block ${index}`;
+  if (b.superset) kicker = 'Alternate sets';
+  if (b.contrast) kicker = `Contrast${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
   return h(
     'section',
-    { class: 'block' },
-    tags.length ? h('div', { class: 'tag' }, tags.join(' · ')) : null,
-    ...b.items.map((it) => (it.kind === 'warmup' ? h('p', { class: 'warmup' }, it.name.replace(/_/g, ' ')) : itemView(app, ctx, it))),
+    { class: 'card' },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, kicker), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
+    ...b.items.map((it) => (it.kind === 'warmup' ? h('p', { class: 'warm' }, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')) : itemView(app, ctx, it))),
   );
 }
 
-function cmjRow(app: App, ctx: Ctx): HTMLElement {
+function cmjCard(app: App, ctx: Ctx): HTMLElement {
   const logged = entriesOn(app.state, app.date).find((e) => e.log.kind === 'cmj');
-  if (logged) return h('div', { class: 'item' }, doneLine(app, ctx, 'cmj', logged));
-  const v = numberInput('CMJ cm (avg of 3)', { value: null, step: 0.1, required: true, placeholder: 'cm' });
+  if (logged) return h('section', { class: 'card' }, doneLine(app, ctx, 'cmj', logged));
+  const v = numberInput('jump height cm', { value: null, step: 0.1, required: true, placeholder: 'cm' });
   return h(
-    'div',
-    { class: 'item row' },
-    v.wrap,
-    h('button', {
-      onclick: () => {
-        const n = readNumber(v.input);
-        if (!requireFilled([v.input]) || n === null) return;
-        ctx.commit({ kind: 'cmj', date: app.date, value: n });
-      },
-    }, 'Log CMJ'),
+    'section',
+    { class: 'card' },
+    h('div', { class: 'title' }, h('h2', {}, 'Countermovement jump'), h('span', { class: 'tag' }, 'before warm-up')),
+    h('p', { class: 'sub' }, 'Average of three, from My Jump Lab.'),
+    h(
+      'div',
+      { class: 'row' },
+      v.wrap,
+      h('span', { class: 'spacer' }),
+      h('button', {
+        class: 'primary',
+        onclick: () => {
+          const n = readNumber(v.input);
+          if (!requireFilled([v.input]) || n === null) return;
+          ctx.commit({ kind: 'cmj', date: app.date, value: n });
+        },
+      }, 'Log CMJ'),
+    ),
   );
 }
 
@@ -312,9 +389,9 @@ function historyView(app: App): HTMLElement {
   const entries = (app.state.log as LogEntry[]).filter((e) => e && typeof e === 'object' && 'summary' in e).slice(-60).reverse();
   return h(
     'details',
-    {},
+    { class: 'card hist' },
     h('summary', {}, `History (${app.state.log.length})`),
-    entries.length ? h('ul', { class: 'hist' }, ...entries.map((e) => h('li', {}, `${e.date} · ${e.summary}`))) : h('p', { class: 'note' }, 'Nothing logged yet.'),
+    entries.length ? h('ul', {}, ...entries.map((e) => h('li', {}, h('time', {}, e.date.slice(5)), h('span', {}, e.summary)))) : h('p', { class: 'sub' }, 'Nothing logged yet.'),
   );
 }
 
@@ -327,14 +404,22 @@ function exportPanel(app: App, ctx: Ctx): HTMLElement {
   return h(
     'div',
     { class: 'panel' },
-    h('h2', {}, 'Export your log'),
-    h('p', {}, 'Storage on the phone can be lost. The exported file is the record; importing it restores everything exactly.'),
-    h('div', { class: 'row' }, h('button', { class: 'primary', onclick: ctx.exportNow }, 'Export now')),
-    app.lastExport ? h('p', { class: 'note' }, app.lastExport) : null,
-    h('h2', { style: 'margin-top:20px' }, 'Import'),
-    h('p', {}, 'Pick an exported .md file. It replaces the current state only if it is valid.'),
-    h('div', { class: 'row' }, file),
-    h('div', { class: 'row', style: 'margin-top:20px' }, h('button', { onclick: ctx.closeExport }, 'Close')),
+    h(
+      'section',
+      { class: 'card' },
+      h('h2', {}, 'Save a copy of your log'),
+      h('p', {}, 'Phones can lose app data without warning. The exported file holds everything and restores it exactly.'),
+      h('div', { class: 'row' }, h('button', { class: 'primary', onclick: ctx.exportNow }, 'Export log')),
+      app.lastExport ? h('p', { class: 'ok' }, app.lastExport) : null,
+    ),
+    h(
+      'section',
+      { class: 'card' },
+      h('h2', {}, 'Restore from a file'),
+      h('p', {}, 'Choose a file you exported earlier. Nothing changes unless the file is valid.'),
+      h('div', { class: 'row' }, file),
+    ),
+    h('div', { class: 'row' }, h('button', { onclick: ctx.closeExport }, 'Back to today')),
   );
 }
 
@@ -345,39 +430,53 @@ function exportPanel(app: App, ctx: Ctx): HTMLElement {
 export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
   const s = ctx.session;
   const day = s.kind === 'session' ? s.day : (app.day ?? 1);
-  const dateInput = h('input', { type: 'date', value: app.date });
+  const dateInput = h('input', { type: 'date', value: app.date, 'aria-label': 'Session date' });
   dateInput.addEventListener('change', () => ctx.setDate(dateInput.value));
 
-  const bar = h(
+  const top = h(
     'div',
-    { class: 'bar' },
+    { class: 'top' },
     h('h1', {}, 'Acro S&C'),
-    dateInput,
-    h('button', { class: day === 1 ? 'on' : '', onclick: () => ctx.setDay(1) }, 'Day 1'),
-    h('button', { class: day === 2 ? 'on' : '', onclick: () => ctx.setDay(2) }, 'Day 2'),
     h('span', { class: 'grow' }),
-    h('button', { class: 'ghost', onclick: ctx.openExport }, 'Export / Import'),
-    h('span', { class: `dot ${app.offlineReady ? 'ok' : ''}` }, app.offlineReady ? '● offline ready' : '○ online only'),
+    h('span', { class: `status ${app.offlineReady ? 'ok' : ''}` }, app.offlineReady ? 'Works offline' : 'Not saved for offline yet'),
+    h('button', { class: 'quiet', onclick: ctx.openExport }, 'Backup'),
+  );
+  const controls = h(
+    'div',
+    { class: 'top', style: 'margin-top:8px' },
+    dateInput,
+    h('div', { class: 'seg' }, h('button', { class: day === 1 ? 'on' : '', onclick: () => ctx.setDay(1) }, 'Day 1'), h('button', { class: day === 2 ? 'on' : '', onclick: () => ctx.setDay(2) }, 'Day 2')),
   );
 
-  const tm = h(
+  const chips = h(
     'div',
-    { class: 'tm' },
+    { class: 'tms' },
     ...(['front_squat', 'deadlift'] as LiftId[]).map((id) =>
-      h('button', { class: 'ghost', onclick: () => ctx.editTm(id) }, `${ctx.liftName(id)} TM ${app.state.lifts[id].tm.toFixed(1)} kg ✎`),
+      h('button', { class: 'chip', onclick: () => ctx.editTm(id) }, ctx.liftName(id).replace('Conventional deadlift', 'Deadlift'), h('b', {}, `${app.state.lifts[id].tm.toFixed(1)} kg`), h('span', { class: 'pen' }, 'edit')),
     ),
   );
 
-  const body: Child[] = [bar, app.banner ? h('div', { class: 'banner' }, app.banner) : null, tm];
+  const body: Child[] = [top, controls, app.banner ? h('div', { class: 'banner' }, app.banner) : null];
   if (s.kind === 'refer') {
-    body.push(h('p', { class: 'refer' }, `No session: ${s.reason}`));
+    body.push(h('p', { class: 'refer', style: 'margin-top:16px' }, `No session for this date. ${s.reason}`));
   } else {
-    body.push(h('p', { class: 'note' }, `${s.notes.join(' ')} Target ${s.target_min} min.`));
-    if (s.pre.includes('cmj')) body.push(cmjRow(app, ctx));
-    body.push(...s.blocks.map((b) => blockView(app, ctx, b)));
+    const lift = s.blocks.flatMap((b) => b.items).find((it): it is SessionSlotItem => it.kind === 'slot' && it.prescription.kind === 'lift');
+    const mode = lift && lift.prescription.kind === 'lift' ? MODE_NAMES[lift.prescription.mode] : undefined;
+    body.push(
+      h(
+        'div',
+        { class: 'context' },
+        h('span', {}, h('strong', {}, `${prettyDate(s.date)} · Day ${s.day}`), ` · week ${s.programme_week}, ${s.mesocycle}`),
+        h('span', {}, `${mode ? `${mode} · ` : ''}about ${s.target_min} min`),
+      ),
+    );
+    body.push(chips);
+    if (s.pre.includes('cmj')) body.push(cmjCard(app, ctx));
+    let n = 0;
+    body.push(...s.blocks.map((b) => blockView(app, ctx, b, ++n)));
   }
   body.push(historyView(app));
-  body.push(h('p', { class: 'note' }, `App ${appVersion}`));
+  body.push(h('p', { class: 'foot' }, `Acro Base S&C · v${appVersion}`));
 
   const endBar = h(
     'div',
@@ -388,7 +487,7 @@ export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
         ctx.commit({ kind: 'session_end', date: app.date, day });
         ctx.openExport();
       },
-    }, 'End session · export'),
+    }, 'Finish session'),
   );
 
   return h('div', {}, ...body, endBar, app.showExport ? exportPanel(app, ctx) : null);
