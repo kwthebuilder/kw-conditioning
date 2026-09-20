@@ -1,6 +1,6 @@
 /**
  * Class A engine: front squat and conventional deadlift.
- * engine_spec_v1_3.md §2, §10 and Appendix A; vectors in the
+ * engine_spec_v1_5.md §2, §10 and Appendix A; vectors in the
  * barbell, rounding, audit_rescale and downward_trigger blocks.
  *
  * Pure: no clock, no randomness, no I/O. Dates come in on the log.
@@ -13,9 +13,11 @@ import type {
   BarbellOutcome,
   BarbellPrescription,
   BarbellRule,
+  Explanation,
   ExplanationStep,
   LiftPrescription,
   RampSet,
+  SingleLog,
   SingleReason,
   UpdateResult,
 } from './types';
@@ -104,6 +106,37 @@ function downwardActive(ls: LiftState): boolean {
   return ls.neg_streak >= DOWNWARD_STREAK;
 }
 
+/** A.20: ramp loads are percentages of the day's displayed load, rounded by the one barbell rule. */
+export function rampSets(dayLoad: number, config: ProgrammeConfig): RampSet[] {
+  const step = roundStep(config);
+  return config.wave.ramp.map(([frac, reps]) => ({ load: roundLoad(dayLoad * frac, step), reps }));
+}
+
+/**
+ * 2.8 / A.8: reset the TM from a ramp single and rescale every set β.
+ * Mutates `ls`; returns the explanation step.
+ */
+export function applySingle(ls: LiftState, single: { load: number; rir: number }): ExplanationStep {
+  const tmOld = ls.tm;
+  const tmNew = tmFromSingle(single.load);
+  const ratio = tmNew / tmOld;
+  const betaText: string[] = [];
+  for (const p of ['2', '3'] as const) {
+    const b = ls.beta[p];
+    if (b !== null) {
+      ls.beta[p] = b * ratio;
+      betaText.push(`β${p} ${f3(b)} → ${f3(b * ratio)}`);
+    }
+  }
+  ls.tm = tmNew;
+  ls.single_scheduled = false;
+  return explainStep(
+    'single',
+    `Ramp single ${f1(single.load)} kg at RIR ${single.rir}. TM = 0.90 × ${f1(single.load)} ÷ 0.93 = ${f1(tmNew)} kg (was ${f1(tmOld)}). Every β scales by ${f3(ratio)}${betaText.length ? ': ' + betaText.join(', ') : ''}.`,
+    { single: single.load, tm_before: tmOld, tm_after: tmNew, ratio },
+  );
+}
+
 // ---------------------------------------------------------------------
 // prescribe
 // ---------------------------------------------------------------------
@@ -146,10 +179,12 @@ export function prescribeLift(
     };
   }
 
-  const reason = singleReason(ls, config, meso);
-  const taken = reason !== undefined && singleLoad !== undefined;
+  // A.23: a single already logged today (state) or previewed (singleLoad) makes this a single day.
+  const takenToday = ls.single_taken?.date === date ? ls.single_taken : undefined;
+  const reason = takenToday ? takenToday.reason : singleReason(ls, config, meso);
+  const taken = takenToday !== undefined || (reason !== undefined && singleLoad !== undefined);
   const notes: string[] = [];
-  const tm = reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
+  const tm = !takenToday && reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
   if (reason && !taken) {
     notes.push(`${SINGLE_REASON_TEXT[reason]} A ramp single at RIR 2 is suggested before the work sets. Skip it and the session runs as normal.`);
   }
@@ -170,10 +205,7 @@ export function prescribeLift(
       const wp = config.wave.positions[String(position) as '1' | '2' | '3'];
       const load = roundLoad(tm * wp.pct, step);
       const amrap = wp.amrap && !taken;
-      const ramp: RampSet[] = config.wave.ramp.map(([frac, reps]) => ({
-        load: roundLoad(load * frac, step),
-        reps,
-      }));
+      const ramp = rampSets(load, config);
       if (forced) notes.push(`Downward trigger: two consecutive negative steps, so position 1 with ${DOWNWARD_SETS} sets.`);
       if (taken && wp.amrap) notes.push('Session opened with a single: straight sets, no rep-out.');
       const p: LiftPrescription = {
@@ -241,6 +273,7 @@ function evaluateWave(
   lift: LiftId,
   log: BarbellLog,
   frozen: boolean,
+  singleDay: boolean,
 ): Work {
   const tm = ls.tm;
   const pos = log.position;
@@ -270,8 +303,8 @@ function evaluateWave(
     };
   }
 
-  // Straight sets on a single day (Q5 ruling): no calibration or update.
-  if (log.single) {
+  // Straight sets on a single day (A.16): no calibration or update.
+  if (singleDay) {
     return {
       rule: 'single',
       step: 0,
@@ -385,7 +418,7 @@ function evaluateWave(
 }
 
 /** M2, M3/M4 and taper (2.9, A.9): only the failure signal moves the TM. */
-function evaluateHeld(ls: LiftState, log: BarbellLog, frozen: boolean): Work {
+function evaluateHeld(ls: LiftState, log: BarbellLog, frozen: boolean, singleDay: boolean): Work {
   const tm = ls.tm;
   const { load, reps, rir } = log.last_set;
   const setText = `${f1(load)} kg × ${reps} at RIR ${rir} (prescribed ${log.prescribed.reps}).`;
@@ -405,7 +438,7 @@ function evaluateHeld(ls: LiftState, log: BarbellLog, frozen: boolean): Work {
     return { rule: 'failure', step, scheduleSingle: false, steps };
   }
   const steps: ExplanationStep[] = [];
-  if (log.mode === 'band_87_90' && !log.single) {
+  if (log.mode === 'band_87_90' && !singleDay) {
     const band = ls.band ?? { pct: BAND_LOW, high_rir_streak: 0 };
     if (rir >= BAND_PROMOTE_RIR) {
       const streak = band.high_rir_streak + 1;
@@ -423,7 +456,23 @@ function evaluateHeld(ls: LiftState, log: BarbellLog, frozen: boolean): Work {
   } else {
     steps.push(explainStep('hold', `${setText} TM is held in this phase: ${f1(tm)} kg.`, { tm }));
   }
-  return { rule: log.single ? 'single' : 'hold', step: 0, scheduleSingle: false, steps };
+  return { rule: singleDay ? 'single' : 'hold', step: 0, scheduleSingle: false, steps };
+}
+
+/**
+ * Apply a ramp single: TM reset, β rescale, and mark the day so the work
+ * sets that follow are straight sets computed from the new TM (A.8, A.16).
+ */
+export function updateSingle(state: State, config: ProgrammeConfig, log: SingleLog): { state: State; explanation: Explanation } {
+  const next = structuredClone(state);
+  const ls = next.lifts[log.lift];
+  const meso = mesocycleOn(config, log.date);
+  const reason: 'boundary' | 'big_gap' = ls.single_scheduled ? 'big_gap' : 'boundary';
+  const step = applySingle(ls, { load: log.load, rir: log.rir });
+  ls.single_taken = { date: log.date, reason };
+  if (meso) ls.last_mesocycle = meso.id;
+  const summary = `${liftName(config, log.lift)}: single ${f1(log.load)} kg → TM ${f1(ls.tm)} kg. Today's work sets are straight sets from the new TM.`;
+  return { state: next, explanation: { summary, steps: [step] } };
 }
 
 /**
@@ -442,34 +491,14 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
   const forced = log.mode === 'wave' && downwardActive(ls);
   const duePosition = ls.next_position;
 
-  // Single first (2.8, A.8): reset TM, rescale every set β.
-  if (log.single) {
-    const tmOld = ls.tm;
-    const tmNew = tmFromSingle(log.single.load);
-    const ratio = tmNew / tmOld;
-    const betaText: string[] = [];
-    for (const p of ['2', '3'] as const) {
-      const b = ls.beta[p];
-      if (b !== null) {
-        ls.beta[p] = b * ratio;
-        betaText.push(`β${p} ${f3(b)} → ${f3(b * ratio)}`);
-      }
-    }
-    ls.tm = tmNew;
-    ls.single_scheduled = false;
-    steps.push(
-      explainStep(
-        'single',
-        `Ramp single ${f1(log.single.load)} kg at RIR ${log.single.rir}. TM = 0.90 × ${f1(log.single.load)} ÷ 0.93 = ${f1(tmNew)} kg (was ${f1(tmOld)}). Every β scales by ${f3(ratio)}${betaText.length ? ': ' + betaText.join(', ') : ''}.`,
-        { single: log.single.load, tm_before: tmOld, tm_after: tmNew, ratio },
-      ),
-    );
-  }
-
+  // Single first (2.8, A.8), either on this log or already applied today through update() (A.23).
+  const singleDay = log.single !== undefined || ls.single_taken?.date === log.date;
+  if (log.single) steps.push(applySingle(ls, log.single));
   // A.17: a suggested single that was not taken is cleared, not carried.
-  const skippedSingle = log.single === undefined && ls.single_scheduled;
+  const skippedSingle = !singleDay && ls.single_scheduled;
   const tmBefore = ls.tm;
-  const work = log.mode === 'wave' ? evaluateWave(ls, config, log.lift, log, frozen) : evaluateHeld(ls, log, frozen);
+  const work = log.mode === 'wave' ? evaluateWave(ls, config, log.lift, log, frozen, singleDay) : evaluateHeld(ls, log, frozen, singleDay);
+  delete ls.single_taken;
   ls.tm = tmBefore + work.step;
   steps.push(...work.steps);
   if (work.scheduleSingle) {

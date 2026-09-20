@@ -5,13 +5,16 @@
  * import from src/ui, src/storage, the DOM, Date.now, Math.random, or
  * the network. Dates are passed in.
  *
- * Phases 1 and 2: per-slot building blocks. Phase 3 composes them into
- * prescribe(state, config, date) → session and update(state, log).
+ * prescribe(state, config, date, day?) and update(state, log, config)
+ * are the surface; bindConfig(config) gives the two-argument forms.
+ * The per-slot functions below are what they compose.
  */
+export { prescribe, defaultDay, isLadderDay } from './session';
+export { update, bindConfig } from './update';
 export { roundLoad } from './rounding';
 export { daysBetween, mesocycleOn, programmeWeek } from './calendar';
 // Class A
-export { prescribeLift, updateLift, tmFromSingle, rawEstimate, failureSignal, SEED_FACTOR } from './barbell';
+export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, SEED_FACTOR } from './barbell';
 // Class B
 export { prescribeRdl, updateRdl, rdlRow, WIDE_WINDOW_SESSIONS } from './rdl';
 export { prescribeTempo, updateTempo, ruleForClassB } from './tempo';

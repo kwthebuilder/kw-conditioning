@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import configJson from '../spec/programme_config_v1_1.json';
+import configJson from '../spec/programme_config_v1_2.json';
 import stateJson from '../spec/initial_state_v1_1.json';
-import vectorsJson from '../spec/engine_test_vectors_v1_1.json';
+import vectorsJson from '../spec/engine_test_vectors_v1_2.json';
 import {
   CONFIG_VERSION,
   INITIAL_STATE,
@@ -13,26 +13,26 @@ import {
 import { ConfigError, parseProgrammeConfig, parseState, parseTestVectors } from '../src/config/validate';
 
 const files: Record<string, unknown> = {
-  'programme_config_v1_1.json': configJson,
+  'programme_config_v1_2.json': configJson,
   'initial_state_v1_1.json': stateJson,
-  'engine_test_vectors_v1_1.json': vectorsJson,
+  'engine_test_vectors_v1_2.json': vectorsJson,
 };
 const raw = (name: string): unknown => files[name];
 
 describe('spec loader', () => {
   it('loads and validates all three files', () => {
-    expect(PROGRAMME_CONFIG.version).toBe('1.1');
-    expect(TEST_VECTORS.version).toBe('1.1');
+    expect(PROGRAMME_CONFIG.version).toBe('1.2');
+    expect(TEST_VECTORS.version).toBe('1.2');
     expect(INITIAL_STATE.schema).toBe(1);
-    expect(CONFIG_VERSION).toBe('1.1');
-    expect(VECTORS_VERSION).toBe('1.1');
+    expect(CONFIG_VERSION).toBe('1.2');
+    expect(VECTORS_VERSION).toBe('1.2');
     expect(STATE_SCHEMA).toBe(1);
   });
 
   it('returns values structurally identical to the files (nothing dropped or coerced)', () => {
-    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_1.json'));
+    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_2.json'));
     expect(INITIAL_STATE).toEqual(raw('initial_state_v1_1.json'));
-    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_1.json'));
+    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_2.json'));
   });
 
   it('carries the shapes the types promise', () => {
@@ -49,8 +49,8 @@ describe('spec loader', () => {
 
 describe('validators reject malformed input with a JSON path', () => {
   const state = (): Record<string, unknown> => structuredClone(raw('initial_state_v1_1.json')) as Record<string, unknown>;
-  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_1.json')) as Record<string, unknown>;
-  const vectors = (): Record<string, unknown> => structuredClone(raw('engine_test_vectors_v1_1.json')) as Record<string, unknown>;
+  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_2.json')) as Record<string, unknown>;
+  const vectors = (): Record<string, unknown> => structuredClone(raw('engine_test_vectors_v1_2.json')) as Record<string, unknown>;
 
   it('rejects a non-object', () => {
     expect(() => parseState(null)).toThrow(ConfigError);

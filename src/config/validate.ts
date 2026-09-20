@@ -236,6 +236,11 @@ function liftState(v: unknown, path: string): LiftState {
   if (band !== undefined) ls.band = band;
   const ff = optional(o, 'forced_failures', path, int);
   if (ff !== undefined) ls.forced_failures = ff;
+  const taken = optional(o, 'single_taken', path, (x, p) => {
+    const t = obj(x, p);
+    return { date: req(t, 'date', p, isoDate), reason: req(t, 'reason', p, oneOf(['boundary', 'big_gap'] as const)) };
+  });
+  if (taken !== undefined) ls.single_taken = taken;
   return ls;
 }
 
@@ -532,11 +537,29 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
   };
   const scopeNote = optional(o, 'scope_note', path, str);
   if (scopeNote !== undefined) cfg.scope_note = scopeNote;
+  const ladder = optional(o, 'ladder', path, (v, p) => {
+    const l = obj(v, p);
+    const out: NonNullable<ProgrammeConfig['ladder']> = {
+      weeks: req(l, 'weeks', p, listOf(int)),
+      day: req(l, 'day', p, oneOf([1, 2] as const)),
+      slot: req(l, 'slot', p, str),
+      replaces: req(l, 'replaces', p, listOf(str)),
+    };
+    const note = optional(l, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (ladder !== undefined) cfg.ladder = ladder;
 
   // Referential checks inside the config file.
   for (const [i, m] of cfg.mesocycles.entries()) {
     if (m.template !== null && !(m.template in cfg.templates)) {
       fail(`${path}.mesocycles[${i}].template`, `unknown template "${m.template}"`);
+    }
+  }
+  if (cfg.ladder) {
+    for (const id of [cfg.ladder.slot, ...cfg.ladder.replaces]) {
+      if (!(id in cfg.slots)) fail(`${path}.ladder`, `unknown slot "${id}"`);
     }
   }
   const mesoIds = new Set(cfg.mesocycles.map((m) => m.id));
@@ -756,6 +779,46 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
     golden_sessions: req(o, 'golden_sessions', path, str),
     singles: req(o, 'singles', path, singlesVector),
     override: req(o, 'override', path, listOf(overrideVector)),
+    ramp: req(
+      o,
+      'ramp',
+      path,
+      listOf((x, p) => {
+        const r = obj(x, p);
+        const out: TestVectors['ramp'][number] = { day_load: req(r, 'day_load', p, num), expect: req(r, 'expect', p, listOf(pair(num))) };
+        const note = optional(r, 'note', p, str);
+        if (note !== undefined) out.note = note;
+        return out;
+      }),
+    ),
+    session: req(o, 'session', path, (x, p) => {
+      const sv = obj(x, p);
+      return {
+        ladder: req(
+          sv,
+          'ladder',
+          p,
+          listOf((y, q) => {
+            const c = obj(y, q);
+            return { date: req(c, 'date', q, isoDate), day: req(c, 'day', q, oneOf([1, 2] as const)), expect: req(c, 'expect', q, str) };
+          }),
+        ),
+        day_default: req(
+          sv,
+          'day_default',
+          p,
+          listOf((y, q) => {
+            const c = obj(y, q);
+            const out: TestVectors['session']['day_default'][number] = { state: req(c, 'state', q, str), expect_day: req(c, 'expect_day', q, oneOf([1, 2] as const)) };
+            const ex = optional(c, 'explicit_day', q, oneOf([1, 2] as const));
+            if (ex !== undefined) out.explicit_day = ex;
+            const note = optional(c, 'note', q, str);
+            if (note !== undefined) out.note = note;
+            return out;
+          }),
+        ),
+      };
+    }),
   };
 }
 

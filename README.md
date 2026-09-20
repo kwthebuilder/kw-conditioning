@@ -19,6 +19,8 @@ npm run preview   # serve dist/ on the LAN
 spec/            read-only contracts: engine spec, vectors, config, initial state, golden log
 src/
   engine/        pure module: no DOM, storage, clock, randomness or network
+    session.ts   prescribe(state, config, date, day?): the session for a date (phase 3)
+    update.ts    update(state, log, config): the one door for every state change (A.23)
     barbell.ts   class A: prescribeLift / updateLift (phase 1)
     rdl.ts       class B RDL table
     tempo.ts     class B hack squat and abductor HSR streaks

@@ -44,6 +44,8 @@ export interface LiftState {
   band?: { pct: 0.87 | 0.9; high_rir_streak: number };
   /** Failure signals on consecutive forced position-1 sessions (2.7, Q2 ruling). */
   forced_failures?: number;
+  /** A.23: a single was logged on this date; the day's work sets are straight sets (A.16). */
+  single_taken?: { date: IsoDate; reason: 'boundary' | 'big_gap' };
 }
 
 export interface RdlState {
@@ -256,6 +258,8 @@ export interface ProgrammeConfig {
   mesocycles: Mesocycle[];
   /** A.15: boundary singles are suggested only on entering these. */
   boundary_singles_on_entering: MesocycleId[];
+  /** A.21: ladder days. Fixed text; the rsi_ladder item replaces the first named slot, the rest are dropped. */
+  ladder?: { weeks: number[]; day: 1 | 2; slot: SlotId; replaces: SlotId[]; note?: string };
   freeze: {
     no_upward_steps_after_week: number;
     depth_jump_height_frozen_after_week: number;
@@ -356,6 +360,17 @@ export type OverrideVector =
       expect: { tm: number; betas: string; next_loads: Record<'1' | '2' | '3', number>; export: string };
     };
 
+export interface RampVector {
+  day_load: number;
+  expect: [number, number][];
+  note?: string;
+}
+
+export interface SessionVector {
+  ladder: { date: IsoDate; day: 1 | 2; expect: string }[];
+  day_default: { state: string; explicit_day?: 1 | 2; expect_day: 1 | 2; note?: string }[];
+}
+
 export interface TestVectors {
   version: string;
   date: IsoDate;
@@ -371,4 +386,6 @@ export interface TestVectors {
   golden_sessions: string;
   singles: SinglesVector;
   override: OverrideVector[];
+  ramp: RampVector[];
+  session: SessionVector;
 }

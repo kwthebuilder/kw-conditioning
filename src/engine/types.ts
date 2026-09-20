@@ -1,7 +1,7 @@
 /**
  * Engine-only types. Config and state types live in src/config/types.
  */
-import type { BarbellMode, IsoDate, LiftId, Position, SlotId, State } from '../config/types';
+import type { BarbellMode, IsoDate, LiftId, MesocycleId, Position, SlotClass, SlotId, State, TemplateId } from '../config/types';
 
 /** What the athlete logged for one barbell lift in one session. */
 export interface BarbellLog {
@@ -252,4 +252,109 @@ export interface CmjSummary {
   count: number;
   last: number | null;
   mean: number | null;
+}
+
+// ---------------------------------------------------------------------
+// Phase 3: session and the one-door update
+// ---------------------------------------------------------------------
+
+export type SessionDay = 1 | 2;
+
+/** A ramp single logged on its own before the work sets (A.23). */
+export interface SingleLog {
+  lift: LiftId;
+  date: IsoDate;
+  load: number;
+  rir: number;
+}
+
+/** How a session item is logged. */
+export type LogKind = 'barbell' | 'rdl' | 'slot' | 'fixed';
+
+/** Fields carried from the template item; the engine's own numbers live on the prescription. */
+export interface SessionTemplateFields {
+  sets?: number;
+  reps?: number;
+  secs?: number;
+  per_side?: boolean;
+  variant?: string;
+  contacts?: number;
+  inside_rest?: boolean;
+}
+
+export interface SessionSlotItem {
+  kind: 'slot';
+  slot: SlotId;
+  cls: SlotClass;
+  name: string;
+  log_kind: LogKind;
+  template: SessionTemplateFields;
+  prescription: BarbellPrescription | RdlPrescription | SlotPrescription | FixedPrescription;
+}
+
+export interface SessionWarmupItem {
+  kind: 'warmup';
+  name: string;
+}
+
+export type SessionItem = SessionSlotItem | SessionWarmupItem;
+
+export interface SessionBlock {
+  min?: number;
+  superset?: boolean;
+  contrast?: boolean;
+  rounds?: number | [number, number];
+  items: SessionItem[];
+}
+
+export interface Session {
+  kind: 'session';
+  date: IsoDate;
+  mesocycle: MesocycleId;
+  programme_week: number;
+  day: SessionDay;
+  template: TemplateId;
+  target_min: number;
+  /** Pre-session measurements from the template, e.g. ["cmj"]. */
+  pre: string[];
+  blocks: SessionBlock[];
+  /** Lifts whose prescription carries an untaken single suggestion. */
+  singles_suggested: { lift: LiftId; reason: SingleReason }[];
+  /** A.21: the rsi_ladder item stands in for the reactive item today. */
+  ladder_day: boolean;
+  notes: string[];
+}
+
+export interface SessionRefer {
+  kind: 'refer';
+  date: IsoDate;
+  reason: string;
+}
+
+export type SessionResult = Session | SessionRefer;
+
+/** A.23: every change to state comes through update() as one of these. */
+export type AnyLog =
+  | ({ kind: 'barbell' } & BarbellLog)
+  | ({ kind: 'single' } & SingleLog)
+  | ({ kind: 'rdl' } & RdlLog)
+  | ({ kind: 'slot' } & SlotLog)
+  | ({ kind: 'fixed' } & FixedLog)
+  | { kind: 'cmj'; date: IsoDate; value: number }
+  | { kind: 'depth_jump_height'; date: IsoDate; height_cm: number }
+  | { kind: 'tm_override'; date: IsoDate; lift: LiftId; tm: number; note?: string }
+  | { kind: 'session_end'; date: IsoDate; day: SessionDay; minutes?: number; note?: string };
+
+/** What update() appends to state.log. */
+export interface LogEntry {
+  kind: AnyLog['kind'];
+  date: IsoDate;
+  summary: string;
+  log: AnyLog;
+}
+
+export interface EngineUpdateResult {
+  state: State;
+  explanation: Explanation;
+  outcome: BarbellOutcome | RdlOutcome | SlotOutcome | null;
 }

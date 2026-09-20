@@ -67,3 +67,19 @@ Format:
 - **Blocked:** Flare ladder, session flags, time pre-cuts, gap rules, trap-bar height progression, jump shrug and Nordic progression, contact caps, CMJ flag and baseline. Classes D, E and F carry no logic: prescriptions are read from the config as fixed text and numbers (trap-bar jump at `equipment.trap_bar_kg`; depth-jump contacts by mesocycle, 6 for the M2 range) and are logged done / not done with an optional number. CMJ stores the value and shows the running mean only.
 - **Ruling:** (orchestrator) Scope cut by the athlete. The `trap_bar_jump`, `cmj`, `flare_ladder` and `gap` vector blocks are out of scope and will be removed in vectors v1.1. Added instead: a manual override on every prescribed load and on each training max, recorded with an optional note and carried in the export; scheduled and boundary singles are a skippable suggestion, never forced.
 - **Spec revision:** (orchestrator) vectors v1.1 pending
+
+## Q8 — ramp-set rounding: golden log 40 kg versus §10's 37.5 kg
+- **Raised:** 2026-09-20, phase 3
+- **Where:** training_log_2026_w01_w02_r3.md week 2 Day 1 item 5 / engine_spec_v1_4.md §2.2, §10
+- **Question:** 50% of the 77.5 kg top set is 38.75, an exact tie, which §10 rounds down to 37.5. The r3 log shows 40. Which rule governs ramp sets?
+- **Blocked:** Nothing; raised at plan time.
+- **Ruling:** (orchestrator) The 40 was a hand error. Spec v1.5 A.20: ramp loads are a percentage of the day's displayed load rounded by the one barbell rule, nearest 2.5 ties down. Golden log r4 shows 37.5; vectors v1.2 add a `ramp` block and the 38.75 → 37.5 rounding case.
+- **Spec revision:** (orchestrator) engine_spec_v1_5.md, training_log_2026_w01_w02_r4.md, engine_test_vectors_v1_2.json
+
+## Q9 — week 2 RSI ladder substitution existed only as prose
+- **Raised:** 2026-09-20, phase 3
+- **Where:** training_log_2026_w01_w02_r3.md week 2 Day 1 item 3 / programme_config_v1_1.json `slots.rsi_ladder.when`
+- **Question:** The golden Day 1 shows the RSI ladder in place of the depth jump, but the config carried the schedule only as a prose `when` field. Should the session substitute it, and from which config field?
+- **Blocked:** Nothing; raised at plan time.
+- **Ruling:** (orchestrator) Spec v1.5 A.21 and config v1.2 top-level `ladder`: on the listed weeks and day, the `rsi_ladder` item takes the place of the first slot named in `replaces` and the others are dropped. Fixed text, no ladder logic. A.22 fixes day selection (explicit day wins; else Day 2 if front squat `last_logged` is later than the deadlift's, else Day 1) and A.23 routes every state change through `update`.
+- **Spec revision:** (orchestrator) engine_spec_v1_5.md, programme_config_v1_2.json
