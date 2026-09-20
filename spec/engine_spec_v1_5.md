@@ -1,7 +1,9 @@
-# Engine Specification v1.4
+# Engine Specification v1.5
 
-**Version 1.4 | 19 September 2026 | Supersedes `engine_spec_v1_3.md`**
-**Status:** approved; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_1.json`, `programme_config_v1_1.json`, `initial_state_v1_1.json`.
+**Version 1.5 | 20 September 2026 | Supersedes `engine_spec_v1_4.md`**
+**Status:** approved; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_2.json`, `programme_config_v1_2.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+
+**v1.5 change note: phase 3 rulings.** No change to any progression rule. Appendix A items 20 to 23 added: ramp sets use the one barbell rounding rule (the r3 log's 40 kg was a hand error, corrected in r4); the RSI ladder schedule is data in config v1.2; Day 1 or Day 2 is chosen by which primary lift was logged last, never by weekday; every state change goes through `update`. §12 file names corrected.
 
 **v1.4 change note: scope cut at the athlete's direction.** The app is a straightforward programme giver. It shows the session for the date, computes loads from logged sets, and lets the athlete edit anything. Judgement (tissue, fatigue, time, gaps) belongs to the athlete, with the project chat on call.
 
@@ -191,12 +193,12 @@ Unchanged from v1 §1, plus: "missed a set" toggle on the primary lift; trap-bar
 
 Built in Claude Code under `app_build_plan_v1.md`. Constraints only; framework and visual design are the builder's choice.
 - **Form:** static, offline-capable web app installable to the phone home screen. No backend, no accounts, no analytics, no network calls after load.
-- **Engine:** a pure TypeScript module with no UI or storage imports. Two functions: `prescribe(state, config, date) → session` and `update(state, log) → { state, explanation }`. Every step is explained to the athlete with the numbers behind it.
-- **Config:** `programme_config_v1.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
-- **State:** schema-versioned; starts from `initial_state_v1.json`; per lift TM, β₂ β₃, next position, negative-step streak, single-scheduled flag; per accessory load and streaks; ladder height; CMJ series and baseline; per-site flare state; pending pre-cuts; full session log.
+- **Engine:** a pure TypeScript module with no UI or storage imports. Two functions: `prescribe(state, config, date, day?) → session` and `update(state, log) → { state, explanation }`. Every step is explained to the athlete with the numbers behind it.
+- **Config:** `programme_config_v1_2.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
+- **State:** schema-versioned; starts from `initial_state_v1_1.json`; per lift TM, β₂ β₃, next position, negative-step streak, single-scheduled flag; per accessory load and streaks; ladder height; CMJ series and baseline; per-site flare state; pending pre-cuts; full session log.
 - **Export:** one tap → `training_log_YYYY_wNN.md`, human-readable, with the full state as a fenced JSON block at the foot. Prompted automatically at the end of every session.
 - **Import:** paste or open that file to rebuild state exactly. The exported log is the record of truth; device storage is a convenience and must be assumed losable.
-- **Tests:** `engine_test_vectors_v1.json` is the acceptance contract. Human-readable summary:
+- **Tests:** `engine_test_vectors_v1_2.json` is the acceptance contract. Human-readable summary:
 
 | Case | Input | Output |
 |---|---|---|
@@ -243,3 +245,7 @@ Evidenced direction (grades as cited): L3 class bases, L4 premises, L8 judging t
 17. **Singles are suggestions.** Boundary and big-gap singles are shown with their reason and can be skipped. Skipping clears the flag and changes nothing else. The >14-day gap single is dropped from the app.
 18. **Overrides.** Every prescribed load is editable before logging; `update` reads the load performed. Each TM is editable; a manual TM change multiplies that lift's β values by new ÷ old, exactly as a single does. Every override is recorded with an optional note and appears in the export.
 19. **Out-of-scope rules are not to be implemented**, even partially. Appendix rulings 8 (time budget clause), 11 (site-flag clause), 12 and 13 (flag clauses) lapse with them.
+20. **Ramp sets.** Each ramp load is its percentage of the day's displayed (rounded) work load, then rounded by the one barbell rule in §10: nearest 2.5 kg, ties down. There is no second rounding rule anywhere. 50% of 77.5 is 38.75 and displays as 37.5.
+21. **Ladder days.** Config `ladder` lists the programme weeks and the day. On that day of those weeks the `rsi_ladder` item takes the place of the first item named in `ladder.replaces` and every other named item is dropped from the session. It is fixed text, logged done / not done with optional numbers. No ladder logic, no contact caps. The athlete records the winning height by editing `depth_jump.height_cm`.
+22. **Day selection.** `prescribe` takes an optional `day` (1 or 2), which always wins. Without it: Day 2 if the front squat's `last_logged` is later than the deadlift's, otherwise Day 1 (including when both are null). The weekday is never consulted, so a shifted session changes nothing. In the taper the same rule applies.
+23. **One door for state.** Every change to state goes through `update` and is appended to `state.log`: set logs, a single taken, a single skipped, a manual TM change, a load override, a CMJ value, a depth-jump height, session end. After a single is logged, `prescribe` for the same date returns that lift's work sets as straight sets (A.16) at loads computed from the new TM (A.8).

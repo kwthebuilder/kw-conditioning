@@ -1,6 +1,6 @@
 # CLAUDE.md — Acro Base S&C training app
 
-Version 1.1 | 19 September 2026
+Version 1.2 | 20 September 2026
 
 ## What this is
 A phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The engine computes every load from the athlete's logged sets. Visual design is unimportant: plain, fast, legible with one hand in a gym.
@@ -8,8 +8,8 @@ A phone-first, offline web app that prescribes and logs a two-day-a-week strengt
 ## Non-negotiables
 1. `/spec` is read-only. It holds the engine spec, test vectors, programme config, initial state and the golden log. Never edit these files and never change what a rule means.
 2. If the spec is unclear or seems wrong, append the question to `SPEC_QUESTIONS.md` with the section reference, skip that item, and carry on. Do not guess.
-3. `spec/engine_test_vectors_v1_1.json` is the acceptance contract. Where prose and vectors disagree, the vectors win and the disagreement goes in `SPEC_QUESTIONS.md`.
-4. The engine is a pure TypeScript module: no UI, storage, network, clock or randomness. Dates are passed in. Public surface: `prescribe(state, config, date)` and `update(state, log)`, the latter returning the new state and a plain-language explanation of every step with its numbers.
+3. `spec/engine_test_vectors_v1_2.json` is the acceptance contract. Where prose and vectors disagree, the vectors win and the disagreement goes in `SPEC_QUESTIONS.md`.
+4. The engine is a pure TypeScript module: no UI, storage, network, clock or randomness. Dates are passed in. Public surface: `prescribe(state, config, date, day?)` and `update(state, log)`, the latter returning the new state and a plain-language explanation of every step with its numbers.
 5. State holds unrounded floats. Rounding happens only when a load is displayed (nearest 2.5 kg, ties down).
 6. No backend, accounts, analytics, or network calls after load. No training data in the repo.
 7. Device storage is losable. Prompt an export at the end of every session. Import must restore state exactly or refuse without touching state.
@@ -17,7 +17,7 @@ A phone-first, offline web app that prescribes and logs a two-day-a-week strengt
 9. Work one phase at a time. Start each phase in plan mode; end it by running the full test suite and reporting: test output, open spec questions, decisions taken.
 
 ## Scope
-This is a straightforward programme giver. Build only what `spec/engine_spec_v1_4.md` lists as in the app. No flags, flare logic, time cuts, gap rules or auto-progression for jumps and prehab. Every prescribed number is editable by the athlete.
+This is a straightforward programme giver. Build only what `spec/engine_spec_v1_5.md` lists as in the app. No flags, flare logic, time cuts, gap rules or auto-progression for jumps and prehab. Every prescribed number is editable by the athlete.
 
 ## Yours to choose
 Framework, styling, storage mechanism, hosting, file layout, component design. Prefer fewer dependencies.

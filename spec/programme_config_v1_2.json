@@ -1,7 +1,7 @@
 {
- "version": "1.1",
- "date": "2026-09-19",
- "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_4.md",
+ "version": "1.2",
+ "date": "2026-09-20",
+ "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_5.md",
  "budget_min": {
   "normal": 75,
   "audit": 85
@@ -93,6 +93,21 @@
   "no_upward_steps_after_week": 22,
   "depth_jump_height_frozen_after_week": 22
  },
+ "ladder": {
+  "weeks": [
+   2,
+   9,
+   15,
+   20
+  ],
+  "day": 1,
+  "slot": "rsi_ladder",
+  "replaces": [
+   "depth_jump",
+   "depth_landing"
+  ],
+  "note": "On Day 1 of these programme weeks the rsi_ladder item takes the place of the first replaced item in the template and every other replaced item is dropped. Fixed text only; no ladder logic in the app. Spec A.21."
+ },
  "wave": {
   "positions": {
    "1": {
@@ -159,7 +174,7 @@
     "patellar"
    ],
    "contacts": 12,
-   "when": "week 2 and every boundary; replaces depth_jump that day"
+   "when": "descriptive only; the schedule is the top-level ladder field"
   },
   "depth_landing": {
    "id": "depth_landing",
@@ -1023,5 +1038,5 @@
   "M3",
   "M4"
  ],
- "scope_note": "v1.1: classes D, E, F are fixed prescriptions with no engine logic. Fields such as 'sites', 'group', 'progress' on slots are descriptive only."
+ "scope_note": "v1.1: classes D, E, F are fixed prescriptions with no engine logic. Fields such as 'sites', 'group', 'progress' on slots are descriptive only. v1.2: ladder schedule added as data (top-level 'ladder'); nothing else changed."
 }

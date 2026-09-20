@@ -1,13 +1,13 @@
 {
- "version": "1.1",
- "date": "2026-09-19",
- "spec": "engine_spec_v1_4.md",
+ "version": "1.2",
+ "date": "2026-09-20",
+ "spec": "engine_spec_v1_5.md",
  "tolerance": {
   "tm": 0.05,
   "beta": 0.002,
   "load": 0
  },
- "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides.",
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected.",
  "barbell": [
   {
    "name": "fs_cal_up",
@@ -386,6 +386,14 @@
   {
    "raw": 132.3,
    "expect": 132.5
+  },
+  {
+   "raw": 38.75,
+   "expect": 37.5
+  },
+  {
+   "raw": 61.25,
+   "expect": 60.0
   }
  ],
  "audit_rescale": {
@@ -512,7 +520,7 @@
    "expect": "hold (no upward steps after week 22)"
   }
  ],
- "golden_sessions": "Week 2 Day 1 and Day 2 as written in training_log_2026_w01_w02_r3.md must be reproduced by prescribe() from initial_state_v1.json and programme_config_v1.json.",
+ "golden_sessions": "Week 2 Day 1 (2026-09-21) and Day 2 (2026-09-24) as written in training_log_2026_w01_w02_r4.md must be reproduced by prescribe() from initial_state_v1_1.json and programme_config_v1_2.json: every computed load, the slot list and the block order. Day 1 shows rsi_ladder, not depth_jump.",
  "singles": {
   "boundary": {
    "fires_on_entering": [
@@ -573,5 +581,86 @@
     "export": "records manual TM change with optional note"
    }
   }
- ]
+ ],
+ "ramp": [
+  {
+   "day_load": 77.5,
+   "expect": [
+    [
+     37.5,
+     5
+    ],
+    [
+     55.0,
+     3
+    ],
+    [
+     65.0,
+     1
+    ]
+   ],
+   "note": "each ramp load = pct x the day's displayed load, then rounded by the one barbell rule (nearest 2.5, ties down). 38.75 is a tie and goes down."
+  },
+  {
+   "day_load": 122.5,
+   "expect": [
+    [
+     60.0,
+     5
+    ],
+    [
+     85.0,
+     3
+    ],
+    [
+     105.0,
+     1
+    ]
+   ]
+  }
+ ],
+ "session": {
+  "ladder": [
+   {
+    "date": "2026-09-21",
+    "day": 1,
+    "expect": "reactive block holds rsi_ladder (12 contacts); depth_jump absent"
+   },
+   {
+    "date": "2026-09-24",
+    "day": 2,
+    "expect": "no ladder; Day 2 has no reactive item"
+   },
+   {
+    "date": "2026-09-28",
+    "day": 1,
+    "expect": "depth_jump, 6 contacts; rsi_ladder absent"
+   },
+   {
+    "date": "2026-11-09",
+    "day": 1,
+    "expect": "week 9, M2: rsi_ladder present; depth_jump and depth_landing both absent; skater_bound unchanged"
+   }
+  ],
+  "day_default": [
+   {
+    "state": "initial_state_v1_1 (front_squat last_logged 2026-09-14, deadlift 2026-09-17)",
+    "expect_day": 1
+   },
+   {
+    "state": "front_squat last_logged later than deadlift",
+    "expect_day": 2
+   },
+   {
+    "state": "both last_logged null",
+    "expect_day": 1
+   },
+   {
+    "state": "any",
+    "explicit_day": 2,
+    "expect_day": 2,
+    "note": "explicit argument always wins; weekday is never consulted"
+   }
+  ]
+ }
 }

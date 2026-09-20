@@ -1,6 +1,6 @@
 # Training Log: Macrocycle to 8 March 2027
 
-**Revision 3 | 19 September 2026 | Supersedes r2.** Week 2 prescribed under `engine_spec_v1_3.md`: trap-bar jump at the empty 24 kg bar, RSI by My Jump Lab, CMJ baseline restarting at point 1. This sheet is also the golden session for the app build.
+**Revision 4 | 20 September 2026 | Supersedes r3.** One correction: the first front squat ramp set is 37.5 kg, not 40. Half of 77.5 is 38.75, an exact tie, and the barbell rule rounds ties down. r3's 40 was a hand error. Nothing else changed. Week 2 prescribed under `engine_spec_v1_3.md`: trap-bar jump at the empty 24 kg bar, RSI by My Jump Lab, CMJ baseline restarting at point 1. This sheet is also the golden session for the app build.
 
 **Log of record. Append weekly. Verified = athlete-reported and recorded; anything else is prescription.**
 
@@ -38,7 +38,7 @@ RIR throughout is reps left before technical failure (position or tempo lost). R
 2. Warm-up: glute sequence, shoulder primer. 10 min.
 3. RSI ladder: 20 / 30 / 40 cm, three jumps each; best mean RSI sets the M1 height. Then 3 more contacts at the winning height. Total 12; this replaces the separate 6-contact set today. Measured in My Jump Lab drop-jump mode; RSI = flight time ÷ contact time.
 4. Trap-bar jump 2 × 3 at the **empty bar, 24 kg** (band 9 to 18 kg sits under the bar; ceiling 30 kg). Confirm the bar's weight.
-5. Front squat: ramp 40 × 5, 55 × 3, 65 × 1; then 3 × 3 at **77.5 kg**. Last set is a rep-out capped at RIR 2; par is about 7. Calibration session for position 2. Log load, reps, RIR.
+5. Front squat: ramp 37.5 × 5, 55 × 3, 65 × 1; then 3 × 3 at **77.5 kg**. Last set is a rep-out capped at RIR 2; par is about 7. Calibration session for position 2. Log load, reps, RIR.
 6. DB push press strength thread 3 × 6 + weighted pull-up 3 × 5, alternated; last set of each to RIR 2, log reps and load.
 7. RDL 3 × 6-8 at **100 kg**, 3 s lowering; last set to RIR 2 or tempo break. Log reps. (12 or more → +10 kg next week; 10-11 → +5; 8-9 → +2.5; 6-7 hold; under 6 → −5.)
 8. Nordic 2 × 3 + hip abduction iso 2 × 30 s/side + incline prone Y-raise 2 × 10.
