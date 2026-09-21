@@ -108,6 +108,67 @@ const WARMUP_NAMES: Record<string, string> = {
   warmup_glute_shoulder: 'Warm-up: glutes and shoulders',
 };
 
+/** On-screen names where the config's slot name is shorthand. Logs and exports keep the config name. */
+const DISPLAY_NAMES: Record<string, string> = {
+  rsi_ladder: 'Drop jump ladder',
+  depth_jump: 'Drop jump',
+  depth_landing: 'Drop landing',
+  db_pp_strength: 'Dumbbell push press (hammer grip)',
+  db_pp_explosive: 'Dumbbell push press, fast',
+  abductor_hsr: 'Cable hip abduction, slow',
+  rdl: 'Romanian deadlift',
+  hack_squat: 'Hack squat',
+  landmine_press: 'One-arm landmine press',
+  landmine_cpp: 'Landmine clean and push press',
+  cs_row: 'Chest-supported row',
+  kb_swing: 'Kettlebell swing',
+  oh_carry: 'One-arm overhead carry',
+  spanish_squat_iso: 'Spanish squat hold',
+  abd_iso: 'Hip abduction hold',
+  y_raise: 'Incline Y-raise',
+  pallof: 'Pallof press',
+  nordic: 'Nordic curl',
+  skater_bound: 'Skater bound',
+  trap_bar_jump: 'Trap-bar jump',
+  jump_shrug: 'Jump shrug',
+  bss: 'Bulgarian split squat',
+  pull_up: 'Weighted pull-up',
+  front_squat: 'Front squat',
+  deadlift: 'Deadlift',
+};
+
+const REACTIVE = 'reactive strength: bounce height divided by time on the floor; quick and high wins';
+
+/** Plain instructions for items whose config text is shorthand. */
+const SLOT_HELP: Record<string, string> = {
+  rsi_ladder:
+    'Step off the box, do not jump off. Land and rebound as fast and as high as you can, with the least time on the floor. Three jumps from 20 cm, three from 30 cm, three from 40 cm. The height that feels quickest and springiest wins; then three more jumps from that height.',
+  depth_jump: 'Step off the box, do not jump off. Land and rebound as fast and as high as you can, with the least time on the floor. Full rest between jumps.',
+  depth_landing: 'Step off a box a little higher than your usual drop height. Land soft, quiet and balanced, and hold it. No rebound.',
+  skater_bound: 'Push off one leg sideways, land on the other and stick the landing before the next bound.',
+  trap_bar_jump: 'Hold the empty bar, dip and jump as high as you can. Land soft, reset, and go again. Stop the set at the first slower jump.',
+  kb_swing: 'Heavy bell. Hinge at the hips and snap it to chest height. Stop the set at the first slower swing.',
+  jump_shrug: 'Barbell from the hang. Jump and shrug hard, no pull under. Stop the set at the first slower rep.',
+  db_pp_explosive: 'Light dumbbells. Dip and drive them overhead as fast as you can. Stop the set at the first slower rep.',
+  landmine_cpp: 'One arm. Clean the bar to the shoulder, then dip and press it overhead in one fast movement. Stop the set at the first slower rep.',
+  rdl: 'Bar in the hands, soft knees. Lower for 3 seconds with a flat back until the hamstrings pull, then stand up.',
+  hack_squat: 'Lower for 3 seconds on every rep, drive up without pause.',
+  abductor_hsr: 'Stand on the working leg with the cable on the other ankle. Move the free leg out slowly, 3 seconds each way.',
+  db_pp_strength: 'Hammer grip. Small dip, press both dumbbells overhead, lower under control.',
+  pull_up: 'Add weight on a belt. Full hang to chin over the bar, no kicking.',
+  landmine_press: 'One arm. Press the end of the bar up and forward, keep the ribs down.',
+  cs_row: 'Chest on the bench. Pull the handles to the ribs, pause, lower slowly.',
+  bss: 'Back foot on the bench, dumbbells in the hands. Drop straight down until the back knee nearly touches, drive up.',
+  nordic: 'Knees down, ankles held. Lower the body forward as slowly as you can, catch with the hands, push back up.',
+  abd_iso: 'Lie on your side, top leg straight. Lift it a little and hold still for the time.',
+  y_raise: 'Face down on an incline bench, light dumbbells. Raise the arms to a Y, thumbs up, and lower slowly.',
+  pallof: 'Cable at chest height, stand side on. Press the handle straight out and hold it there against the pull.',
+  spanish_squat_iso: 'Strap behind the knees anchored in front. Sit back into a squat with a vertical shin and hold.',
+  oh_carry: 'One dumbbell locked out overhead. Walk tall for the distance, then swap arms.',
+};
+
+const displayName = (slot: string, fallback: string): string => DISPLAY_NAMES[slot] ?? fallback;
+
 const MODE_NAMES: Record<string, string> = {
   wave: 'wave',
   band_87_90: 'contrast doubles',
@@ -161,7 +222,7 @@ function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescr
   const title = h(
     'div',
     { class: 'title' },
-    h('h2', {}, item.name),
+    h('h2', {}, displayName(lift, item.name)),
     h('button', { class: 'quiet tm', onclick: () => ctx.editTm(lift) }, 'TM ', h('b', {}, `${tm.toFixed(1)} kg`)),
   );
   const logged = loggedSlot(app.state, app.date, lift);
@@ -207,12 +268,20 @@ function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescr
       { class: 'rx' },
       h('span', { class: 'big' }, kg(p.load)),
       h('span', { class: 'unit' }, 'kg'),
-      h('span', { class: 'sets' }, `${p.sets} × ${p.reps}`),
+      h('span', { class: 'sets' }, `${p.sets} sets × ${p.reps}`),
       h('span', { class: 'unit' }, `${Math.round(p.pct * 100)}% of TM`),
     ),
   );
-  children.push(h('p', { class: 'sub' }, p.amrap ? `Last set: as many clean reps as you can, stop at RIR 2.${p.par !== undefined ? ` Par ${p.par}.` : ''}` : 'Straight sets.'));
-  if (p.ramp.length) children.push(h('p', { class: 'ramp' }, 'Ramp ', ...p.ramp.map((r) => h('span', {}, `${kg(r.load)} × ${r.reps}`))));
+  children.push(
+    h(
+      'p',
+      { class: 'sub' },
+      p.amrap
+        ? `Last set: as many clean reps as you can, stop with 2 left in the tank (RIR 2).${p.par !== undefined ? ` About ${p.par} reps means the training max is right; more and it goes up, fewer and it comes down.` : ''}`
+        : 'All sets at the prescribed reps. Stop each set with 2 or more left in the tank.',
+    ),
+  );
+  if (p.ramp.length) children.push(h('p', { class: 'ramp' }, 'Warm-up sets ', ...p.ramp.map((r) => h('span', {}, `${kg(r.load)} kg × ${r.reps}`))));
 
   const load = numberInput('load kg', { value: p.load, step: 2.5 });
   const reps = numberInput('reps', { value: p.amrap ? null : p.reps, integer: true, required: p.amrap, placeholder: p.amrap ? '–' : '' });
@@ -245,23 +314,30 @@ function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescr
 }
 
 function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescription | SlotPrescription): HTMLElement {
-  const title = h('div', { class: 'title' }, h('h2', {}, item.name));
+  const title = h('div', { class: 'title' }, h('h2', {}, displayName(item.slot, item.name)));
   const logged = loggedSlot(app.state, app.date, item.slot);
   if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
   const children: Child[] = [title];
   const sets = item.template.sets ?? 3;
-  const side = item.template.per_side ? '/side' : '';
+  const side = item.template.per_side ? ' each side' : '';
   const rx = h('div', { class: 'rx' });
   if (p.kind === 'rdl') {
-    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} × ${p.rep_range[0]}–${p.rep_range[1]}`));
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} sets × ${p.rep_range[0]}–${p.rep_range[1]}`));
   } else if (p.load !== null) {
-    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} × ${p.reps}${side}`));
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} sets × ${p.reps}${side}`));
   } else {
-    rx.append(h('span', { class: 'sets' }, `${sets} × ${p.reps}${side}`), h('span', { class: 'unit' }, p.start_hint_kg !== undefined ? `pick a load, try ${p.start_hint_kg} kg` : 'pick a load'));
+    rx.append(h('span', { class: 'sets' }, `${sets} sets × ${p.reps}${side}`), h('span', { class: 'unit' }, p.start_hint_kg !== undefined ? `pick a load, try ${p.start_hint_kg} kg` : 'pick a load'));
   }
   children.push(rx);
   const tempoSlot = p.kind === 'rdl' || p.cls === 'B';
-  children.push(h('p', { class: 'sub' }, `${tempoSlot ? '3 s lowering. ' : ''}Last set: as many clean reps as you can, stop at RIR ${p.rir_cap}${tempoSlot ? ' or when the tempo breaks' : ''}.`));
+  const help = SLOT_HELP[item.slot];
+  children.push(
+    h(
+      'p',
+      { class: 'sub' },
+      `${help ? help + ' ' : ''}Last set: as many clean reps as you can, stop with ${p.rir_cap} left in the tank (RIR ${p.rir_cap})${tempoSlot ? ', or as soon as the 3 second lowering gets faster' : ''}.`,
+    ),
+  );
   if (p.kind === 'slot' && p.pending) {
     const inc = p.increment.kind === 'kg' ? `${p.increment.kg} kg${p.increment.per_hand ? ' per hand' : ''}` : p.increment.text;
     children.push(h('div', { class: 'callout info' }, h('strong', {}, `Go ${p.pending} ${inc}`), ' this session. Log whatever you lift.'));
@@ -290,40 +366,43 @@ function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescr
     },
   }, 'Log');
   children.push(h('div', { class: 'row' }, load.wrap, reps.wrap, rir.wrap, h('span', { class: 'spacer' }), log));
-  if (tempo) children.push(h('label', { class: 'f check' }, tempo, 'Tempo broke on the last set'));
+  if (tempo) children.push(h('label', { class: 'f check' }, tempo, 'The 3 second lowering got faster on the last set'));
   return h('div', { class: 'item' }, ...children);
 }
 
 function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescription): HTMLElement {
-  const title = h('div', { class: 'title' }, h('h2', {}, item.name));
+  const title = h('div', { class: 'title' }, h('h2', {}, displayName(item.slot, item.name)));
   const logged = loggedSlot(app.state, app.date, item.slot);
   if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
   const t = item.template;
-  const side = t.per_side ? '/side' : '';
+  const side = t.per_side ? ' each side' : '';
+  const isLadder = item.slot === 'rsi_ladder';
+  const isDepthJump = item.slot === 'depth_jump';
   const rx = h('div', { class: 'rx' });
   if (p.load_kg !== undefined) rx.append(h('span', { class: 'big' }, kg(p.load_kg)), h('span', { class: 'unit' }, 'kg'));
-  if (t.sets !== undefined && t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} × ${t.reps}${side}`));
-  else if (t.sets !== undefined && t.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} × ${t.secs} s${side}`));
+  if (t.sets !== undefined && t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets × ${t.reps}${side}`));
+  else if (t.sets !== undefined && t.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets × ${t.secs} seconds${side}`));
   else if (t.sets !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets`));
   else if (t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.reps} reps${side}`));
-  if (p.contacts !== undefined) rx.append(h('span', { class: 'sets' }, `${p.contacts} contacts`));
+  if (p.contacts !== undefined) rx.append(h('span', { class: 'sets' }, isLadder ? `${p.contacts} jumps in total` : `${p.contacts} jumps`));
   if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
-  const isLadder = item.slot === 'rsi_ladder';
   const subs: string[] = [];
-  if (t.variant) subs.push(t.variant[0]!.toUpperCase() + t.variant.slice(1));
-  if (isLadder) subs.push('20, 30, 40 cm, three jumps each. Best RSI wins, then three more at that height.');
-  if (item.slot === 'trap_bar_jump') subs.push('Empty bar.');
-  const isDepthJump = item.slot === 'depth_jump';
-  const value = numberInput(isLadder ? 'best RSI' : isDepthJump ? 'RSI, optional' : 'number, optional', { value: null, step: isLadder || isDepthJump ? 0.01 : 1, integer: !(isLadder || isDepthJump) });
-  const height = isLadder ? numberInput('winning height cm', { value: null, step: 5, integer: true }) : null;
-  const calc = isLadder ? calculator('ladder', value.input, height!.input) : isDepthJump ? calculator('rsi', value.input) : null;
+  const help = SLOT_HELP[item.slot];
+  if (help) subs.push(help);
+  if (t.variant) subs.push(`Variation: ${t.variant}.`);
+  if (isLadder || isDepthJump) subs.push(`Scored on ${REACTIVE}.`);
+  const value = isLadder
+    ? numberInput('Winning drop height (cm)', { value: null, step: 5, integer: true, placeholder: '20, 30 or 40' })
+    : isDepthJump
+      ? numberInput('reactive strength, optional', { value: null, step: 0.01 })
+      : numberInput('number, optional', { value: null, step: 1, integer: true });
+  const calc = isLadder ? calculator('ladder', value.input) : isDepthJump ? calculator('rsi', value.input) : null;
   const done = (didIt: boolean) => () => {
     const v = readNumber(value.input);
     const entry: AnyLog = { kind: 'fixed', slot: item.slot, date: app.date, done: didIt };
     if (v !== null) entry.value = v;
     ctx.commit(entry);
-    const hcm = height ? readNumber(height.input) : null;
-    if (isLadder && didIt && hcm !== null) ctx.commit({ kind: 'depth_jump_height', date: app.date, height_cm: hcm });
+    if (isLadder && didIt && v !== null) ctx.commit({ kind: 'depth_jump_height', date: app.date, height_cm: v });
   };
   return h(
     'div',
@@ -331,7 +410,7 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
     title,
     rx,
     subs.length ? h('p', { class: 'sub' }, subs.join(' ')) : null,
-    h('div', { class: 'row' }, value.wrap, height ? height.wrap : null, calc, h('span', { class: 'spacer' }), h('button', { class: 'subtle', onclick: done(false) }, 'Skip'), h('button', { class: 'primary', onclick: done(true) }, 'Done')),
+    h('div', { class: 'row' }, value.wrap, calc, h('span', { class: 'spacer' }), h('button', { class: 'subtle', onclick: done(false) }, 'Skip'), h('button', { class: 'primary', onclick: done(true) }, 'Done')),
   );
 }
 
@@ -355,8 +434,8 @@ function blockView(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElem
     return h('section', { class: 'card' }, ...b.items.map((it) => (it.kind === 'warmup' ? h('div', { class: 'title' }, h('h2', {}, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null) : null)));
   }
   let kicker = `Block ${index}`;
-  if (b.superset) kicker = 'Alternate sets';
-  if (b.contrast) kicker = `Contrast${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
+  if (b.superset) kicker = 'Superset';
+  if (b.contrast) kicker = `Contrast pairs: heavy lift, then a jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
   return h(
     'section',
     { class: 'card' },
@@ -461,11 +540,11 @@ function setField(input: HTMLInputElement, value: number): void {
 
 /**
  * "Calculate" beside a number field. `height` fills the field with jump
- * height; `rsi` with RSI; `ladder` takes three jumps at each of 20, 30
- * and 40 cm, shows the mean RSI per height, and fills the RSI field
- * with the best mean and the height field with its height.
+ * height; `rsi` with reactive strength; `ladder` takes three jumps at
+ * each of 20, 30 and 40 cm, shows the mean reactive strength per height,
+ * and fills the field with the winning drop height.
  */
-function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement, heightTarget?: HTMLInputElement): HTMLElement {
+function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement): HTMLElement {
   const panel = h('div', { class: 'calc' });
   panel.hidden = true;
   const toggle = h('button', { class: 'subtle', onclick: () => (panel.hidden = !panel.hidden) }, 'Calculate');
@@ -499,7 +578,7 @@ function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement,
       }
       const m = jumpFromFrames(mode === 'rsi' && g ? { fps: f, air: a, ground: g } : { fps: f, air: a });
       const parts = [`Flight ${m.flight_s.toFixed(3)} s`, `height ${roundHeight(m.height_cm).toFixed(1)} cm`];
-      if (m.rsi !== undefined && m.contact_s !== undefined) parts.push(`contact ${m.contact_s.toFixed(3)} s`, `RSI ${roundRsi(m.rsi).toFixed(2)}`);
+      if (m.rsi !== undefined && m.contact_s !== undefined) parts.push(`on the floor ${m.contact_s.toFixed(3)} s`, `reactive strength ${roundRsi(m.rsi).toFixed(2)}`);
       out.textContent = parts.join(' · ');
       result = mode === 'height' ? roundHeight(m.height_cm) : roundRsi(m.rsi!);
       use.disabled = false;
@@ -531,7 +610,7 @@ function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement,
           return jumpFromFrames({ fps: f, air, ground }).rsi ?? null;
         });
         const m = mean(values);
-        r.meanEl.textContent = m === null ? '–' : `mean RSI ${roundRsi(m).toFixed(2)}`;
+        r.meanEl.textContent = m === null ? '–' : `mean reactive strength ${roundRsi(m).toFixed(2)}`;
         if (m !== null) {
           summary.push(`${r.cm} cm ${roundRsi(m).toFixed(2)}`);
           if (!best || m > best.rsi) best = { cm: r.cm, rsi: m };
@@ -553,8 +632,7 @@ function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement,
     }
     use.addEventListener('click', () => {
       if (!best) return;
-      setField(target, roundRsi(best.rsi));
-      if (heightTarget) setField(heightTarget, best.cm);
+      setField(target, best.cm);
       panel.hidden = true;
     });
     panel.append(h('div', { class: 'row' }, fps.wrap), grid, out, h('div', { class: 'row' }, h('span', { class: 'spacer' }), use));
