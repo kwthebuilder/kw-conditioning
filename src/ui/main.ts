@@ -73,6 +73,7 @@ function render(): void {
   }
   const ctx: Ctx = {
     session: prescribe(app.state, cfg, app.date, app.day),
+    config: cfg,
     liftName: (id) => cfg.slots[id]?.name ?? id,
     commit,
     setDate: (date) => {

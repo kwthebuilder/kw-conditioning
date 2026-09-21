@@ -2,7 +2,8 @@
  * The Today screen. Builds DOM from the session and the state; every
  * action goes back through ctx.commit, which is the one door (A.23).
  */
-import type { LiftId, State } from '../config/types';
+import type { LiftId, ProgrammeConfig, State } from '../config/types';
+import { jumpFromFrames, mean, mesocycleOn, programmeWeek, roundHeight, roundRsi } from '../engine';
 import type {
   AnyLog,
   BarbellPrescription,
@@ -31,6 +32,7 @@ export interface App {
 
 export interface Ctx {
   session: SessionResult;
+  config: ProgrammeConfig;
   liftName: (id: string) => string;
   commit: (log: AnyLog) => void;
   setDate: (date: string) => void;
@@ -311,13 +313,17 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
   if (t.variant) subs.push(t.variant[0]!.toUpperCase() + t.variant.slice(1));
   if (isLadder) subs.push('20, 30, 40 cm, three jumps each. Best RSI wins, then three more at that height.');
   if (item.slot === 'trap_bar_jump') subs.push('Empty bar.');
-  const value = numberInput(isLadder ? 'best height cm' : 'number, optional', { value: null, step: 1, integer: !isLadder });
+  const isDepthJump = item.slot === 'depth_jump';
+  const value = numberInput(isLadder ? 'best RSI' : isDepthJump ? 'RSI, optional' : 'number, optional', { value: null, step: isLadder || isDepthJump ? 0.01 : 1, integer: !(isLadder || isDepthJump) });
+  const height = isLadder ? numberInput('winning height cm', { value: null, step: 5, integer: true }) : null;
+  const calc = isLadder ? calculator('ladder', value.input, height!.input) : isDepthJump ? calculator('rsi', value.input) : null;
   const done = (didIt: boolean) => () => {
     const v = readNumber(value.input);
     const entry: AnyLog = { kind: 'fixed', slot: item.slot, date: app.date, done: didIt };
     if (v !== null) entry.value = v;
     ctx.commit(entry);
-    if (isLadder && didIt && v !== null) ctx.commit({ kind: 'depth_jump_height', date: app.date, height_cm: v });
+    const hcm = height ? readNumber(height.input) : null;
+    if (isLadder && didIt && hcm !== null) ctx.commit({ kind: 'depth_jump_height', date: app.date, height_cm: hcm });
   };
   return h(
     'div',
@@ -325,7 +331,7 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
     title,
     rx,
     subs.length ? h('p', { class: 'sub' }, subs.join(' ')) : null,
-    h('div', { class: 'row' }, value.wrap, h('span', { class: 'spacer' }), h('button', { class: 'subtle', onclick: done(false) }, 'Skip'), h('button', { class: 'primary', onclick: done(true) }, 'Done')),
+    h('div', { class: 'row' }, value.wrap, height ? height.wrap : null, calc, h('span', { class: 'spacer' }), h('button', { class: 'subtle', onclick: done(false) }, 'Skip'), h('button', { class: 'primary', onclick: done(true) }, 'Done')),
   );
 }
 
@@ -367,11 +373,12 @@ function cmjCard(app: App, ctx: Ctx): HTMLElement {
     'section',
     { class: 'card' },
     h('div', { class: 'title' }, h('h2', {}, 'Countermovement jump'), h('span', { class: 'tag' }, 'before warm-up')),
-    h('p', { class: 'sub' }, 'Average of three, from My Jump Lab.'),
+    h('p', { class: 'sub' }, 'Average of three. Enter the height, or count frames and calculate.'),
     h(
       'div',
       { class: 'row' },
       v.wrap,
+      calculator('height', v.input),
       h('span', { class: 'spacer' }),
       h('button', {
         class: 'primary',
@@ -420,6 +427,174 @@ function exportPanel(app: App, ctx: Ctx): HTMLElement {
       h('div', { class: 'row' }, file),
     ),
     h('div', { class: 'row' }, h('button', { onclick: ctx.closeExport }, 'Back to today')),
+  );
+}
+
+// ---------------------------------------------------------------------
+// frame-count calculator (no video; the athlete counts frames in a slow-motion clip)
+// ---------------------------------------------------------------------
+
+const FPS_KEY = 'acro-base-sc/fps';
+const LADDER_HEIGHTS_CM = [20, 30, 40];
+
+function recallFps(): number {
+  try {
+    const v = Number(window.localStorage.getItem(FPS_KEY));
+    return v > 0 ? v : 240;
+  } catch {
+    return 240;
+  }
+}
+function rememberFps(v: number): void {
+  try {
+    window.localStorage.setItem(FPS_KEY, String(v));
+  } catch {
+    /* preference only */
+  }
+}
+
+function setField(input: HTMLInputElement, value: number): void {
+  input.value = String(value);
+  input.classList.remove('missing');
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+/**
+ * "Calculate" beside a number field. `height` fills the field with jump
+ * height; `rsi` with RSI; `ladder` takes three jumps at each of 20, 30
+ * and 40 cm, shows the mean RSI per height, and fills the RSI field
+ * with the best mean and the height field with its height.
+ */
+function calculator(mode: 'height' | 'rsi' | 'ladder', target: HTMLInputElement, heightTarget?: HTMLInputElement): HTMLElement {
+  const panel = h('div', { class: 'calc' });
+  panel.hidden = true;
+  const toggle = h('button', { class: 'subtle', onclick: () => (panel.hidden = !panel.hidden) }, 'Calculate');
+  const fps = numberInput('frames per second', { value: recallFps(), integer: true, step: 1 });
+  const out = h('p', { class: 'calc-out' }, 'Count the frames in a slow-motion clip.');
+  const use = h('button', { class: 'primary' }, 'Use');
+  use.disabled = true;
+
+  const fpsValue = (): number | null => {
+    const v = readNumber(fps.input);
+    return v && v > 0 ? v : null;
+  };
+  fps.input.addEventListener('input', () => {
+    const v = fpsValue();
+    if (v) rememberFps(v);
+  });
+
+  if (mode !== 'ladder') {
+    const air = numberInput('frames in the air', { integer: true, placeholder: '0' });
+    const ground = mode === 'rsi' ? numberInput('frames on the ground', { integer: true, placeholder: '0' }) : null;
+    let result: number | null = null;
+    const recompute = () => {
+      const f = fpsValue();
+      const a = readNumber(air.input);
+      const g = ground ? readNumber(ground.input) : undefined;
+      result = null;
+      if (!f || a === null || a <= 0 || (mode === 'rsi' && (g === null || g === undefined || g <= 0))) {
+        out.textContent = 'Count the frames in a slow-motion clip.';
+        use.disabled = true;
+        return;
+      }
+      const m = jumpFromFrames(mode === 'rsi' && g ? { fps: f, air: a, ground: g } : { fps: f, air: a });
+      const parts = [`Flight ${m.flight_s.toFixed(3)} s`, `height ${roundHeight(m.height_cm).toFixed(1)} cm`];
+      if (m.rsi !== undefined && m.contact_s !== undefined) parts.push(`contact ${m.contact_s.toFixed(3)} s`, `RSI ${roundRsi(m.rsi).toFixed(2)}`);
+      out.textContent = parts.join(' · ');
+      result = mode === 'height' ? roundHeight(m.height_cm) : roundRsi(m.rsi!);
+      use.disabled = false;
+    };
+    for (const i of [fps.input, air.input, ground?.input]) i?.addEventListener('input', recompute);
+    use.addEventListener('click', () => {
+      if (result === null) return;
+      setField(target, result);
+      panel.hidden = true;
+    });
+    panel.append(h('div', { class: 'row' }, fps.wrap, air.wrap, ground ? ground.wrap : null), out, h('div', { class: 'row' }, h('span', { class: 'spacer' }), use));
+  } else {
+    // Three attempts per height: air and ground frames each.
+    const rows = LADDER_HEIGHTS_CM.map((cm) => ({
+      cm,
+      attempts: [0, 1, 2].map(() => ({ air: numberInput('air', { integer: true, placeholder: '0' }), ground: numberInput('ground', { integer: true, placeholder: '0' }) })),
+      meanEl: h('span', { class: 'calc-mean' }, '–'),
+    }));
+    let best: { cm: number; rsi: number } | null = null;
+    const recompute = () => {
+      const f = fpsValue();
+      best = null;
+      const summary: string[] = [];
+      for (const r of rows) {
+        const values = r.attempts.map((a) => {
+          const air = readNumber(a.air.input);
+          const ground = readNumber(a.ground.input);
+          if (!f || air === null || ground === null || air <= 0 || ground <= 0) return null;
+          return jumpFromFrames({ fps: f, air, ground }).rsi ?? null;
+        });
+        const m = mean(values);
+        r.meanEl.textContent = m === null ? '–' : `mean RSI ${roundRsi(m).toFixed(2)}`;
+        if (m !== null) {
+          summary.push(`${r.cm} cm ${roundRsi(m).toFixed(2)}`);
+          if (!best || m > best.rsi) best = { cm: r.cm, rsi: m };
+        }
+      }
+      out.textContent = best ? `${summary.join(' · ')}. Best: ${best.cm} cm.` : 'Enter air and ground frames for each jump.';
+      use.disabled = best === null;
+    };
+    fps.input.addEventListener('input', recompute);
+    const grid = h('div', { class: 'calc-ladder' });
+    for (const r of rows) {
+      const line = h('div', { class: 'calc-height' }, h('div', { class: 'calc-label' }, h('b', {}, `${r.cm} cm`), r.meanEl));
+      for (const a of r.attempts) {
+        a.air.input.addEventListener('input', recompute);
+        a.ground.input.addEventListener('input', recompute);
+        line.append(h('div', { class: 'calc-pair' }, a.air.wrap, a.ground.wrap));
+      }
+      grid.append(line);
+    }
+    use.addEventListener('click', () => {
+      if (!best) return;
+      setField(target, roundRsi(best.rsi));
+      if (heightTarget) setField(heightTarget, best.cm);
+      panel.hidden = true;
+    });
+    panel.append(h('div', { class: 'row' }, fps.wrap), grid, out, h('div', { class: 'row' }, h('span', { class: 'spacer' }), use));
+  }
+  return h('div', { class: 'calc-wrap' }, toggle, panel);
+}
+
+// ---------------------------------------------------------------------
+// plan (read-only, from config and state)
+// ---------------------------------------------------------------------
+
+function shortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString(undefined, { day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+function planView(app: App, ctx: Ctx): HTMLElement {
+  const cfg = ctx.config;
+  const week = programmeWeek(cfg, app.date);
+  const current = mesocycleOn(cfg, app.date);
+  const fs = app.state.lifts.front_squat.next_position;
+  const dl = app.state.lifts.deadlift.next_position;
+  const rows = cfg.mesocycles.map((m) => {
+    const now = current?.id === m.id;
+    return h(
+      'tr',
+      { class: now ? 'now' : '' },
+      h('td', {}, h('b', {}, m.id), now ? h('span', { class: 'now-tag' }, 'now') : null),
+      h('td', {}, `${shortDate(m.start)} – ${shortDate(m.end)}`),
+      h('td', {}, m.weeks[0] === m.weeks[1] ? `wk ${m.weeks[0]}` : `wk ${m.weeks[0]}–${m.weeks[1]}`),
+      h('td', {}, m.barbell_mode ? (MODE_NAMES[m.barbell_mode] ?? m.barbell_mode) : 'not in the app'),
+    );
+  });
+  const summary = week >= 1 && current ? `Week ${week} of the programme, ${current.id}.` : 'Outside the programme dates.';
+  return h(
+    'details',
+    { class: 'card hist plan' },
+    h('summary', {}, 'Plan'),
+    h('p', { class: 'plan-now' }, `${summary} Next wave position: front squat ${fs}, deadlift ${dl}.`),
+    h('table', { class: 'plan-table' }, h('thead', {}, h('tr', {}, h('th', {}, 'Block'), h('th', {}, 'Dates'), h('th', {}, 'Weeks'), h('th', {}, 'Barbell'))), h('tbody', {}, ...rows)),
   );
 }
 
@@ -476,6 +651,7 @@ export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
     body.push(...s.blocks.map((b) => blockView(app, ctx, b, ++n)));
   }
   body.push(historyView(app));
+  body.push(planView(app, ctx));
   body.push(h('p', { class: 'foot' }, `Acro Base S&C · v${appVersion}`));
 
   const endBar = h(

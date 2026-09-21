@@ -35,4 +35,6 @@ export { prescribeFixed, contactsFor } from './fixed';
 export { recordCmj, cmjSummary } from './cmj';
 // Manual overrides
 export { overrideLoad, overrideTm } from './overrides';
+// Jump metrics from frame counts (calculator helper; no video handling)
+export { flightTime, jumpHeightCm, rsi, jumpFromFrames, roundHeight, roundRsi, mean, type JumpFrames, type JumpMetrics } from './jump';
 export type * from './types';
