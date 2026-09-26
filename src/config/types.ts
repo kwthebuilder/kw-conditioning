@@ -53,6 +53,14 @@ export interface RdlState {
   sessions_logged: number;
 }
 
+/** A.24: one explosive slot's carried load. Absent until the first log sets it. */
+export interface ExplosiveState {
+  /** kg on the bar (jump shrug), on the sleeve (landmine) or per hand (DB), as logged. */
+  load: number;
+  /** Consecutive sessions at this load with no stop-rule cut. */
+  clean_streak: number;
+}
+
 export interface AccessoryState {
   /** kg, or kg per hand for dumbbell slots; null until the first log sets it (A.11). */
   load: number | null;
@@ -111,6 +119,8 @@ export interface State {
   log: unknown[];
   /** Phase 2: manual overrides of loads and training maxes. Absent = none. */
   overrides?: OverrideRecord[];
+  /** A.24: explosive slot loads. Absent = none logged yet. */
+  explosive?: Record<SlotId, ExplosiveState>;
 }
 
 // ---------------------------------------------------------------------
@@ -194,7 +204,10 @@ export interface Slot {
   band_pct_fs_tm?: [number, number];
   ceiling_pct_est_1rm?: number;
   increment_kg?: number;
+  /** Withdrawn in config v1.3 (spec v1.6); still parsed so older configs import. */
   start_pct_dl_tm?: number;
+  /** A.24: the slot carries a load set by the athlete's first log. */
+  load_rule?: 'carry';
 
   // class E (plyometric)
   contacts?: Contacts;
@@ -371,6 +384,23 @@ export interface SessionVector {
   day_default: { state: string; explicit_day?: 1 | 2; expect_day: 1 | 2; note?: string }[];
 }
 
+export interface ExplosiveVector {
+  name: string;
+  slot: SlotId;
+  date: IsoDate;
+  sessions: { load: number; cut: boolean }[];
+  expect_load: number;
+  expect_streak: number;
+}
+
+export interface RoundsVector {
+  date: IsoDate;
+  day: 1 | 2;
+  slot: SlotId;
+  expect_sets: number;
+  expect_sets_max: number | null;
+}
+
 export interface TestVectors {
   version: string;
   date: IsoDate;
@@ -388,4 +418,6 @@ export interface TestVectors {
   override: OverrideVector[];
   ramp: RampVector[];
   session: SessionVector;
+  explosive: ExplosiveVector[];
+  rounds: RoundsVector[];
 }

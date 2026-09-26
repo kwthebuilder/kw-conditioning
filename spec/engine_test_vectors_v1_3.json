@@ -1,13 +1,13 @@
 {
- "version": "1.2",
- "date": "2026-09-20",
- "spec": "engine_spec_v1_5.md",
+ "version": "1.3",
+ "date": "2026-09-26",
+ "spec": "engine_spec_v1_6.md",
  "tolerance": {
   "tm": 0.05,
   "beta": 0.002,
   "load": 0
  },
- "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected.",
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected. v1.3: explosive (A.24) and rounds (A.25) blocks added.",
  "barbell": [
   {
    "name": "fs_cal_up",
@@ -520,7 +520,7 @@
    "expect": "hold (no upward steps after week 22)"
   }
  ],
- "golden_sessions": "Week 2 Day 1 (2026-09-21) and Day 2 (2026-09-24) as written in training_log_2026_w01_w02_r4.md must be reproduced by prescribe() from initial_state_v1_1.json and programme_config_v1_2.json: every computed load, the slot list and the block order. Day 1 shows rsi_ladder, not depth_jump.",
+ "golden_sessions": "Week 2 Day 1 (2026-09-21) and Day 2 (2026-09-24) as written in training_log_2026_w01_w02_r4.md must be reproduced by prescribe() from initial_state_v1_1.json and programme_config_v1_3.json: every computed load, the slot list and the block order. Day 1 shows rsi_ladder, not depth_jump.",
  "singles": {
   "boundary": {
    "fires_on_entering": [
@@ -662,5 +662,174 @@
     "note": "explicit argument always wins; weekday is never consulted"
    }
   ]
- }
+ },
+ "explosive": [
+  {
+   "name": "first session sets the load",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 60,
+   "expect_streak": 0
+  },
+  {
+   "name": "two clean sessions after the first step up 2.5 kg",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 62.5,
+   "expect_streak": 0
+  },
+  {
+   "name": "a stop-rule cut resets the streak",
+   "slot": "landmine_cpp",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 20,
+     "cut": false
+    },
+    {
+     "load": 20,
+     "cut": false
+    },
+    {
+     "load": 20,
+     "cut": true
+    },
+    {
+     "load": 20,
+     "cut": false
+    }
+   ],
+   "expect_load": 20,
+   "expect_streak": 1
+  },
+  {
+   "name": "a logged load change is taken and resets the streak",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 65,
+     "cut": false
+    }
+   ],
+   "expect_load": 65,
+   "expect_streak": 0
+  },
+  {
+   "name": "explosive DB never steps",
+   "slot": "db_pp_explosive",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    }
+   ],
+   "expect_load": 12,
+   "expect_streak": 0
+  },
+  {
+   "name": "no upward step after week 22",
+   "slot": "jump_shrug",
+   "date": "2027-02-18",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 60,
+   "expect_streak": 0
+  }
+ ],
+ "rounds": [
+  {
+   "date": "2026-11-10",
+   "day": 1,
+   "slot": "front_squat",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-10",
+   "day": 1,
+   "slot": "trap_bar_jump",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "deadlift",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "jump_shrug",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "landmine_cpp",
+   "expect_sets": 3,
+   "expect_sets_max": null
+  }
+ ]
 }

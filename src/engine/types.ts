@@ -54,6 +54,8 @@ export interface LiftPrescription {
   /** Rounded display load. */
   load: number;
   sets: number;
+  /** A.25: top of the block's round range, when it has one. */
+  sets_max?: number;
   reps: number;
   amrap: boolean;
   /** Reps at RIR 2 at which the raw estimate equals the TM (2.2). */
@@ -245,6 +247,46 @@ export interface FixedLog {
 }
 
 // ---------------------------------------------------------------------
+// A.24: explosive slots that carry a load
+// ---------------------------------------------------------------------
+
+export interface ExplosivePrescription {
+  kind: 'explosive';
+  slot: SlotId;
+  name: string;
+  /** Stored load; null before the first log (the athlete sets it). */
+  load: number | null;
+  /** kg per step, absent when the engine never steps (explosive DB). */
+  increment_kg?: number;
+  /** Clean sessions needed for a step, and how many are banked. */
+  streak_needed?: number;
+  clean_streak: number;
+  notes: string[];
+}
+
+export interface ExplosiveLog {
+  slot: SlotId;
+  date: IsoDate;
+  load: number;
+  sets_done: number;
+  /** The stop rule (first visibly slower rep) ended a set before its last rep. */
+  cut: boolean;
+}
+
+export interface ExplosiveOutcome {
+  rule: 'first' | 'changed' | 'clean' | 'cut' | 'step' | 'withheld' | 'fixed';
+  load_before: number | null;
+  load_after: number;
+  clean_streak: number;
+}
+
+export interface ExplosiveUpdateResult {
+  state: State;
+  outcome: ExplosiveOutcome;
+  explanation: Explanation;
+}
+
+// ---------------------------------------------------------------------
 // Phase 2: CMJ, stored only
 // ---------------------------------------------------------------------
 
@@ -269,11 +311,13 @@ export interface SingleLog {
 }
 
 /** How a session item is logged. */
-export type LogKind = 'barbell' | 'rdl' | 'slot' | 'fixed';
+export type LogKind = 'barbell' | 'rdl' | 'slot' | 'fixed' | 'explosive';
 
 /** Fields carried from the template item; the engine's own numbers live on the prescription. */
 export interface SessionTemplateFields {
   sets?: number;
+  /** A.25: top of the block's round range. */
+  sets_max?: number;
   reps?: number;
   secs?: number;
   per_side?: boolean;
@@ -289,7 +333,7 @@ export interface SessionSlotItem {
   name: string;
   log_kind: LogKind;
   template: SessionTemplateFields;
-  prescription: BarbellPrescription | RdlPrescription | SlotPrescription | FixedPrescription;
+  prescription: BarbellPrescription | RdlPrescription | SlotPrescription | FixedPrescription | ExplosivePrescription;
 }
 
 export interface SessionWarmupItem {
@@ -341,6 +385,7 @@ export type AnyLog =
   | ({ kind: 'rdl' } & RdlLog)
   | ({ kind: 'slot' } & SlotLog)
   | ({ kind: 'fixed' } & FixedLog)
+  | ({ kind: 'explosive' } & ExplosiveLog)
   | { kind: 'cmj'; date: IsoDate; value: number }
   | { kind: 'depth_jump_height'; date: IsoDate; height_cm: number }
   | { kind: 'tm_override'; date: IsoDate; lift: LiftId; tm: number; note?: string }
@@ -357,5 +402,5 @@ export interface LogEntry {
 export interface EngineUpdateResult {
   state: State;
   explanation: Explanation;
-  outcome: BarbellOutcome | RdlOutcome | SlotOutcome | null;
+  outcome: BarbellOutcome | RdlOutcome | SlotOutcome | ExplosiveOutcome | null;
 }

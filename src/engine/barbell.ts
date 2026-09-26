@@ -1,6 +1,6 @@
 /**
  * Class A engine: front squat and conventional deadlift.
- * engine_spec_v1_5.md §2, §10 and Appendix A; vectors in the
+ * engine_spec_v1_6.md §2, §10 and Appendix A; vectors in the
  * barbell, rounding, audit_rescale and downward_trigger blocks.
  *
  * Pure: no clock, no randomness, no I/O. Dates come in on the log.
@@ -227,7 +227,7 @@ export function prescribeLift(
         ...base,
         pct: bandPct,
         load: roundLoad(tm * bandPct, step),
-        // Rounds come from the template (3 to 4); phase 3 overrides this.
+        // A.25: session.ts replaces this with the block's round range.
         sets: 3,
         reps: 2,
         amrap: false,

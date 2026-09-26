@@ -10,6 +10,7 @@
  */
 import type {
   AccessoryState,
+  ExplosiveState,
   AccessoryVector,
   AuditRescaleVector,
   BarbellMode,
@@ -256,6 +257,11 @@ function accessoryState(v: unknown, path: string): AccessoryState {
   return a;
 }
 
+function explosiveState(v: unknown, path: string): ExplosiveState {
+  const o = obj(v, path);
+  return { load: req(o, 'load', path, num), clean_streak: req(o, 'clean_streak', path, int) };
+}
+
 function overrideRecord(v: unknown, path: string): OverrideRecord {
   const o = obj(v, path);
   const kind = req(o, 'kind', path, oneOf(['tm', 'load'] as const));
@@ -312,6 +318,8 @@ export function parseState(input: unknown, path = 'state'): State {
   const precuts = optional(o, 'pending_precuts', path, arr);
   if (precuts !== undefined) state.pending_precuts = precuts;
   if (overrides !== undefined) state.overrides = overrides;
+  const explosive = optional(o, 'explosive', path, mapOf(explosiveState));
+  if (explosive !== undefined) state.explosive = explosive;
   return state;
 }
 
@@ -417,6 +425,7 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
   opt('ceiling_pct_est_1rm', num);
   opt('increment_kg', num);
   opt('start_pct_dl_tm', num);
+  opt('load_rule', oneOf(['carry'] as const));
   opt('contacts', contacts);
   opt('landings', pair(int));
 
@@ -430,7 +439,7 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
     'id', 'name', 'cls', 'sites', 'group', 'alt', 'swap', 'progress', 'regression', 'never_zero',
     'when', 'note', 'tm_seed', 'cal_cap', 'reps', 'rir_cap',
     'up_at', 'down_below', 'streak', 'increment', 'start_hint_kg', 'start_kg', 'rep_range', 'table',
-    'band_pct_fs_tm', 'ceiling_pct_est_1rm', 'increment_kg', 'start_pct_dl_tm', 'contacts', 'landings',
+    'band_pct_fs_tm', 'ceiling_pct_est_1rm', 'increment_kg', 'start_pct_dl_tm', 'load_rule', 'contacts', 'landings',
   ]);
   for (const k of Object.keys(o)) if (!known.has(k)) fail(`${path}.${k}`, 'unknown slot field');
   return s;
@@ -791,6 +800,45 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
         return out;
       }),
     ),
+    explosive: req(
+      o,
+      'explosive',
+      path,
+      listOf((x, p) => {
+        const e = obj(x, p);
+        return {
+          name: req(e, 'name', p, str),
+          slot: req(e, 'slot', p, str),
+          date: req(e, 'date', p, isoDate),
+          sessions: req(
+            e,
+            'sessions',
+            p,
+            listOf((y, q) => {
+              const s = obj(y, q);
+              return { load: req(s, 'load', q, num), cut: req(s, 'cut', q, bool) };
+            }),
+          ),
+          expect_load: req(e, 'expect_load', p, num),
+          expect_streak: req(e, 'expect_streak', p, int),
+        };
+      }),
+    ),
+    rounds: req(
+      o,
+      'rounds',
+      path,
+      listOf((x, p) => {
+        const r = obj(x, p);
+        return {
+          date: req(r, 'date', p, isoDate),
+          day: req(r, 'day', p, oneOf([1, 2] as const)),
+          slot: req(r, 'slot', p, str),
+          expect_sets: req(r, 'expect_sets', p, int),
+          expect_sets_max: req(r, 'expect_sets_max', p, (y, q) => nullable(y, q, int)),
+        };
+      }),
+    ),
     session: req(o, 'session', path, (x, p) => {
       const sv = obj(x, p);
       return {
@@ -840,6 +888,9 @@ export function crossCheck(state: State, config: ProgrammeConfig): void {
   }
   for (const id of Object.keys(state.accessories)) {
     if (!(id in config.slots)) fail(`state.accessories.${id}`, 'accessory not in config slots');
+  }
+  for (const id of Object.keys(state.explosive ?? {})) {
+    if (config.slots[id]?.load_rule !== 'carry') fail(`state.explosive.${id}`, 'not a carry-load slot in the config');
   }
   if (state.trap_bar_jump.load_kg !== config.equipment.trap_bar_kg) {
     fail('state.trap_bar_jump.load_kg', `differs from config.equipment.trap_bar_kg (${config.equipment.trap_bar_kg})`);

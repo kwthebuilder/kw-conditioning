@@ -1,7 +1,7 @@
 {
- "version": "1.2",
- "date": "2026-09-20",
- "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_5.md",
+ "version": "1.3",
+ "date": "2026-09-26",
+ "governs": "programme_design_rationale_v3_2.md sections 5-7; engine_spec_v1_6.md",
  "budget_min": {
   "normal": 75,
   "audit": 85
@@ -225,21 +225,26 @@
    "id": "jump_shrug",
    "name": "Jump shrug",
    "cls": "D",
-   "start_pct_dl_tm": 0.7,
    "increment_kg": 2.5,
-   "progress": "two sessions with no stop-rule cut"
+   "progress": "load at visible speed: you set it at the first session; +2.5 kg after two sessions with no stop-rule cut",
+   "load_rule": "carry",
+   "streak": 2
   },
   "db_pp_explosive": {
    "id": "db_pp_explosive",
    "name": "DB push press, explosive",
    "cls": "D",
-   "progress": "speed at fixed DB; no load step inside a mesocycle"
+   "progress": "speed at a fixed dumbbell: you set it at the first session; no load step inside a mesocycle",
+   "load_rule": "carry"
   },
   "landmine_cpp": {
    "id": "landmine_cpp",
    "name": "1-arm landmine clean and push press",
    "cls": "D",
-   "increment_kg": 2.5
+   "increment_kg": 2.5,
+   "load_rule": "carry",
+   "streak": 2,
+   "progress": "load at catch speed: you set it at the first session; +2.5 kg after two sessions with no stop-rule cut"
   },
   "front_squat": {
    "id": "front_squat",

@@ -1,7 +1,7 @@
 /**
  * Golden sessions: week 2 Day 1 (2026-09-21) and Day 2 (2026-09-24) as
  * written in spec/training_log_2026_w01_w02_r4.md, from
- * initial_state_v1_1 and programme_config_v1_2. Every computed load,
+ * initial_state_v1_1 and programme_config_v1_3. Every computed load,
  * the slot list and the block order. The expected values below are
  * transcribed from the log, item by item.
  */
@@ -34,7 +34,7 @@ describe(`golden sessions: ${TEST_VECTORS.golden_sessions}`, () => {
   it('vectors name the files the loader reads', () => {
     expect(TEST_VECTORS.golden_sessions).toContain('training_log_2026_w01_w02_r4.md');
     expect(TEST_VECTORS.golden_sessions).toContain('initial_state_v1_1.json');
-    expect(TEST_VECTORS.golden_sessions).toContain('programme_config_v1_2.json');
+    expect(TEST_VECTORS.golden_sessions).toContain('programme_config_v1_3.json');
   });
 
   describe('Day 1, Mon 21 Sep, target 72 min', () => {

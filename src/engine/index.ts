@@ -31,6 +31,8 @@ export {
 } from './accessory';
 // Classes D, E, F: fixed prescriptions
 export { prescribeFixed, contactsFor } from './fixed';
+// A.24: explosive slots that carry a load
+export { prescribeExplosive, updateExplosive, isCarrySlot } from './explosive';
 // CMJ, stored only
 export { recordCmj, cmjSummary } from './cmj';
 // Manual overrides
