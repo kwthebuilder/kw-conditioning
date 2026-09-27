@@ -11,6 +11,7 @@ import { updateAccessory } from './accessory';
 import { updateLift, updateSingle } from './barbell';
 import { cmjSummary, recordCmj } from './cmj';
 import { explainStep } from './explain';
+import { updateExplosive } from './explosive';
 import { overrideTm } from './overrides';
 import { updateRdl } from './rdl';
 import { prescribe } from './session';
@@ -59,6 +60,11 @@ export function update(state: State, log: AnyLog, config: ProgrammeConfig): Engi
     case 'fixed': {
       const name = config.slots[log.slot]?.name ?? log.slot;
       r = plain(structuredClone(state), `${name}: ${log.done ? 'done' : 'not done'}${log.value !== undefined ? ` (${log.value})` : ''}${log.note ? `, ${log.note}` : ''}.`);
+      break;
+    }
+    case 'explosive': {
+      const u = updateExplosive(state, config, log);
+      r = { state: u.state, explanation: u.explanation, outcome: u.outcome };
       break;
     }
     case 'cmj': {

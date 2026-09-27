@@ -83,3 +83,19 @@ Format:
 - **Blocked:** Nothing; raised at plan time.
 - **Ruling:** (orchestrator) Spec v1.5 A.21 and config v1.2 top-level `ladder`: on the listed weeks and day, the `rsi_ladder` item takes the place of the first slot named in `replaces` and the others are dropped. Fixed text, no ladder logic. A.22 fixes day selection (explicit day wins; else Day 2 if front squat `last_logged` is later than the deadlift's, else Day 1) and A.23 routes every state change through `update`.
 - **Spec revision:** (orchestrator) engine_spec_v1_5.md, programme_config_v1_2.json
+
+## Q10 — M2 explosive slots show no load; jump shrug start of 70% of deadlift TM
+- **Raised:** 2026-09-26, review before M2
+- **Where:** engine_spec_v1_5.md §5, A.19 / programme_config_v1_2.json `slots.jump_shrug.start_pct_dl_tm`
+- **Question:** Under the v1.4 scope cut the jump shrug, landmine clean and push press, and explosive DB push press are fixed text with no load. From 9 Nov the athlete would get no number for three slots. Separately, §5's jump shrug start of 70% of deadlift TM traces to science §5.2's pull-class optimum "at or above 70% of 1RM", which is a percentage of the power clean or hang power clean 1RM, not the deadlift. For the jump shrug, peak power was highest at 30% of hang power clean 1RM (Suchomel and Sole 2017).
+- **Blocked:** Nothing; ruled below.
+- **Ruling:** Athlete decision 26 Sep 2026: the first logged session sets each load by speed; the app carries it. Jump shrug and landmine step +2.5 kg after two sessions with no stop-rule cut; explosive DB never steps inside a block. The 70% of deadlift TM start is withdrawn.
+- **Spec revision:** engine_spec_v1_6.md (A.24), programme_config_v1_3.json, engine_test_vectors_v1_3.json (`explosive` block)
+
+## Q11 — M2 contrast rounds hard-coded to 3 sets
+- **Raised:** 2026-09-26, review before M2
+- **Where:** src/engine/barbell.ts band mode / programme_config_v1_2.json M2 `rounds: [3, 4]`
+- **Question:** The template gives 3 to 4 rounds but the band prescription always showed 3 sets, and the paired jump items showed no sets.
+- **Blocked:** Nothing; ruled below.
+- **Ruling:** A block's round range sets `sets` (low end) and `sets_max` (high end) on every item without its own sets, including the primary lift. The athlete chooses within the range.
+- **Spec revision:** engine_spec_v1_6.md (A.25), engine_test_vectors_v1_3.json (`rounds` block)

@@ -1,7 +1,9 @@
-# Engine Specification v1.5
+# Engine Specification v1.6
 
-**Version 1.5 | 20 September 2026 | Supersedes `engine_spec_v1_4.md`**
-**Status:** approved; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_2.json`, `programme_config_v1_2.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+**Version 1.6 | 26 September 2026 | Supersedes `engine_spec_v1_5.md`**
+**Status:** approved by the athlete 26 Sep 2026; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_3.json`, `programme_config_v1_3.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+
+**v1.6 change note: M2 explosive loads and contrast rounds.** Found in review before M2 (9 Nov) governs. (1) The jump shrug, landmine clean and push press, and explosive DB push press showed no load at all under the v1.4 scope cut. They now carry a load (A.24). (2) The jump shrug's starting load of 70% of deadlift TM is withdrawn. It came from the pull-class optimum "at or above 70% of 1RM" in science §5.2, but that figure is a percentage of the power clean or hang power clean 1RM, not the deadlift (Soriano et al. 2015). For the jump shrug itself, peak power was highest at 30% of hang power clean 1RM, the lightest load tested (Suchomel and Sole 2017, 30/45/65/80%). 70% of the current deadlift TM is about 100 kg, which is likely near or above this athlete's hang power clean max. With no clean max on record, the first session sets the load by speed. (3) Contrast blocks with a round range (M2, 3 to 4) now prescribe that range on every item instead of a hard-coded 3 sets (A.25). No other rule changes.
 
 **v1.5 change note: phase 3 rulings.** No change to any progression rule. Appendix A items 20 to 23 added: ramp sets use the one barbell rounding rule (the r3 log's 40 kg was a hand error, corrected in r4); the RSI ladder schedule is data in config v1.2; Day 1 or Day 2 is chosen by which primary lift was logged last, never by weekday; every state change goes through `update`. §12 file names corrected.
 
@@ -9,7 +11,7 @@
 
 | In the app | Not in the app (sections kept below as coaching reference only) |
 |---|---|
-| §2 barbell engine, as built in phase 1, with the rulings in A.14 to A.17 | §5 height and clean-session progressions for ballistic slots |
+| §2 barbell engine, as built in phase 1, with the rulings in A.14 to A.17 | §5 trap-bar jump height progression |
 | §3 RDL table; hack squat and abductor streak rule | §6 ladder logic, contact caps, halving |
 | §4 accessory double progression | §7 Nordic auto-progression |
 | §10 rounding | §8 every flag: CMJ, tissue, catch, time, gaps |
@@ -18,8 +20,10 @@
 | Boundary and big-gap singles as skippable suggestions | |
 | CMJ value stored, running mean shown, no rule | |
 | Export after every session; exact import | |
+| Explosive slot loads: jump shrug, landmine clean and push press, explosive DB push press (A.24) | |
+| Contrast round ranges (A.25) | |
 
-Classes D, E and F are fixed prescriptions read from the config and logged as done / not done with an optional number.
+Classes D, E and F are fixed prescriptions read from the config and logged as done / not done with an optional number, except the three explosive slots in A.24.
 
 **v1.3 change note.** No change to progression logic. (1) Equipment and instruments fixed: trap bar 24 kg (athlete-reported, to be confirmed), so the trap-bar jump runs at the empty bar; RSI and CMJ from My Jump Lab. (2) CMJ baseline restarts at week 2 (week 1 value lost); flag rule written exactly. (3) Delivery changed from a Claude artifact to a standalone app built in Claude Code; §12 rewritten. (4) Appendix A added: implementation rulings that remove every ambiguity the prose left, so the builder never has to interpret. Structure (order, selection, mesocycles, taper) stays with `programme_design_rationale_v3_1.md`. The engine moves numbers inside that structure and nothing else.
 
@@ -139,9 +143,9 @@ Stop rule on every set: first visibly slower rep ends it (Design P3; §5.5).
 
 - **Trap-bar jump.** Band 10 to 20% of front squat TM, recomputed live; hard ceiling 30% of estimated 1RM (§5.2). Equipment floor: if the empty bar exceeds the band, the empty bar is the load provided it is under the ceiling; if it is over, the slot runs with dumbbells at the band. Progression is jump height at fixed load where the app reads it; +2.5 kg only after height has risen and then held flat across two sessions. With no height reading the load simply tracks the band.
 - **KB swing (M1).** Fixed heavy bell; no progression; done/not done.
-- **Jump shrug (M2+).** Start 70% of deadlift TM; +2.5 kg after two sessions with no stop-rule cut before the last rep.
-- **DB push press, explosive (M2+).** Fixed dumbbell under 30% class; progression is speed, judged; no load step inside a mesocycle.
-- **Landmine clean and push press (M2+).** Load at catch speed; +2.5 kg on the same two-session rule; first slot cut on time or elbow flag.
+- **Jump shrug (M2+).** Starting load set by the athlete at the first session (v1.6, A.24; the v1.5 start of 70% of deadlift TM is withdrawn); +2.5 kg after two sessions with no stop-rule cut before the last rep.
+- **DB push press, explosive (M2+).** Fixed dumbbell under 30% class, set by the athlete at the first session (A.24); progression is speed, judged; no load step inside a mesocycle.
+- **Landmine clean and push press (M2+).** Load at catch speed, set by the athlete at the first session (A.24); +2.5 kg on the same two-session rule; first slot cut on time or elbow flag.
 
 ---
 
@@ -194,11 +198,11 @@ Unchanged from v1 §1, plus: "missed a set" toggle on the primary lift; trap-bar
 Built in Claude Code under `app_build_plan_v1.md`. Constraints only; framework and visual design are the builder's choice.
 - **Form:** static, offline-capable web app installable to the phone home screen. No backend, no accounts, no analytics, no network calls after load.
 - **Engine:** a pure TypeScript module with no UI or storage imports. Two functions: `prescribe(state, config, date, day?) → session` and `update(state, log) → { state, explanation }`. Every step is explained to the athlete with the numbers behind it.
-- **Config:** `programme_config_v1_2.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
+- **Config:** `programme_config_v1_3.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
 - **State:** schema-versioned; starts from `initial_state_v1_1.json`; per lift TM, β₂ β₃, next position, negative-step streak, single-scheduled flag; per accessory load and streaks; ladder height; CMJ series and baseline; per-site flare state; pending pre-cuts; full session log.
 - **Export:** one tap → `training_log_YYYY_wNN.md`, human-readable, with the full state as a fenced JSON block at the foot. Prompted automatically at the end of every session.
 - **Import:** paste or open that file to rebuild state exactly. The exported log is the record of truth; device storage is a convenience and must be assumed losable.
-- **Tests:** `engine_test_vectors_v1_2.json` is the acceptance contract. Human-readable summary:
+- **Tests:** `engine_test_vectors_v1_3.json` is the acceptance contract. Human-readable summary:
 
 | Case | Input | Output |
 |---|---|---|
@@ -249,3 +253,10 @@ Evidenced direction (grades as cited): L3 class bases, L4 premises, L8 judging t
 21. **Ladder days.** Config `ladder` lists the programme weeks and the day. On that day of those weeks the `rsi_ladder` item takes the place of the first item named in `ladder.replaces` and every other named item is dropped from the session. It is fixed text, logged done / not done with optional numbers. No ladder logic, no contact caps. The athlete records the winning height by editing `depth_jump.height_cm`.
 22. **Day selection.** `prescribe` takes an optional `day` (1 or 2), which always wins. Without it: Day 2 if the front squat's `last_logged` is later than the deadlift's, otherwise Day 1 (including when both are null). The weekday is never consulted, so a shifted session changes nothing. In the taper the same rule applies.
 23. **One door for state.** Every change to state goes through `update` and is appended to `state.log`: set logs, a single taken, a single skipped, a manual TM change, a load override, a CMJ value, a depth-jump height, session end. After a single is logged, `prescribe` for the same date returns that lift's work sets as straight sets (A.16) at loads computed from the new TM (A.8).
+24. **Explosive slot loads.** Slots in the config with `load_rule: "carry"` (jump shrug, landmine clean and push press, explosive DB push press) carry one load in state, `state.explosive[slot] = { load, clean_streak }`, absent until first logged.
+    - **First session:** no load is prescribed. The athlete works up in small jumps until the first visibly slower rep, then logs the heaviest load that stayed fast. That load is stored; the streak starts at 0.
+    - **Every session:** the log carries the load lifted, the sets done and one yes/no, "the stop rule cut a set before its last rep". A logged load that differs from the stored load replaces it, is recorded as an override, and resets the streak to 0; that session does not count towards a step.
+    - **Step:** on slots with `increment_kg` and `streak` (jump shrug, landmine), a session at the stored load with no cut adds 1 to the streak; a cut resets it to 0. When the streak reaches `streak`, the load rises by `increment_kg` and the streak resets to 0. After week 22 the step is withheld and the streak still resets.
+    - **Explosive DB:** no `increment_kg`, so the engine never steps. The athlete changes it by logging a different dumbbell, normally at a mesocycle boundary (§5: no load step inside a mesocycle).
+    - Loads are stored as logged and displayed as stored: jump shrug in kg on the bar, landmine in kg on the sleeve, DB in kg per hand.
+25. **Round ranges.** When a template block carries `rounds`, every item in it without its own `sets` is prescribed `sets` = the low end and, for a range, `sets_max` = the high end. That includes the primary lift in M2 band mode, which no longer defaults to 3. The athlete chooses within the range; the engine reads only the last set, so the choice changes no rule.

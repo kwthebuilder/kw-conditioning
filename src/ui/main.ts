@@ -164,6 +164,11 @@ function commit(log: AnyLog): void {
 
 render();
 
+// Ask the browser not to evict saved state. WebKit grants this on
+// heuristics such as running as a Home Screen web app; a refusal changes
+// nothing, and the export stays the record of truth (CLAUDE.md rule 7).
+void navigator.storage?.persist?.().catch(() => false);
+
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker
     .register('./sw.js')

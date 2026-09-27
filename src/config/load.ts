@@ -5,9 +5,9 @@
  * for the import path). Validation runs once on module load and throws
  * a ConfigError naming the JSON path if a file is malformed.
  */
-import configJson from '../../spec/programme_config_v1_2.json';
+import configJson from '../../spec/programme_config_v1_3.json';
 import stateJson from '../../spec/initial_state_v1_1.json';
-import vectorsJson from '../../spec/engine_test_vectors_v1_2.json';
+import vectorsJson from '../../spec/engine_test_vectors_v1_3.json';
 import { crossCheck, parseProgrammeConfig, parseState, parseTestVectors } from './validate';
 import type { ProgrammeConfig, State, TestVectors } from './types';
 

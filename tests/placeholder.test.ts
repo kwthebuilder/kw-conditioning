@@ -8,6 +8,6 @@ describe('phase 0 placeholder', () => {
 
   it('exposes an app version and spec name', () => {
     expect(APP_VERSION).toMatch(/^\d+\.\d+\.\d+/);
-    expect(SPEC_NAME).toBe('engine_spec_v1_5');
+    expect(SPEC_NAME).toBe('engine_spec_v1_6');
   });
 });

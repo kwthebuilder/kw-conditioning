@@ -7,6 +7,7 @@ import { jumpFromFrames, mean, mesocycleOn, programmeWeek, roundHeight, roundRsi
 import type {
   AnyLog,
   BarbellPrescription,
+  ExplosivePrescription,
   FixedPrescription,
   LogEntry,
   RdlPrescription,
@@ -193,7 +194,7 @@ function entriesOn(state: State, date: string): LogEntry[] {
 function loggedSlot(state: State, date: string, slot: string): LogEntry | undefined {
   return entriesOn(state, date).find((e) => {
     const l = e.log;
-    return (l.kind === 'barbell' && l.lift === slot) || ((l.kind === 'rdl' || l.kind === 'slot' || l.kind === 'fixed') && l.slot === slot);
+    return (l.kind === 'barbell' && l.lift === slot) || ((l.kind === 'rdl' || l.kind === 'slot' || l.kind === 'fixed' || l.kind === 'explosive') && l.slot === slot);
   });
 }
 
@@ -268,7 +269,7 @@ function barbellItem(app: App, ctx: Ctx, item: SessionSlotItem, p: BarbellPrescr
       { class: 'rx' },
       h('span', { class: 'big' }, kg(p.load)),
       h('span', { class: 'unit' }, 'kg'),
-      h('span', { class: 'sets' }, `${p.sets} sets × ${p.reps}`),
+      h('span', { class: 'sets' }, `${setsText(p.sets, p.sets_max)} × ${p.reps}`),
       h('span', { class: 'unit' }, `${Math.round(p.pct * 100)}% of TM`),
     ),
   );
@@ -319,14 +320,15 @@ function progressionItem(app: App, ctx: Ctx, item: SessionSlotItem, p: RdlPrescr
   if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
   const children: Child[] = [title];
   const sets = item.template.sets ?? 3;
+  const setsLabel = setsText(sets, item.template.sets_max);
   const side = item.template.per_side ? ' each side' : '';
   const rx = h('div', { class: 'rx' });
   if (p.kind === 'rdl') {
-    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} sets × ${p.rep_range[0]}–${p.rep_range[1]}`));
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${setsLabel} × ${p.rep_range[0]}–${p.rep_range[1]}`));
   } else if (p.load !== null) {
-    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${sets} sets × ${p.reps}${side}`));
+    rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, 'kg'), h('span', { class: 'sets' }, `${setsLabel} × ${p.reps}${side}`));
   } else {
-    rx.append(h('span', { class: 'sets' }, `${sets} sets × ${p.reps}${side}`), h('span', { class: 'unit' }, p.start_hint_kg !== undefined ? `pick a load, try ${p.start_hint_kg} kg` : 'pick a load'));
+    rx.append(h('span', { class: 'sets' }, `${setsLabel} × ${p.reps}${side}`), h('span', { class: 'unit' }, p.start_hint_kg !== undefined ? `pick a load, try ${p.start_hint_kg} kg` : 'pick a load'));
   }
   children.push(rx);
   const tempoSlot = p.kind === 'rdl' || p.cls === 'B';
@@ -380,9 +382,9 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
   const isDepthJump = item.slot === 'depth_jump';
   const rx = h('div', { class: 'rx' });
   if (p.load_kg !== undefined) rx.append(h('span', { class: 'big' }, kg(p.load_kg)), h('span', { class: 'unit' }, 'kg'));
-  if (t.sets !== undefined && t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets × ${t.reps}${side}`));
-  else if (t.sets !== undefined && t.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets × ${t.secs} seconds${side}`));
-  else if (t.sets !== undefined) rx.append(h('span', { class: 'sets' }, `${t.sets} sets`));
+  if (t.sets !== undefined && t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${setsText(t.sets, t.sets_max)} × ${t.reps}${side}`));
+  else if (t.sets !== undefined && t.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${setsText(t.sets, t.sets_max)} × ${t.secs} seconds${side}`));
+  else if (t.sets !== undefined) rx.append(h('span', { class: 'sets' }, setsText(t.sets, t.sets_max)));
   else if (t.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${t.reps} reps${side}`));
   if (p.contacts !== undefined) rx.append(h('span', { class: 'sets' }, isLadder ? `${p.contacts} jumps in total` : `${p.contacts} jumps`));
   if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
@@ -414,6 +416,58 @@ function fixedItem(app: App, ctx: Ctx, item: SessionSlotItem, p: FixedPrescripti
   );
 }
 
+const LOAD_UNIT: Record<string, string> = {
+  jump_shrug: 'kg on the bar',
+  landmine_cpp: 'kg on the sleeve',
+  db_pp_explosive: 'kg per hand',
+};
+
+/** A.24: jump shrug, landmine clean and push press, explosive DB. */
+function explosiveItem(app: App, ctx: Ctx, item: SessionSlotItem, p: ExplosivePrescription): HTMLElement {
+  const title = h('div', { class: 'title' }, h('h2', {}, displayName(item.slot, item.name)));
+  const logged = loggedSlot(app.state, app.date, item.slot);
+  if (logged) return h('div', { class: 'item' }, title, doneLine(app, ctx, item.slot, logged));
+  const t = item.template;
+  const side = t.per_side ? ' each side' : '';
+  const unit = LOAD_UNIT[item.slot] ?? 'kg';
+  const sets = t.sets ?? 3;
+  const reps = t.reps !== undefined ? ` × ${t.reps}${side}` : '';
+  const rx = h('div', { class: 'rx' });
+  if (p.load !== null) rx.append(h('span', { class: 'big' }, kg(p.load)), h('span', { class: 'unit' }, unit));
+  rx.append(h('span', { class: 'sets' }, `${setsText(sets, t.sets_max)}${reps}`));
+  if (p.load === null) rx.append(h('span', { class: 'unit' }, 'first time: find your load'));
+  const subs: string[] = [];
+  const help = SLOT_HELP[item.slot];
+  if (help) subs.push(help);
+  if (p.load === null) subs.push('Work up in small jumps until a rep slows down. Log the heaviest load that stayed fast; the app keeps it from here.');
+  else if (p.streak_needed !== undefined && p.increment_kg !== undefined)
+    subs.push(`${p.clean_streak} of ${p.streak_needed} clean sessions banked. Two in a row with no set cut short and it goes up ${p.increment_kg} kg.`);
+  else subs.push('Same weight all block. Log a different weight if you change it.');
+  const load = numberInput(unit, { value: p.load, step: 0.5, required: true, placeholder: 'kg' });
+  const setsIn = numberInput('sets', { value: sets, integer: true, step: 1 });
+  const cut = h('input', { type: 'checkbox' });
+  const log = h('button', {
+    class: 'primary',
+    onclick: () => {
+      if (!requireFilled([load.input, setsIn.input])) return;
+      ctx.commit({ kind: 'explosive', slot: item.slot, date: app.date, load: readNumber(load.input)!, sets_done: readNumber(setsIn.input)!, cut: cut.checked });
+    },
+  }, 'Log');
+  return h(
+    'div',
+    { class: 'item' },
+    title,
+    rx,
+    h('p', { class: 'sub' }, subs.join(' ')),
+    h('div', { class: 'row' }, load.wrap, setsIn.wrap, h('span', { class: 'spacer' }), log),
+    h('label', { class: 'f check' }, cut, 'A rep slowed and I cut a set short'),
+  );
+}
+
+function setsText(sets: number, max?: number): string {
+  return max !== undefined ? `${sets}–${max} sets` : `${sets} sets`;
+}
+
 function itemView(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
   const p = item.prescription;
   switch (p.kind) {
@@ -425,6 +479,8 @@ function itemView(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
       return progressionItem(app, ctx, item, p);
     case 'fixed':
       return fixedItem(app, ctx, item, p);
+    case 'explosive':
+      return explosiveItem(app, ctx, item, p);
   }
 }
 

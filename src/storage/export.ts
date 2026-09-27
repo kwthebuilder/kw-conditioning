@@ -48,6 +48,8 @@ function logLine(log: AnyLog, config: ProgrammeConfig): string {
       return `${name(log.slot)}: ${log.sets_done} sets, last set ${setText(log.load, log.last_set.reps, log.last_set.rir, log.override)}${log.last_set.tempo_break ? ', tempo broke' : ''}`;
     case 'fixed':
       return `${name(log.slot)}: ${log.done ? 'done' : 'not done'}${log.value !== undefined ? ` (${log.value})` : ''}${log.note ? `, ${log.note}` : ''}`;
+    case 'explosive':
+      return `${name(log.slot)}: ${log.sets_done} sets at ${f1(log.load)} kg${log.cut ? ', stop rule cut a set' : ', no cut'}`;
     case 'cmj':
       return `CMJ ${log.value} cm`;
     case 'depth_jump_height':

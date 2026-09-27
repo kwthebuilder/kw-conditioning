@@ -6,6 +6,7 @@
  */
 import type { IsoDate, ProgrammeConfig, SessionTemplate, SlotId, SlotItem, State } from '../config/types';
 import { prescribeAccessory } from './accessory';
+import { isCarrySlot, prescribeExplosive } from './explosive';
 import { prescribeLift } from './barbell';
 import { mesocycleOn, programmeWeek } from './calendar';
 import { prescribeFixed } from './fixed';
@@ -55,6 +56,7 @@ function buildItem(state: State, config: ProgrammeConfig, slotId: SlotId, date: 
     case 'C':
       return { ...base, log_kind: 'slot', prescription: prescribeAccessory(state, config, slotId) };
     default: {
+      if (isCarrySlot(slot)) return { ...base, log_kind: 'explosive', prescription: prescribeExplosive(state, config, slotId) };
       const p = prescribeFixed(state, config, slotId, date);
       // A template item may fix the contacts (TAPER).
       if (template.contacts !== undefined) p.contacts = template.contacts;
@@ -92,7 +94,17 @@ export function prescribe(state: State, config: ProgrammeConfig, date: IsoDate, 
         slotId = ladder.slot;
         tf = {};
       }
-      items.push(buildItem(state, config, slotId, date, tf));
+      // A.25: a block's round range sets the sets on every item without its own.
+      if (b.rounds !== undefined && tf.sets === undefined) {
+        tf.sets = Array.isArray(b.rounds) ? b.rounds[0] : b.rounds;
+        if (Array.isArray(b.rounds) && b.rounds[1] !== b.rounds[0]) tf.sets_max = b.rounds[1];
+      }
+      const built = buildItem(state, config, slotId, date, tf);
+      if (b.rounds !== undefined && it.sets === undefined && built.prescription.kind === 'lift') {
+        built.prescription.sets = tf.sets!;
+        if (tf.sets_max !== undefined) built.prescription.sets_max = tf.sets_max;
+      }
+      items.push(built);
     }
     if (items.length === 0) continue;
     const block: SessionBlock = { items };
