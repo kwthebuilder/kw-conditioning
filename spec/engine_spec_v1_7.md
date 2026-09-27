@@ -1,7 +1,9 @@
-# Engine Specification v1.6
+# Engine Specification v1.7
 
-**Version 1.6 | 26 September 2026 | Supersedes `engine_spec_v1_5.md`**
-**Status:** approved by the athlete 26 Sep 2026; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_3.json`, `programme_config_v1_3.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+**Version 1.7 | 27 September 2026 | Supersedes `engine_spec_v1_6.md`**
+**Status:** approved by the athlete 27 Sep 2026; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_3.json`, `programme_config_v1_3.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+
+**v1.7 change note: automatic backup to GitHub.** No change to any progression rule. §12 now allows one network destination: the athlete's own private GitHub repo, written through the GitHub contents API with a fine-grained token the athlete pastes on the phone. Reason: the app is already the programme giver and device storage can be lost without warning (§12 Import), so relying on a manual export after every session left the log one forgotten tap from loss. Rules are in §12 Backup. SPEC_QUESTIONS Q12.
 
 **v1.6 change note: M2 explosive loads and contrast rounds.** Found in review before M2 (9 Nov) governs. (1) The jump shrug, landmine clean and push press, and explosive DB push press showed no load at all under the v1.4 scope cut. They now carry a load (A.24). (2) The jump shrug's starting load of 70% of deadlift TM is withdrawn. It came from the pull-class optimum "at or above 70% of 1RM" in science §5.2, but that figure is a percentage of the power clean or hang power clean 1RM, not the deadlift (Soriano et al. 2015). For the jump shrug itself, peak power was highest at 30% of hang power clean 1RM, the lightest load tested (Suchomel and Sole 2017, 30/45/65/80%). 70% of the current deadlift TM is about 100 kg, which is likely near or above this athlete's hang power clean max. With no clean max on record, the first session sets the load by speed. (3) Contrast blocks with a round range (M2, 3 to 4) now prescribe that range on every item instead of a hard-coded 3 sets (A.25). No other rule changes.
 
@@ -196,12 +198,19 @@ Unchanged from v1 §1, plus: "missed a set" toggle on the primary lift; trap-bar
 ## 12. Architecture for the build
 
 Built in Claude Code under `app_build_plan_v1.md`. Constraints only; framework and visual design are the builder's choice.
-- **Form:** static, offline-capable web app installable to the phone home screen. No backend, no accounts, no analytics, no network calls after load.
+- **Form:** static, offline-capable web app installable to the phone home screen. No backend, no accounts, no analytics. The only network call after load is the optional backup below.
 - **Engine:** a pure TypeScript module with no UI or storage imports. Two functions: `prescribe(state, config, date, day?) → session` and `update(state, log) → { state, explanation }`. Every step is explained to the athlete with the numbers behind it.
 - **Config:** `programme_config_v1_3.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
 - **State:** schema-versioned; starts from `initial_state_v1_1.json`; per lift TM, β₂ β₃, next position, negative-step streak, single-scheduled flag; per accessory load and streaks; ladder height; CMJ series and baseline; per-site flare state; pending pre-cuts; full session log.
 - **Export:** one tap → `training_log_YYYY_wNN.md`, human-readable, with the full state as a fenced JSON block at the foot. Prompted automatically at the end of every session.
 - **Import:** paste or open that file to rebuild state exactly. The exported log is the record of truth; device storage is a convenience and must be assumed losable.
+- **Backup (v1.7):** optional, off until the athlete saves a token.
+  - Destination: one private GitHub repo named by the athlete (default `kwthebuilder/kw-conditioning-logs`). A public repo is refused, because the log holds health data. Training data never goes into the app's own repo, which is public.
+  - Credential: a fine-grained personal access token limited to that one repo with Contents read and write. It is stored on the device under its own key, outside the engine state, and never appears in an export or a backup.
+  - What is written: on every change to state, a few seconds later, the export file is written twice: `latest.md` and `logs/training_log_YYYY_wNN.md`, named by the calendar date, not the date on screen. A file whose content is unchanged is skipped, so no empty commits.
+  - Offline: a change is marked unsent at once; the backup retries on app open, when signal returns, and when the app comes back to the foreground. The engine never waits on the network.
+  - Restore: reads `latest.md` and goes through the same import as a file, so it restores exactly or refuses without touching state.
+  - The manual export stays, as a second copy and for the project chat.
 - **Tests:** `engine_test_vectors_v1_3.json` is the acceptance contract. Human-readable summary:
 
 | Case | Input | Output |

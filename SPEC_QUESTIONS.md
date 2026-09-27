@@ -99,3 +99,11 @@ Format:
 - **Blocked:** Nothing; ruled below.
 - **Ruling:** A block's round range sets `sets` (low end) and `sets_max` (high end) on every item without its own sets, including the primary lift. The athlete chooses within the range.
 - **Spec revision:** engine_spec_v1_6.md (A.25), engine_test_vectors_v1_3.json (`rounds` block)
+
+## Q12 — no network calls versus losing the log
+- **Raised:** 2026-09-26, athlete, after the app became the programme giver
+- **Where:** engine_spec_v1_6.md §12 Form and Export / CLAUDE.md rule 6 / app_build_plan_v1_1.md §3
+- **Question:** The log lives only in the phone's browser storage, which can be wiped, and the only copy elsewhere is a manual export the athlete must remember after every session. Can the app back up by itself? Pushing into this repo was considered and rejected: the repo is public (GitHub Pages on the free plan requires that), a token able to write here could also change the app's code, and every push would redeploy the app.
+- **Blocked:** Nothing; ruled below.
+- **Ruling:** Athlete decision 26 Sep 2026: automatic backup to a separate private repo, `kwthebuilder/kw-conditioning-logs`, with a fine-grained token limited to that repo. Public repos refused. Token kept out of state and exports. Manual export retained.
+- **Spec revision:** engine_spec_v1_7.md §12 Backup; CLAUDE.md v1.4 rule 6

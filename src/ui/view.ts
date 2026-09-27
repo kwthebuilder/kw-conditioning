@@ -3,6 +3,8 @@
  * action goes back through ctx.commit, which is the one door (A.23).
  */
 import type { LiftId, ProgrammeConfig, State } from '../config/types';
+import type { SyncSettings } from '../storage/sync';
+import { DEFAULT_OWNER, DEFAULT_REPO } from './backup';
 import { jumpFromFrames, mean, mesocycleOn, programmeWeek, roundHeight, roundRsi } from '../engine';
 import type {
   AnyLog,
@@ -29,6 +31,8 @@ export interface App {
   banner: string | null;
   showExport: boolean;
   lastExport: string | null;
+  /** GitHub backup: saved settings (null = off) and the current status line. */
+  backup: { settings: SyncSettings | null; status: string };
 }
 
 export interface Ctx {
@@ -43,6 +47,10 @@ export interface Ctx {
   closeExport: () => void;
   exportNow: () => void;
   importFile: (file: File) => void;
+  saveBackup: (settings: SyncSettings) => void;
+  backupNow: () => void;
+  restoreFromGitHub: () => void;
+  forgetBackup: () => void;
   editTm: (lift: LiftId) => void;
 }
 
@@ -561,7 +569,61 @@ function exportPanel(app: App, ctx: Ctx): HTMLElement {
       h('p', {}, 'Choose a file you exported earlier. Nothing changes unless the file is valid.'),
       h('div', { class: 'row' }, file),
     ),
+    backupSection(app, ctx),
     h('div', { class: 'row' }, h('button', { onclick: ctx.closeExport }, 'Back to today')),
+  );
+}
+
+function backupSection(app: App, ctx: Ctx): HTMLElement {
+  const status = h('p', { class: 'sub backup-status' }, app.backup.status);
+  const s = app.backup.settings;
+  if (s) {
+    return h(
+      'section',
+      { class: 'card' },
+      h('h2', {}, 'Automatic backup to GitHub'),
+      h('p', {}, `On. Every change is copied to your private repo ${s.owner}/${s.repo} a few seconds later, or as soon as you have signal again.`),
+      status,
+      h(
+        'div',
+        { class: 'row' },
+        h('button', { class: 'primary', onclick: ctx.backupNow }, 'Back up now'),
+        h('button', { onclick: ctx.restoreFromGitHub }, 'Restore from GitHub'),
+        h('button', { class: 'subtle', onclick: ctx.forgetBackup }, 'Remove token'),
+      ),
+    );
+  }
+  const text = (label: string, value: string, type = 'text') => {
+    const input = h('input', { type, value, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+    return { input, wrap: h('label', { class: 'f' }, h('span', {}, label), input) };
+  };
+  const owner = text('GitHub user', DEFAULT_OWNER);
+  const repo = text('Private repo', DEFAULT_REPO);
+  const token = text('Token', '', 'password');
+  return h(
+    'section',
+    { class: 'card' },
+    h('h2', {}, 'Automatic backup to GitHub'),
+    h('p', {}, 'Off. Paste a token that can write only to your private logs repo, and every change is backed up there automatically. The token stays on this phone and is never included in an export.'),
+    owner.wrap,
+    repo.wrap,
+    token.wrap,
+    status,
+    h(
+      'div',
+      { class: 'row' },
+      h('button', {
+        class: 'primary',
+        onclick: () => {
+          const t = token.input.value.trim();
+          if (!t) {
+            token.input.focus();
+            return;
+          }
+          ctx.saveBackup({ owner: owner.input.value.trim(), repo: repo.input.value.trim(), token: t });
+        },
+      }, 'Save and back up now'),
+    ),
   );
 }
 
@@ -786,6 +848,7 @@ export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
   }
   body.push(historyView(app));
   body.push(planView(app, ctx));
+  body.push(h('p', { class: 'foot backup-status' }, app.backup.status));
   body.push(h('p', { class: 'foot' }, `Acro Base S&C · v${appVersion}`));
 
   const endBar = h(

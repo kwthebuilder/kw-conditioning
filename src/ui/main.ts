@@ -8,6 +8,8 @@ import type { LiftId } from '../config/types';
 import { prescribe, update } from '../engine';
 import type { AnyLog, LogEntry, SessionDay } from '../engine';
 import { exportMarkdown, importMarkdown, localStorageStore, memoryStore, type Store } from '../storage';
+import { checkRepo, pullLatest, pushExport, SyncError, type SyncSettings } from '../storage/sync';
+import { browserDeps, lastBackup, loadSettings, pending, saveSettings, whenText } from './backup';
 import { APP_VERSION } from '../version';
 import { readTextFile, shareOrDownload } from './io';
 import { renderApp, type App, type Ctx } from './view';
@@ -41,6 +43,7 @@ const app: App = {
   banner: null,
   showExport: false,
   lastExport: null,
+  backup: { settings: loadSettings(), status: '' },
 };
 
 /** The day chosen for a date, kept in the browser so a reload mid-session shows the same day. Not engine state. */
@@ -125,9 +128,97 @@ function render(): void {
           app.banner = null;
           app.showExport = false;
           app.lastExport = null;
+          requestBackup();
         }
         render();
       })();
+    },
+    saveBackup: (settings: SyncSettings) => {
+      void (async () => {
+        setBackupStatus('Checking the repo…');
+        try {
+          await checkRepo(deps, settings);
+        } catch (e) {
+          setBackupStatus(errorText(e));
+          return;
+        }
+        // Never let a blank or older phone overwrite a fuller backup (a wiped phone being set up again).
+        let remote: string | null;
+        try {
+          remote = await pullLatest(deps, settings);
+        } catch (e) {
+          setBackupStatus(errorText(e));
+          return;
+        }
+        const r = remote === null ? null : importMarkdown(remote);
+        const here = app.state.log.length;
+        if (r?.ok && r.state.log.length > here) {
+          const there = r.state.log.length;
+          if (window.confirm(`GitHub already has a backup with ${there} log entries; this phone has ${here}. Restore the backup onto this phone?`)) {
+            app.state = r.state;
+            store.save(r.state);
+            saveSettings(settings);
+            app.backup.settings = settings;
+            backupError = null;
+            pending.set(false);
+            lastBackup.set(new Date().toISOString());
+            render();
+            return;
+          }
+          if (!window.confirm(`Overwrite the GitHub backup (${there} entries) with this phone's ${here}? Older versions stay in the repo's history.`)) {
+            setBackupStatus('Backup not set up. Nothing was changed on GitHub or on this phone.');
+            return;
+          }
+        }
+        saveSettings(settings);
+        app.backup.settings = settings;
+        backupError = null;
+        pending.set(true);
+        render();
+        await runBackup();
+      })();
+    },
+    backupNow: () => {
+      pending.set(true);
+      void runBackup();
+    },
+    restoreFromGitHub: () => {
+      const s = app.backup.settings;
+      if (!s) return;
+      void (async () => {
+        setBackupStatus('Fetching the backup…');
+        let text: string | null;
+        try {
+          text = await pullLatest(deps, s);
+        } catch (e) {
+          setBackupStatus(errorText(e));
+          return;
+        }
+        if (text === null) {
+          setBackupStatus('Nothing backed up on GitHub yet.');
+          return;
+        }
+        const r = importMarkdown(text);
+        if (!r.ok) {
+          app.banner = `Restore refused, nothing changed: ${r.reason}`;
+        } else if (window.confirm(`Replace what is on this phone with the backup on GitHub (${r.state.log.length} log entries)?`)) {
+          app.state = r.state;
+          store.save(r.state);
+          pending.set(false);
+          lastBackup.set(new Date().toISOString());
+          app.banner = null;
+          app.showExport = false;
+        }
+        render();
+        refreshBackupStatus();
+      })();
+    },
+    forgetBackup: () => {
+      if (!window.confirm('Remove the GitHub token from this phone? Automatic backup stops until you paste one again.')) return;
+      saveSettings(null);
+      app.backup.settings = null;
+      backupError = null;
+      render();
     },
     editTm: (lift: LiftId) => {
       const current = app.state.lifts[lift].tm;
@@ -145,6 +236,7 @@ function render(): void {
     },
   };
   root!.replaceChildren(renderApp(app, ctx, APP_VERSION));
+  refreshBackupStatus();
 }
 
 function commit(log: AnyLog): void {
@@ -156,13 +248,92 @@ function commit(log: AnyLog): void {
     app.state = r.state;
     store.save(r.state);
     app.banner = null;
+    requestBackup();
   } catch (e) {
     app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
   }
   render();
 }
 
+// ---------------------------------------------------------------------
+// GitHub backup (engine_spec_v1_7.md §12)
+// ---------------------------------------------------------------------
+
+const deps = browserDeps();
+let backupTimer: ReturnType<typeof setTimeout> | undefined;
+let backupRunning = false;
+let backupAgain = false;
+let backupError: string | null = null;
+
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * The status line is patched in place, never by a full render, so a
+ * backup finishing in the background cannot wipe a half-typed set.
+ */
+function setBackupStatus(text: string): void {
+  app.backup.status = text;
+  for (const el of document.querySelectorAll('.backup-status')) el.textContent = text;
+}
+
+/** One place that decides the status line from the facts. */
+function refreshBackupStatus(): void {
+  if (!app.backup.settings) return setBackupStatus('Automatic backup is off. Tap Backup to set it up.');
+  if (backupRunning) return setBackupStatus('Backing up…');
+  if (backupError) return setBackupStatus(backupError);
+  const last = lastBackup.get();
+  const lastText = last ? `Last backed up ${whenText(last)}.` : 'Nothing sent yet.';
+  setBackupStatus(pending.get() ? `Backup waiting to send. ${lastText}` : `Backed up to GitHub. ${lastText}`);
+}
+
+/** Called after every change to state: mark it unsent and back up a few seconds later. */
+function requestBackup(): void {
+  pending.set(true);
+  if (!app.backup.settings) return;
+  if (backupTimer) clearTimeout(backupTimer);
+  backupTimer = setTimeout(() => void runBackup(), 3000);
+}
+
+async function runBackup(): Promise<void> {
+  const s = app.backup.settings;
+  if (!s) return;
+  if (backupRunning) {
+    backupAgain = true;
+    return;
+  }
+  backupRunning = true;
+  refreshBackupStatus();
+  try {
+    // Named by today's date, not the date being viewed.
+    await pushExport(deps, s, exportMarkdown(app.state, cfg, isoToday()));
+    pending.set(false);
+    lastBackup.set(new Date().toISOString());
+    backupError = null;
+  } catch (e) {
+    const retry = e instanceof SyncError ? e.retryable : true;
+    backupError = retry ? `Backup waiting: ${errorText(e)}` : `Backup failed: ${errorText(e)}`;
+  } finally {
+    backupRunning = false;
+    refreshBackupStatus();
+    if (backupAgain) {
+      backupAgain = false;
+      void runBackup();
+    }
+  }
+}
+
 render();
+
+// Anything left unsent from last time goes now, and again whenever signal returns.
+if (app.backup.settings && pending.get()) void runBackup();
+window.addEventListener('online', () => {
+  if (pending.get()) void runBackup();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && pending.get()) void runBackup();
+});
 
 // Ask the browser not to evict saved state. WebKit grants this on
 // heuristics such as running as a Home Screen web app; a refusal changes
