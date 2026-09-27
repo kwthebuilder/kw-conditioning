@@ -15,7 +15,7 @@ npm run preview   # serve dist/ on the LAN
 
 ## On the phone
 
-The built app is a static site (`dist/`) with a service worker, so it needs HTTPS. `.github/workflows/pages.yml` builds, tests and deploys `dist/` to GitHub Pages on every push to `main`; Pages must be set to "GitHub Actions" as its source once. Open the site on the phone while online, add it to the home screen (Safari share sheet, or Chrome menu), and from then on it runs from the icon in airplane mode. State lives in the browser's storage; export at the end of every session.
+The built app is a static site (`dist/`) with a service worker, so it needs HTTPS. `.github/workflows/pages.yml` builds, tests and deploys `dist/` to GitHub Pages on every push to `main`; Pages must be set to "GitHub Actions" as its source once. Open the site on the phone while online, add it to the home screen (Safari share sheet, or Chrome menu), and from then on it runs from the icon in airplane mode. State lives in the browser's storage. Turn on automatic backup (Backup, then paste a token) to copy every change to the private repo `kwthebuilder/kw-conditioning-logs`; see `spec/engine_spec_v1_7.md` §12. Training data never goes into this repo, which is public.
 
 ## Layout
 
