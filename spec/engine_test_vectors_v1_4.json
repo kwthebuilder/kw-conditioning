@@ -1,13 +1,13 @@
 {
- "version": "1.3",
- "date": "2026-09-26",
- "spec": "engine_spec_v1_6.md",
+ "version": "1.4",
+ "date": "2026-10-09",
+ "spec": "engine_spec_v1_8.md",
  "tolerance": {
   "tm": 0.05,
   "beta": 0.002,
   "load": 0
  },
- "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected. v1.3: explosive (A.24) and rounds (A.25) blocks added.",
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected. v1.3: explosive (A.24) and rounds (A.25) blocks added. v1.4 (9 Oct 2026): every v1.3 block unchanged; adds `skip` (A.26) and `amend` (A.28). Base for both blocks is initial_state_v1_1.json. Steps are AnyLog objects passed to update(); a correction is a list of actions passed to amend(). Expected values are hand-computed from §2 and §3.",
  "barbell": [
   {
    "name": "fs_cal_up",
@@ -830,6 +830,490 @@
    "slot": "landmine_cpp",
    "expect_sets": 3,
    "expect_sets_max": null
+  }
+ ],
+ "skip": [
+  {
+   "name": "skipped primary lift moves nothing and the position is prescribed again",
+   "steps": [
+    {
+     "kind": "skip",
+     "slot": "front_squat",
+     "date": "2026-09-21",
+     "reason": "time"
+    }
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 92.0
+    },
+    "next_position": {
+     "front_squat": 2
+    },
+    "sessions_logged": {
+     "front_squat": 1
+    }
+   }
+  },
+  {
+   "name": "skip between two qualifying sessions neither counts nor resets the streak (Q13)",
+   "steps": [
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-09-21",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 7,
+      "rir": 2
+     }
+    },
+    {
+     "kind": "skip",
+     "slot": "pull_up",
+     "date": "2026-09-29",
+     "reason": "time"
+    },
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-10-06",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 8,
+      "rir": 2
+     }
+    }
+   ],
+   "expect": {
+    "accessory": {
+     "pull_up": {
+      "load": 2.5,
+      "streak_up": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "skipped Romanian deadlift keeps its load and session count",
+   "steps": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "skip",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "reason": "other"
+    }
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 1
+   }
+  }
+ ],
+ "amend": [
+  {
+   "name": "a 0-rep Romanian deadlift corrected to a skip restores the load",
+   "logs": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "load": 55,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 0,
+      "rir": 2
+     }
+    }
+   ],
+   "before": {
+    "rdl_load": 50,
+    "rdl_sessions": 2
+   },
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "skip",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "reason": "other"
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 1
+   }
+  },
+  {
+   "name": "a duplicate session end removed changes no derived value",
+   "logs": [
+    {
+     "kind": "session_end",
+     "date": "2026-09-24",
+     "day": 2
+    },
+    {
+     "kind": "session_end",
+     "date": "2026-09-24",
+     "day": 2
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "remove",
+      "target": 1
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 92.0,
+     "deadlift": 145.2
+    },
+    "effective_length": 1
+   }
+  },
+  {
+   "name": "a corrected calibration set replays the later session: 122.5 x 6 holds 145.2 (beta2 1.040), then 135 x 4 calibrates +0.6",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "deadlift",
+     "date": "2026-09-24",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 122.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 122.5,
+      "reps": 8,
+      "rir": 2
+     },
+     "missed": false
+    },
+    {
+     "kind": "barbell",
+     "lift": "deadlift",
+     "date": "2026-10-02",
+     "mode": "wave",
+     "position": 3,
+     "prescribed": {
+      "load": 135,
+      "reps": 2,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 135,
+      "reps": 4,
+      "rir": 2
+     },
+     "missed": false,
+     "override": {
+      "from": 132.5
+     }
+    }
+   ],
+   "before": {
+    "tm": {
+     "deadlift": 147.0
+    }
+   },
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 0,
+      "entry": {
+       "kind": "barbell",
+       "lift": "deadlift",
+       "date": "2026-09-24",
+       "mode": "wave",
+       "position": 2,
+       "prescribed": {
+        "load": 122.5,
+        "reps": 3,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 122.5,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "deadlift": 145.8
+    },
+    "beta": {
+     "deadlift": {
+      "2": 1.0397,
+      "3": 1.0
+     }
+    },
+    "next_position": {
+     "deadlift": 1
+    }
+   }
+  },
+  {
+   "name": "a missed session is inserted in date order and advances the pointer",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "front_squat",
+     "date": "2026-09-21",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 77.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 77.5,
+      "reps": 9,
+      "rir": 2
+     },
+     "missed": false
+    },
+    {
+     "kind": "session_end",
+     "date": "2026-10-06",
+     "day": 1
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "insert",
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 96.9
+    },
+    "next_position": {
+     "front_squat": 1
+    },
+    "effective_dates": [
+     "2026-09-21",
+     "2026-09-29",
+     "2026-10-06"
+    ]
+   }
+  },
+  {
+   "name": "the latest correction of the same entry wins",
+   "logs": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "load": 55,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 0,
+      "rir": 2
+     }
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "skip",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "reason": "other"
+      }
+     }
+    ],
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "rdl",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "load": 55,
+       "sets_done": 3,
+       "last_set": {
+        "reps": 7,
+        "rir": 2
+       }
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 2
+   }
+  },
+  {
+   "name": "an inserted entry can itself be corrected: 85 x 4 at heavy week holds 95.3 (beta3 1.038)",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "front_squat",
+     "date": "2026-09-21",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 77.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 77.5,
+      "reps": 9,
+      "rir": 2
+     },
+     "missed": false
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "insert",
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ],
+    [
+     {
+      "op": "replace",
+      "target": [
+       1,
+       0
+      ],
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 4,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 95.325
+    },
+    "beta": {
+     "front_squat": {
+      "2": 1.0,
+      "3": 1.0384
+     }
+    }
+   }
   }
  ]
 }

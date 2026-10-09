@@ -107,3 +107,51 @@ Format:
 - **Blocked:** Nothing; ruled below.
 - **Ruling:** Athlete decision 26 Sep 2026: automatic backup to a separate private repo, `kwthebuilder/kw-conditioning-logs`, with a fine-grained token limited to that repo. Public repos refused. Token kept out of state and exports. Manual export retained.
 - **Spec revision:** engine_spec_v1_7.md §12 Backup; CLAUDE.md v1.4 rule 6
+
+## Q13 — does a skipped session break "two in a row"?
+- **Raised:** 2026-10-08, interface audit
+- **Where:** engine_spec_v1_7.md §3, §4, A.11, A.24
+- **Question:** Accessory, tempo and explosive slots step after two consecutive qualifying sessions. The pull-up stepped on 6 Oct counting 21 Sep and 6 Oct as two in a row, with no pull-up logged on 29 Sep. Does a session where the slot was skipped or not logged break the run?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete decision 9 Oct 2026: no. "Two consecutive sessions" means two consecutive logged sessions of that slot; a skip or an unlogged session neither counts nor resets, the same way light weeks are treated for the barbell downward rule (A.6). The 6 Oct pull-up step stands.
+- **Spec revision:** engine_spec_v1_8.md A.26
+
+## Q14 — correcting logged entries
+- **Raised:** 2026-10-08, interface audit
+- **Where:** engine_spec_v1_7.md A.18, A.23 / app_build_plan_v1_1.md phase 5
+- **Question:** The app had no undo and no way to fix a logged entry. A 0-rep Romanian deadlift on 29 Sep (likely meant as "not done") cut the load 55 → 50 kg, and a backdated log could change which day the app opens on. How should corrections work, and how far back?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete decision 9 Oct 2026: any date can be corrected; every correction stays visible in the log and the export. Engine ruling: entries are never edited in place; a correction is its own entry, and derived numbers are rebuilt by replaying the corrected log from the initial state, with the consequences previewed before saving. Undo within 10 seconds is an interface convenience and leaves no entry.
+- **Spec revision:** engine_spec_v1_8.md A.28; ui_spec_v1_0.md §4.3, §7
+
+## Q15 — tissue check-in
+- **Raised:** 2026-10-08, interface review
+- **Where:** engine_spec_v1_4.md scope cut (§8, §9 out of the app)
+- **Question:** The programme judges tendon work on the 24 to 48 hour response, and the app records none of it. Should it, and should anything act on it?
+- **Blocked:** Nothing; built in interface release 3.
+- **Ruling:** Athlete decision 9 Oct 2026: record only. Above 3/10 the interface shows the athlete's flare protocol text, unchanged. No rule reads the score; the v1.4 scope cut stands.
+- **Spec revision:** engine_spec_v1_8.md A.29; ui_spec_v1_0.md §15.4
+
+## Q16 — light-week rep-outs
+- **Raised:** 2026-10-08, review of week 4
+- **Where:** engine_spec_v1_7.md §2.2 position 1 / programme_design_rationale_v3_2.md P3
+- **Question:** In week 4 both lifts were taken well past the prescribed 4 reps on the light week, which is meant to be the low-fatigue week of the wavelet. Should the interface intervene?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete decision 9 Oct 2026: one line of copy on the light-week card, and one line after logging more than 2 reps above the prescription. Never blocks logging. No rule change.
+- **Spec revision:** ui_spec_v1_0.md §14.7 (release 2); the instruction line ships in release 1
+
+## Q17 — what a past date shows
+- **Raised:** 2026-10-08, athlete report ("Day 1 showed 3 × 4 on Monday and 3 × 3 today")
+- **Where:** engine_spec_v1_7.md §12 / app_build_plan_v1_1.md phase 5
+- **Question:** The app computed every date's session from the current state, so a past date showed the next prescription under the old date, and items not logged that day looked like blank forms. What should a past date show?
+- **Blocked:** Nothing.
+- **Ruling:** A past date is a read-only record: planned against done, skipped, or not logged. The plan is the snapshot saved when the session's first item was logged (new `session_start` entry); sessions logged before v1.8 have their plan rebuilt by replaying the log, labelled as rebuilt. Future dates are a labelled preview.
+- **Spec revision:** engine_spec_v1_8.md A.27; ui_spec_v1_0.md §4
+
+## Q18 — dumbbell range in the config
+- **Raised:** 2026-10-09, interface build
+- **Where:** programme_config_v1_3.json `equipment.db_min_kg` 24, `db_max_kg` 40 / engine_spec_v1_8.md §10
+- **Question:** The config and §10 say dumbbells run 24 to 40 kg in 2 kg steps, but Bulgarian split squats were logged at 16 kg per hand. What is the real range?
+- **Blocked:** Nothing. The load steppers use 2 kg steps on dumbbell slots with no range limit until answered.
+- **Ruling:** (athlete) pending
+- **Spec revision:** programme_config_v1_4.json once answered

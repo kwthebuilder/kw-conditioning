@@ -401,6 +401,37 @@ export interface RoundsVector {
   expect_sets_max: number | null;
 }
 
+/** v1.4 `skip` and `amend` vectors: expected derived values after the steps. */
+export interface VectorExpect {
+  tm?: Record<string, number>;
+  next_position?: Record<string, number>;
+  sessions_logged?: Record<string, number>;
+  beta?: Record<string, Record<string, number>>;
+  rdl_load?: number;
+  rdl_sessions?: number;
+  accessory?: Record<string, { load: number; streak_up: number }>;
+  effective_length?: number;
+  effective_dates?: string[];
+}
+
+/** A log object as written in the vectors file; the engine types it (AnyLog). */
+export type VectorLog = Record<string, unknown> & { kind: string; date: string };
+
+export interface SkipVector {
+  name: string;
+  steps: VectorLog[];
+  expect: VectorExpect;
+}
+
+export interface AmendVector {
+  name: string;
+  logs: VectorLog[];
+  before?: VectorExpect;
+  /** Each inner list is one correction's actions. */
+  corrections: Record<string, unknown>[][];
+  expect: VectorExpect;
+}
+
 export interface TestVectors {
   version: string;
   date: IsoDate;
@@ -420,4 +451,8 @@ export interface TestVectors {
   session: SessionVector;
   explosive: ExplosiveVector[];
   rounds: RoundsVector[];
+  /** v1.4 */
+  skip: SkipVector[];
+  /** v1.4 */
+  amend: AmendVector[];
 }

@@ -377,6 +377,89 @@ export interface SessionRefer {
 
 export type SessionResult = Session | SessionRefer;
 
+// ---------------------------------------------------------------------
+// v1.8: skips, session start, tissue check, corrections (A.26 to A.29)
+// ---------------------------------------------------------------------
+
+/** A.26: optional reason on a skip. */
+export type SkipReason = 'time' | 'tissue' | 'equipment' | 'fatigue' | 'other';
+export const SKIP_REASONS: readonly SkipReason[] = ['time', 'tissue', 'equipment', 'fatigue', 'other'];
+
+/** A.26: the item was not done. Moves nothing. `slot` is a config slot id, or "cmj". */
+export interface SkipLog {
+  slot: SlotId;
+  date: IsoDate;
+  reason?: SkipReason;
+  note?: string;
+}
+
+/** A.27: one item of the plan as displayed when the session started. */
+export interface PlanItem {
+  slot: SlotId;
+  name: string;
+  /** 1-based block number in the template. */
+  block: number;
+  superset?: boolean;
+  sets?: number;
+  sets_max?: number;
+  reps?: number;
+  rep_range?: [number, number];
+  secs?: number;
+  per_side?: boolean;
+  /** Displayed load (rounded), or null when the athlete sets it. */
+  load?: number | null;
+  /** Barbell only. */
+  pct?: number;
+  position?: Position;
+  amrap?: boolean;
+  contacts?: number;
+  single_suggested?: boolean;
+}
+
+/** A.27: the session as displayed when its first item was logged. */
+export interface PlanSnapshot {
+  mesocycle: MesocycleId;
+  programme_week: number;
+  day: SessionDay;
+  target_min: number;
+  /** "cmj" when the template asks for the jump test first. */
+  pre: string[];
+  items: PlanItem[];
+}
+
+export interface SessionStartLog {
+  date: IsoDate;
+  day: SessionDay;
+  /** Clock time, from the interface. Read by nothing in the engine. */
+  at?: string;
+  plan: PlanSnapshot;
+}
+
+/** A.29: record only; built in interface release 3. */
+export interface TissueCheckLog {
+  date: IsoDate;
+  for_date?: IsoDate;
+  scores: { patellar?: number; gluteal?: number; shoulder?: number };
+  note?: string;
+}
+
+/** A.28: an original entry's index in state.log, or [correction index, action index] for an inserted entry. */
+export type CorrectionTarget = number | [number, number];
+
+export type CorrectionAction =
+  | { op: 'replace'; target: CorrectionTarget; entry: AnyLog }
+  | { op: 'remove'; target: CorrectionTarget }
+  | { op: 'insert'; entry: AnyLog };
+
+/** A.28: a correction. `date` is the day it is made; `on` is the session date it corrects. */
+export interface CorrectionLog {
+  kind: 'correction';
+  date: IsoDate;
+  on: IsoDate;
+  actions: CorrectionAction[];
+  note?: string;
+}
+
 /** A.23: every change to state comes through update() as one of these. */
 export type AnyLog =
   | ({ kind: 'barbell' } & BarbellLog)
@@ -389,14 +472,20 @@ export type AnyLog =
   | { kind: 'cmj'; date: IsoDate; value: number }
   | { kind: 'depth_jump_height'; date: IsoDate; height_cm: number }
   | { kind: 'tm_override'; date: IsoDate; lift: LiftId; tm: number; note?: string }
-  | { kind: 'session_end'; date: IsoDate; day: SessionDay; minutes?: number; note?: string };
+  | { kind: 'session_end'; date: IsoDate; day: SessionDay; minutes?: number; at?: string; note?: string }
+  | ({ kind: 'skip' } & SkipLog)
+  | ({ kind: 'session_start' } & SessionStartLog)
+  | ({ kind: 'tissue_check' } & TissueCheckLog);
 
-/** What update() appends to state.log. */
+/** Anything that can sit in state.log: an update() log, or a correction (A.28). */
+export type RecordLog = AnyLog | CorrectionLog;
+
+/** What update() and amend() append to state.log. */
 export interface LogEntry {
-  kind: AnyLog['kind'];
+  kind: RecordLog['kind'];
   date: IsoDate;
   summary: string;
-  log: AnyLog;
+  log: RecordLog;
 }
 
 export interface EngineUpdateResult {

@@ -16,7 +16,7 @@ export { daysBetween, mesocycleOn, programmeWeek } from './calendar';
 // Class A
 export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, SEED_FACTOR } from './barbell';
 // Class B
-export { prescribeRdl, updateRdl, rdlRow, WIDE_WINDOW_SESSIONS } from './rdl';
+export { prescribeRdl, updateRdl, rdlRow, rowBand, WIDE_WINDOW_SESSIONS } from './rdl';
 export { prescribeTempo, updateTempo, ruleForClassB } from './tempo';
 // Class C (and the shared streak engine)
 export {
@@ -39,4 +39,9 @@ export { recordCmj, cmjSummary } from './cmj';
 export { overrideLoad, overrideTm } from './overrides';
 // Jump metrics from frame counts (calculator helper; no video handling)
 export { flightTime, jumpHeightCm, rsi, jumpFromFrames, roundHeight, roundRsi, mean, type JumpFrames, type JumpMetrics } from './jump';
+// v1.8: plan snapshot, corrections and replay (A.27, A.28), one-line descriptions
+export { planSnapshot } from './snapshot';
+export { amend, AmendError, effectiveLog, replay, replayMatches, stateBefore, derivedEqual, sameTarget, isLogEntry, type EffectiveItem, type Replay, type ReplayStep, type AmendResult } from './replay';
+export { describeLog, describeAction, slotOfLog, skipReasonText } from './describe';
+export { SKIP_REASONS } from './types';
 export type * from './types';

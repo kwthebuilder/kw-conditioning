@@ -10,6 +10,10 @@
  */
 import type {
   AccessoryState,
+  AmendVector,
+  SkipVector,
+  VectorExpect,
+  VectorLog,
   ExplosiveState,
   AccessoryVector,
   AuditRescaleVector,
@@ -771,6 +775,35 @@ function overrideVector(v: unknown, path: string): OverrideVector {
   };
 }
 
+function vectorLog(v: unknown, path: string): VectorLog {
+  const o = obj(v, path);
+  req(o, 'kind', path, str);
+  req(o, 'date', path, isoDate);
+  return o as VectorLog;
+}
+
+function vectorExpect(v: unknown, path: string): VectorExpect {
+  return obj(v, path) as VectorExpect;
+}
+
+function skipVector(v: unknown, path: string): SkipVector {
+  const o = obj(v, path);
+  return { name: req(o, 'name', path, str), steps: req(o, 'steps', path, listOf(vectorLog)), expect: req(o, 'expect', path, vectorExpect) };
+}
+
+function amendVector(v: unknown, path: string): AmendVector {
+  const o = obj(v, path);
+  const out: AmendVector = {
+    name: req(o, 'name', path, str),
+    logs: req(o, 'logs', path, listOf(vectorLog)),
+    corrections: req(o, 'corrections', path, listOf(listOf((x, p) => obj(x, p)))),
+    expect: req(o, 'expect', path, vectorExpect),
+  };
+  const before = optional(o, 'before', path, vectorExpect);
+  if (before !== undefined) out.before = before;
+  return out;
+}
+
 export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors {
   const o = obj(input, path);
   return {
@@ -839,6 +872,8 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
         };
       }),
     ),
+    skip: req(o, 'skip', path, listOf(skipVector)),
+    amend: req(o, 'amend', path, listOf(amendVector)),
     session: req(o, 'session', path, (x, p) => {
       const sv = obj(x, p);
       return {

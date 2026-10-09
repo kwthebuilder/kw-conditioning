@@ -256,7 +256,7 @@ function commit(log: AnyLog): void {
 }
 
 // ---------------------------------------------------------------------
-// GitHub backup (engine_spec_v1_7.md §12)
+// GitHub backup (engine_spec_v1_8.md §12)
 // ---------------------------------------------------------------------
 
 const deps = browserDeps();

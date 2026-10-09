@@ -34,6 +34,20 @@ export function rdlRow(table: RdlTableRow[], reps: number, sessionsLogged: numbe
   return null;
 }
 
+/**
+ * A.30: the band a row covers, among the rows live for this session:
+ * "under 6", "6 to 7", "10 or more".
+ */
+export function rowBand(table: RdlTableRow[], row: RdlTableRow, sessionsLogged: number): string {
+  const wide = sessionsLogged < WIDE_WINDOW_SESSIONS;
+  const live = table.filter((r) => !isWindowRow(r) || wide).map((r) => r[0]);
+  const higher = live.filter((t) => t > row[0]);
+  if (higher.length === 0) return `${row[0]} or more`;
+  const next = Math.min(...higher);
+  if (row[0] === 0) return `under ${next}`;
+  return next - 1 === row[0] ? `${row[0]}` : `${row[0]} to ${next - 1}`;
+}
+
 export function prescribeRdl(state: State, config: ProgrammeConfig): RdlPrescription {
   const { slot, rep_range, rir_cap } = rdlSlot(config);
   const wide = state.rdl.sessions_logged < WIDE_WINDOW_SESSIONS;
@@ -72,7 +86,8 @@ export function updateRdl(state: State, config: ProgrammeConfig, log: RdlLog): R
   const row = rdlRow(table, reps, next.rdl.sessions_logged);
   let delta = row ? row[1] : 0;
   let withheld: 'freeze' | undefined;
-  const rowText = row ? `${reps} reps is ${row[0]} or more${row.length === 3 ? ` (${row[2]})` : ''}: ${delta >= 0 ? '+' : ''}${delta} kg.` : `${reps} reps matches no row: hold.`;
+  const deltaText = delta === 0 ? 'hold' : `${delta > 0 ? '+' : '−'}${Math.abs(delta)} kg`;
+  const rowText = row ? `${reps} reps is ${rowBand(table, row, next.rdl.sessions_logged)}${row.length === 3 ? ` (${row[2]})` : ''}: ${deltaText}.` : `${reps} reps matches no row: hold.`;
   if (frozen && delta > 0) {
     withheld = 'freeze';
     steps.push(explainStep('freeze', `Session ${sessionNumber}. ${rowText} Week ${week} is past week ${config.freeze.no_upward_steps_after_week}: upward step withheld.`, { reps, delta, week }));

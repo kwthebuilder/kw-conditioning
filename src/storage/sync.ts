@@ -1,6 +1,6 @@
 /**
  * Automatic backup to the athlete's own private GitHub repo
- * (engine_spec_v1_7.md §12). The only network call the app makes after
+ * (engine_spec_v1_8.md §12). The only network call the app makes after
  * load. Two files are written on every backup:
  *
  *   latest.md             the newest export; "Restore from GitHub" reads it

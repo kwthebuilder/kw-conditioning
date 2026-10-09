@@ -1,7 +1,9 @@
-# Engine Specification v1.7
+# Engine Specification v1.8
 
-**Version 1.7 | 27 September 2026 | Supersedes `engine_spec_v1_6.md`**
-**Status:** approved by the athlete 27 Sep 2026; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_3.json`, `programme_config_v1_3.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`.
+**Version 1.8 | 9 October 2026 | Supersedes `engine_spec_v1_7.md`**
+**Status:** approved by the athlete 9 Oct 2026; this is the build specification. Companions, which win over prose on any numeric conflict: `engine_test_vectors_v1_4.json`, `programme_config_v1_3.json`, `initial_state_v1_1.json`. Golden session: `training_log_2026_w01_w02_r4.md`. The interface is governed by `ui_spec_v1_0.md`.
+
+**v1.8 change note: the record, skips and corrections.** No change to any progression rule, threshold or number. Found in the 8 October audit of the app against the athlete's log: the app could not show what was done on a past date, had no way to record "not done" except by typing numbers (a 0-rep entry on 29 Sep cut the Romanian deadlift by 5 kg), and no way to fix a logged entry. Six rulings, Appendix A items 26 to 31; SPEC_QUESTIONS Q13 to Q18. (1) A skip is a log entry that moves nothing, and a skipped or unlogged session neither counts towards nor breaks a "two in a row" streak (A.26, Q13). (2) The first item logged in a session records a snapshot of the plan as shown, so a past session can be shown as planned against done; older sessions are reconstructed by replay (A.27, Q17). (3) Logged entries are never edited in place. A correction is its own entry, and every derived number is rebuilt by replaying the corrected log through `update` from the initial state, with the consequences shown before saving (A.28, Q14). (4) A record-only tissue check-in is defined now and built in interface release 3 (A.29, Q15). (5) The Romanian deadlift explanation names the band the reps fall in (A.30). (6) A log carries the session's date, not the clock's (A.31).
 
 **v1.7 change note: automatic backup to GitHub.** No change to any progression rule. §12 now allows one network destination: the athlete's own private GitHub repo, written through the GitHub contents API with a fine-grained token the athlete pastes on the phone. Reason: the app is already the programme giver and device storage can be lost without warning (§12 Import), so relying on a manual export after every session left the log one forgotten tap from loss. Rules are in §12 Backup. SPEC_QUESTIONS Q12.
 
@@ -24,6 +26,10 @@
 | Export after every session; exact import | |
 | Explosive slot loads: jump shrug, landmine clean and push press, explosive DB push press (A.24) | |
 | Contrast round ranges (A.25) | |
+| Skip with a reason on every item (A.26) | |
+| Record of past sessions: plan snapshot, or reconstruction by replay (A.27) | |
+| Corrections by replay, previewed before saving (A.28) | |
+| Tissue check-in, record only, interface release 3 (A.29) | |
 
 Classes D, E and F are fixed prescriptions read from the config and logged as done / not done with an optional number, except the three explosive slots in A.24.
 
@@ -191,7 +197,7 @@ Barbell to nearest 2.5 kg, ties down. Dumbbells to the rack (2 kg steps, 24 to 4
 
 ## 11. Inputs
 
-Unchanged from v1 §1, plus: "missed a set" toggle on the primary lift; trap-bar jump height (optional); ladder result on ladder days; tissue flag asks site and score only when answered yes.
+Unchanged from v1 §1, plus: "missed a set" toggle on the primary lift; trap-bar jump height (optional); ladder result on ladder days; tissue flag asks site and score only when answered yes. v1.8: every item can be skipped with an optional reason (A.26); reps in reserve has no default value and must be chosen on every rated set, because a pre-filled rating cannot be told apart from a real one and the barbell engine depends on the rating (§2.0, L4).
 
 ---
 
@@ -203,6 +209,7 @@ Built in Claude Code under `app_build_plan_v1.md`. Constraints only; framework a
 - **Config:** `programme_config_v1_3.json`, bundled and replaceable by import. A template change is a config version issued by the project, never a code change.
 - **State:** schema-versioned; starts from `initial_state_v1_1.json`; per lift TM, β₂ β₃, next position, negative-step streak, single-scheduled flag; per accessory load and streaks; ladder height; CMJ series and baseline; per-site flare state; pending pre-cuts; full session log.
 - **Export:** one tap → `training_log_YYYY_wNN.md`, human-readable, with the full state as a fenced JSON block at the foot. Prompted automatically at the end of every session.
+- **Export, v1.8:** the human-readable log lists every entry as logged, marks entries a correction replaced or removed, and lists each correction with what it changed. The JSON block holds the raw log including corrections, so an import restores exactly.
 - **Import:** paste or open that file to rebuild state exactly. The exported log is the record of truth; device storage is a convenience and must be assumed losable.
 - **Backup (v1.7):** optional, off until the athlete saves a token.
   - Destination: one private GitHub repo named by the athlete (default `kwthebuilder/kw-conditioning-logs`). A public repo is refused, because the log holds health data. Training data never goes into the app's own repo, which is public.
@@ -211,7 +218,7 @@ Built in Claude Code under `app_build_plan_v1.md`. Constraints only; framework a
   - Offline: a change is marked unsent at once; the backup retries on app open, when signal returns, and when the app comes back to the foreground. The engine never waits on the network.
   - Restore: reads `latest.md` and goes through the same import as a file, so it restores exactly or refuses without touching state.
   - The manual export stays, as a second copy and for the project chat.
-- **Tests:** `engine_test_vectors_v1_3.json` is the acceptance contract. Human-readable summary:
+- **Tests:** `engine_test_vectors_v1_4.json` is the acceptance contract. It carries every v1.3 block unchanged plus `skip` and `amend`. Human-readable summary:
 
 | Case | Input | Output |
 |---|---|---|
@@ -269,3 +276,15 @@ Evidenced direction (grades as cited): L3 class bases, L4 premises, L8 judging t
     - **Explosive DB:** no `increment_kg`, so the engine never steps. The athlete changes it by logging a different dumbbell, normally at a mesocycle boundary (§5: no load step inside a mesocycle).
     - Loads are stored as logged and displayed as stored: jump shrug in kg on the bar, landmine in kg on the sleeve, DB in kg per hand.
 25. **Round ranges.** When a template block carries `rounds`, every item in it without its own `sets` is prescribed `sets` = the low end and, for a range, `sets_max` = the high end. That includes the primary lift in M2 band mode, which no longer defaults to 3. The athlete chooses within the range; the engine reads only the last set, so the choice changes no rule.
+
+26. **Skip (v1.8).** Log `{ kind: "skip", date, slot, reason?, note? }`. `reason` is one of `time`, `tissue`, `equipment`, `fatigue`, `other`. `slot` is any config slot id, or `cmj`. `update` appends the entry and changes nothing else: no training max, scale factor, load, streak, wave position, `last_logged` or `sessions_logged`. A skipped primary lift is not a completed session (A.7), so the wave position does not advance and the same position is prescribed next time. On every slot that progresses by streak (classes B and C, and the explosive slots in A.24), "two consecutive sessions" means two consecutive *logged* sessions of that slot: a skipped or unlogged session neither counts nor resets the streak (Q13). This is the behaviour the app already had for unlogged sessions; v1.8 states it and extends it to skips. A legacy `fixed` entry with `done: false` reads as a skip with no reason.
+27. **Session start and plan snapshot (v1.8).** When the first item of a session is logged, the app first logs `{ kind: "session_start", date, day, at?, plan }`. `at` is the clock time, supplied by the interface; `plan` is the session exactly as displayed at that moment: for each slot in order, the displayed load, sets (and `sets_max`), reps or rep range, seconds, per side, percentage of training max, wave position, rep-out flag, contacts, and whether a single was suggested. It changes no state. A past session is shown from its snapshot. A session logged before v1.8 has none, so its plan is reconstructed: replay the log (A.28) up to the first entry dated that day and call `prescribe` for that date and day. A reconstructed plan is labelled as such, because it is computed under the current rules. `session_end` gains an optional `at`, and `minutes` when the start time is known.
+28. **Corrections (v1.8).** A logged entry is never edited or deleted in place; `state.log` only grows. A correction is one entry `{ kind: "correction", date, on, actions, note? }`: `date` is the day the correction is made, `on` is the session date it corrects, and `actions` is a list of `replace(target, entry)`, `remove(target)` and `insert(entry)`. A target is the index in `state.log` of an original entry, or the pair (index of a correction, index of its action) for an entry a correction inserted.
+    - **Corrected log.** Walk `state.log` in order. An original entry takes its place. A correction applies its actions in order: `replace` swaps the target's content and keeps its place; `remove` drops it; `insert` places the new entry immediately before the first entry dated later than it, or at the end. A later correction of the same target wins.
+    - **Rebuild.** Every derived value (training maxes, scale factors, wave pointers, streaks, loads, overrides, CMJ series, drop-jump height) is the result of passing the corrected log through `update`, one entry at a time, from `initial_state_v1_1.json`. Each entry keeps the position, prescription and load it was logged with; only derived values are recomputed. The wave pointer still advances one step per completed session (A.7), so inserting or removing a primary-lift session shifts the pointer for every later session, and the preview says so.
+    - **One door.** Corrections go through `amend(base, state, correction, config)`, which appends the correction entry and rebuilds the state by replay. `update` refuses a correction. `amend` refuses, without touching state, if replaying the current log from the initial state does not reproduce the current state exactly (for example, after a rule change between versions), or if a target does not exist.
+    - **Preview.** Before a correction is saved, the interface shows what it changes, in plain language: training maxes, next loads and wave positions, streaks and loads on every slot that moves. Nothing is saved until the athlete confirms.
+    - Any date can be corrected, with no time limit (Q14). Every correction stays in the log and in the export.
+29. **Tissue check-in (v1.8; built in interface release 3).** Log `{ kind: "tissue_check", date, for_date?, scores: { patellar?, gluteal?, shoulder? }, note? }`, scores 0 to 10. Record only: no rule reads it (scope cut v1.4 stands). When any score is above 3 the interface shows the athlete's live flare protocol text from the project context transfer, unchanged (Q15).
+30. **Romanian deadlift explanation (v1.8).** The explanation names the band the last-set reps fall in, from the table rows: "0 reps is under 6: −5 kg", "7 reps is 6 to 7: hold", "10 reps is 10 or more: +5 kg". Wording only; the table and its thresholds are unchanged.
+31. **Dates (v1.8).** The date on every log entry is the session's date, not the clock's. A session started before midnight keeps its date until it ends (interface spec §9). A correction may carry entries for any earlier date. The engine still never reads a clock; `at` and `minutes` are supplied by the interface and read by nothing in the engine.

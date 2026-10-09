@@ -1,7 +1,7 @@
 /**
  * engine_spec_v1_6.md A.24 (explosive carry-load slots) and A.25 (round
  * ranges), driven from the explosive and rounds blocks of
- * engine_test_vectors_v1_3.json.
+ * engine_test_vectors_v1_4.json.
  */
 import { describe, expect, it } from 'vitest';
 import { INITIAL_STATE, PROGRAMME_CONFIG, TEST_VECTORS } from '../src/config/load';

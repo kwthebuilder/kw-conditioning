@@ -5,7 +5,9 @@
 import { CONFIG_VERSION, VECTORS_VERSION } from '../config/load';
 import type { LiftId, OverrideRecord, ProgrammeConfig, State } from '../config/types';
 import { programmeWeek } from '../engine/calendar';
-import type { AnyLog, LogEntry } from '../engine/types';
+import { describeLog } from '../engine/describe';
+import { effectiveLog } from '../engine/replay';
+import type { LogEntry } from '../engine/types';
 import { APP_VERSION, SPEC_NAME } from '../version';
 
 export interface ExportFile {
@@ -22,43 +24,15 @@ function overrideRow(o: OverrideRecord): string {
   return `| ${o.kind === 'tm' ? 'training max' : 'load'} | ${o.date} | ${target} | ${f1(o.from)} | ${f1(o.to)} | ${o.note ?? ''} |`;
 }
 
-/** A set as "load × reps @ RIR n", with prescribed and performed when the load was overridden. */
-function setText(load: number, reps: number, rir: number, override?: { from: number }): string {
-  const set = `${f1(load)} × ${reps} @ RIR ${rir}`;
-  return override ? `${set} (prescribed ${f1(override.from)}, performed ${f1(load)})` : set;
-}
-
-function logLine(log: AnyLog, config: ProgrammeConfig): string {
-  const name = (id: string) => config.slots[id]?.name ?? id;
-  switch (log.kind) {
-    case 'barbell': {
-      const parts: string[] = [];
-      if (log.single) parts.push(`single ${f1(log.single.load)} @ RIR ${log.single.rir}`);
-      const where = log.position !== undefined ? `position ${log.position}` : log.mode;
-      parts.push(`${where}, last set ${setText(log.last_set.load, log.last_set.reps, log.last_set.rir, log.override)}`);
-      if (log.missed) parts.push('a set was missed');
-      return `${name(log.lift)}: ${parts.join('; ')}`;
-    }
-    case 'single':
-      return `${name(log.lift)}: single ${f1(log.load)} @ RIR ${log.rir}`;
-    case 'single_skipped':
-      return `${name(log.lift)}: suggested single skipped`;
-    case 'rdl':
-    case 'slot':
-      return `${name(log.slot)}: ${log.sets_done} sets, last set ${setText(log.load, log.last_set.reps, log.last_set.rir, log.override)}${log.last_set.tempo_break ? ', tempo broke' : ''}`;
-    case 'fixed':
-      return `${name(log.slot)}: ${log.done ? 'done' : 'not done'}${log.value !== undefined ? ` (${log.value})` : ''}${log.note ? `, ${log.note}` : ''}`;
-    case 'explosive':
-      return `${name(log.slot)}: ${log.sets_done} sets at ${f1(log.load)} kg${log.cut ? ', stop rule cut a set' : ', no cut'}`;
-    case 'cmj':
-      return `CMJ ${log.value} cm`;
-    case 'depth_jump_height':
-      return `depth-jump height ${log.height_cm} cm`;
-    case 'tm_override':
-      return `${name(log.lift)}: training max set to ${f1(log.tm)}${log.note ? ` (${log.note})` : ''}`;
-    case 'session_end':
-      return `Day ${log.day} ended${log.minutes !== undefined ? `, ${log.minutes} min` : ''}${log.note ? `: ${log.note}` : ''}`;
+/** Raw index → " (corrected 2026-10-09)" or " (removed 2026-10-09)" for original entries a correction touched. */
+function correctionMarks(log: readonly unknown[]): Map<number, string> {
+  const marks = new Map<number, string>();
+  for (const item of effectiveLog(log)) {
+    if (typeof item.origin !== 'number') continue;
+    if (item.removed) marks.set(item.origin, ` (removed ${item.removed.date})`);
+    else if (item.corrections.length) marks.set(item.origin, ` (corrected ${item.corrections[item.corrections.length - 1]!.date})`);
   }
+  return marks;
 }
 
 function isLogEntry(e: unknown): e is LogEntry {
@@ -97,9 +71,31 @@ export function exportMarkdown(state: State, config: ProgrammeConfig, date: stri
   lines.push('## Log');
   lines.push('');
   if (state.log.length === 0) lines.push('Empty.');
-  for (const e of state.log) {
-    if (isLogEntry(e)) lines.push(`- ${e.date} ${logLine(e.log, config)}`);
-    else lines.push(`- ${JSON.stringify(e)}`);
+  // v1.8: every entry as logged; entries a correction replaced or removed are marked (A.28).
+  let marks = new Map<number, string>();
+  try {
+    marks = correctionMarks(state.log);
+  } catch {
+    /* an unreadable correction leaves the entries unmarked; the JSON below is still exact */
+  }
+  const corrections: string[] = [];
+  state.log.forEach((e, i) => {
+    if (!isLogEntry(e)) {
+      lines.push(`- ${JSON.stringify(e)}`);
+      return;
+    }
+    if (e.log.kind === 'correction') {
+      corrections.push(`- ${e.date} ${e.summary}`);
+      return;
+    }
+    if (e.log.kind === 'session_start') return;
+    lines.push(`- ${e.date} ${describeLog(e.log, config)}${marks.get(i) ?? ''}`);
+  });
+  if (corrections.length) {
+    lines.push('');
+    lines.push('## Corrections');
+    lines.push('');
+    lines.push(...corrections);
   }
   lines.push('');
   lines.push('## State');

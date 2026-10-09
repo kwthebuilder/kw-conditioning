@@ -1,5 +1,5 @@
 /**
- * Browser glue for the GitHub backup (engine_spec_v1_7.md §12).
+ * Browser glue for the GitHub backup (engine_spec_v1_8.md §12).
  *
  * The token and repo name live in their own storage key, outside the
  * engine state, so they never appear in an export or in the backup
