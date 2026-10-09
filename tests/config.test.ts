@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import configJson from '../spec/programme_config_v1_3.json';
+import configJson from '../spec/programme_config_v1_4.json';
+import configV13 from '../spec/programme_config_v1_3.json';
 import stateJson from '../spec/initial_state_v1_1.json';
 import vectorsJson from '../spec/engine_test_vectors_v1_4.json';
 import {
@@ -13,7 +14,8 @@ import {
 import { ConfigError, parseProgrammeConfig, parseState, parseTestVectors } from '../src/config/validate';
 
 const files: Record<string, unknown> = {
-  'programme_config_v1_3.json': configJson,
+  'programme_config_v1_4.json': configJson,
+  'programme_config_v1_3.json': configV13,
   'initial_state_v1_1.json': stateJson,
   'engine_test_vectors_v1_4.json': vectorsJson,
 };
@@ -21,16 +23,16 @@ const raw = (name: string): unknown => files[name];
 
 describe('spec loader', () => {
   it('loads and validates all three files', () => {
-    expect(PROGRAMME_CONFIG.version).toBe('1.3');
+    expect(PROGRAMME_CONFIG.version).toBe('1.4');
     expect(TEST_VECTORS.version).toBe('1.4');
     expect(INITIAL_STATE.schema).toBe(1);
-    expect(CONFIG_VERSION).toBe('1.3');
+    expect(CONFIG_VERSION).toBe('1.4');
     expect(VECTORS_VERSION).toBe('1.4');
     expect(STATE_SCHEMA).toBe(1);
   });
 
   it('returns values structurally identical to the files (nothing dropped or coerced)', () => {
-    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_3.json'));
+    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_4.json'));
     expect(INITIAL_STATE).toEqual(raw('initial_state_v1_1.json'));
     expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_4.json'));
   });
@@ -47,9 +49,26 @@ describe('spec loader', () => {
   });
 });
 
+describe('config v1.4 (SPEC_QUESTIONS Q18)', () => {
+  it('records the dumbbell rack as 2 to 40 kg in 2 kg steps', () => {
+    expect(PROGRAMME_CONFIG.equipment).toMatchObject({ db_min_kg: 2, db_max_kg: 40, db_step_kg: 2 });
+  });
+
+  it('changes nothing else: no dose, rep, rest or slot differs from v1.3', () => {
+    const strip = (c: unknown): Record<string, unknown> => {
+      const o = structuredClone(c) as Record<string, unknown> & { equipment: Record<string, unknown> };
+      delete o.version;
+      delete o.date;
+      delete o.equipment.db_min_kg;
+      return o;
+    };
+    expect(strip(raw('programme_config_v1_4.json'))).toEqual(strip(raw('programme_config_v1_3.json')));
+  });
+});
+
 describe('validators reject malformed input with a JSON path', () => {
   const state = (): Record<string, unknown> => structuredClone(raw('initial_state_v1_1.json')) as Record<string, unknown>;
-  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_3.json')) as Record<string, unknown>;
+  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_4.json')) as Record<string, unknown>;
   const vectors = (): Record<string, unknown> => structuredClone(raw('engine_test_vectors_v1_4.json')) as Record<string, unknown>;
 
   it('rejects a non-object', () => {

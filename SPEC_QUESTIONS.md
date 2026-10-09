@@ -153,8 +153,8 @@ Format:
 - **Where:** programme_config_v1_3.json `equipment.db_min_kg` 24, `db_max_kg` 40 / engine_spec_v1_8.md §10
 - **Question:** The config and §10 say dumbbells run 24 to 40 kg in 2 kg steps, but Bulgarian split squats were logged at 16 kg per hand. What is the real range?
 - **Blocked:** Nothing. The load steppers use 2 kg steps on dumbbell slots with no range limit until answered.
-- **Ruling:** (athlete) pending
-- **Spec revision:** programme_config_v1_4.json once answered
+- **Ruling:** Athlete 9 Oct 2026: the rack runs 2 to 40 kg in 2 kg steps. Config v1.4 changes `db_min_kg` from 24 to 2 and nothing else (a test proves every other value matches v1.3). The engine never reads the range, so no load, rule or replayed state changes. Read engine_spec_v1_8.md §10 "24 to 40" and ui_spec_v1_1.md §8.1 and §17.1 as answered by this ruling until their next revisions. Steppers keep 2 kg steps and impose no limit, because every prescribed number stays editable. Test vectors v1.4 still name config v1.3 for the golden sessions; they reproduce identically under v1.4.
+- **Spec revision:** programme_config_v1_4.json
 
 ## Q19 — tissue check-in in release 2
 - **Raised:** 2026-10-09, review before Block 2
