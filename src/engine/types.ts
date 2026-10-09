@@ -413,6 +413,12 @@ export interface PlanItem {
   position?: Position;
   amrap?: boolean;
   contacts?: number;
+  /** Template variant, e.g. "stuck landing". */
+  variant?: string;
+  /** Class E landings range from the slot, e.g. [4, 6]. */
+  landings?: [number, number];
+  /** Done inside the rest of the block's main pair. */
+  inside_rest?: boolean;
   single_suggested?: boolean;
 }
 

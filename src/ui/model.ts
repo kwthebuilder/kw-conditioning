@@ -295,7 +295,12 @@ export function plannedText(item: PlanItem): string {
   else if (sets && item.rep_range) parts.push(`${sets} × ${item.rep_range[0]}–${item.rep_range[1]}`);
   else if (sets && item.secs !== undefined) parts.push(`${sets} × ${item.secs} s${side}`);
   else if (sets) parts.push(`${sets} sets`);
+  else if (item.reps !== undefined) parts.push(`${item.reps} reps${side}`);
+  else if (item.secs !== undefined) parts.push(`${item.secs} s${side}`);
   if (item.contacts !== undefined) parts.push(`${item.contacts} jumps`);
+  if (item.landings) parts.push(`${item.landings[0]}–${item.landings[1]} landings`);
+  if (item.variant) parts.push(item.variant);
+  if (item.inside_rest) parts.push('inside the rests');
   return parts.join(' · ') || 'As planned';
 }
 
@@ -499,7 +504,7 @@ export function planFor(history: History, base: State, state: State, config: Pro
   const before = stateBefore(base, state.log, config, date);
   const s = prescribe(before, config, date, day);
   if (s.kind !== 'session') return { source: 'none' };
-  return { plan: planSnapshot(s), source: 'rebuilt' };
+  return { plan: planSnapshot(s, config), source: 'rebuilt' };
 }
 
 export function recordFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, dayHint?: SessionDay): RecordView {

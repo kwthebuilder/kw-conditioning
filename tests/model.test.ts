@@ -48,7 +48,7 @@ describe('record of a past date (ui_spec §4.2, Q17)', () => {
     expect(outcomeLine(row.step!, cfg)).toBe('Light week: max unchanged at 93.0 kg.');
     // The next Day 1 is a medium week; never shown under 5 Oct.
     const next = prescribe(state, cfg, '2026-10-12', 1) as Session;
-    const p = planSnapshot(next).items.find((i) => i.slot === 'front_squat')!;
+    const p = planSnapshot(next, cfg).items.find((i) => i.slot === 'front_squat')!;
     expect(p).toMatchObject({ position: 2, reps: 3 });
   });
 
@@ -98,7 +98,7 @@ describe('day and live date (ui_spec §9)', () => {
     expect(dayFor(h.byDate.get('2026-09-28')!, '2026-09-28', cfg)).toBe(1);
   });
   it('an open session started before midnight keeps its date for 6 hours', () => {
-    const plan = planSnapshot(prescribe(INITIAL_STATE, cfg, '2026-09-21', 1) as Session);
+    const plan = planSnapshot(prescribe(INITIAL_STATE, cfg, '2026-09-21', 1) as Session, cfg);
     const s = apply([{ kind: 'session_start', date: '2026-09-21', day: 1, at: '2026-09-21T23:30:00+08:00', plan }, { kind: 'cmj', date: '2026-09-21', value: 40 }]);
     const h = buildHistory(INITIAL_STATE, s, cfg);
     expect(liveDate('2026-09-22', Date.parse('2026-09-22T00:40:00+08:00'), h)).toBe('2026-09-21');

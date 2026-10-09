@@ -147,7 +147,7 @@ function logLive(logs: AnyLog[], label: string): void {
     if (!steps.some((x) => x.item.log.kind === 'session_start')) {
       const sess = prescribe(s, cfg, app.live, liveDay());
       if (sess.kind === 'session') {
-        s = update(s, { kind: 'session_start', date: app.live, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess) }, cfg).state;
+        s = update(s, { kind: 'session_start', date: app.live, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess, cfg) }, cfg).state;
         rememberDay(app.live, sess.day);
       }
     }

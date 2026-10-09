@@ -157,6 +157,9 @@ interface Spec {
   secs?: number;
   per_side?: boolean;
   contacts?: number;
+  variant?: string;
+  landings?: [number, number];
+  inside_rest?: boolean;
   // barbell
   mode?: BarbellMode;
   position?: Position;
@@ -187,6 +190,10 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
   const base: Spec = { slot: item.slot, type: 'fixed', date, load: null };
   if (t.per_side) base.per_side = true;
   if (t.secs !== undefined) base.secs = t.secs;
+  if (t.variant !== undefined) base.variant = t.variant;
+  if (t.inside_rest) base.inside_rest = true;
+  const landings = config.slots[item.slot]?.landings;
+  if (landings) base.landings = [landings[0], landings[1]];
   switch (p.kind) {
     case 'refer':
       return { ...base, type: 'barbell', refer: p.reason };
@@ -206,6 +213,7 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
       return { ...base, type: 'rdl', load: p.load, sets: t.sets ?? 3, rep_range: [p.rep_range[0], p.rep_range[1]], rirCap: p.rir_cap, tempo: true };
     case 'slot': {
       const s: Spec = { ...base, type: 'slot', load: p.load, sets: t.sets ?? 3, reps: p.reps, rirCap: p.rir_cap, tempo: p.cls === 'B' };
+      if (t.sets_max !== undefined) s.sets_max = t.sets_max;
       if (p.start_hint_kg !== undefined) s.hint = p.start_hint_kg;
       if (p.pending) {
         s.pending = p.pending;
@@ -224,6 +232,7 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
     case 'fixed': {
       const s: Spec = { ...base, type: 'fixed' };
       if (p.load_kg !== undefined) s.load = p.load_kg;
+      if (t.secs !== undefined) s.secs = t.secs;
       if (t.sets !== undefined) s.sets = t.sets;
       if (t.sets_max !== undefined) s.sets_max = t.sets_max;
       if (t.reps !== undefined) s.reps = t.reps;
@@ -231,7 +240,6 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
       return s;
     }
   }
-  void config;
   return base;
 }
 
@@ -244,6 +252,9 @@ function specFromPlan(item: PlanItem, date: IsoDate, config: ProgrammeConfig): S
   if (item.secs !== undefined) s.secs = item.secs;
   if (item.per_side) s.per_side = true;
   if (item.contacts !== undefined) s.contacts = item.contacts;
+  if (item.variant !== undefined) s.variant = item.variant;
+  if (item.landings) s.landings = item.landings;
+  if (item.inside_rest) s.inside_rest = true;
   if (item.slot === 'cmj') return { ...s, type: 'cmj' };
   if (LIFT_IDS.has(item.slot)) {
     const mode = mesocycleOn(config, date)?.barbell_mode ?? 'wave';
@@ -310,10 +321,16 @@ function rxLine(spec: Spec): HTMLElement {
   if (spec.load !== null && spec.slot === 'pull_up' && spec.load === 0) rx.append(h('span', { class: 'big' }, 'Bodyweight'));
   else if (spec.load !== null) rx.append(h('span', { class: 'big' }, kg(spec.load)), h('span', { class: 'unit' }, PER_HAND.has(spec.slot) ? 'kg per hand' : 'kg'));
   const side = spec.per_side ? ' each side' : '';
-  if (spec.sets !== undefined && spec.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.sets_max !== undefined ? `${spec.sets}–${spec.sets_max}` : spec.sets} × ${spec.reps}${side}`));
-  else if (spec.sets !== undefined && spec.rep_range) rx.append(h('span', { class: 'sets' }, `${spec.sets} × ${spec.rep_range[0]}–${spec.rep_range[1]}`));
+  const setsN = spec.sets !== undefined ? (spec.sets_max !== undefined ? `${spec.sets}–${spec.sets_max}` : `${spec.sets}`) : '';
+  if (spec.sets !== undefined && spec.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${setsN} × ${spec.reps}${side}`));
+  else if (spec.sets !== undefined && spec.rep_range) rx.append(h('span', { class: 'sets' }, `${setsN} × ${spec.rep_range[0]}–${spec.rep_range[1]}`));
   else if (spec.sets !== undefined && spec.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.sets} × ${spec.secs} s${side}`));
   else if (spec.sets !== undefined) rx.append(h('span', { class: 'sets' }, setsText(spec.sets, spec.sets_max)));
+  else if (spec.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.reps} reps${side}`));
+  else if (spec.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.secs} s${side}`));
+  if (spec.landings) rx.append(h('span', { class: 'sets' }, `${spec.landings[0]}–${spec.landings[1]} landings`));
+  if (spec.variant) rx.append(h('span', { class: 'unit' }, spec.variant));
+  if (spec.inside_rest) rx.append(h('span', { class: 'unit' }, 'inside the rests'));
   if (spec.contacts !== undefined) rx.append(h('span', { class: 'sets' }, spec.slot === 'rsi_ladder' ? `${spec.contacts} jumps in total` : `${spec.contacts} jumps`));
   if (spec.load === null && (spec.type === 'slot' || spec.type === 'explosive')) rx.append(h('span', { class: 'unit' }, spec.hint !== undefined ? `pick a load, try ${spec.hint} kg` : 'first time: pick a load'));
   if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
@@ -788,7 +805,7 @@ function liveBody(app: App, ctx: Ctx, s: Session): HTMLElement[] {
 // ---------------------------------------------------------------------
 
 function previewBody(app: App, ctx: Ctx, s: Session): HTMLElement[] {
-  const snap = planSnapshot(s);
+  const snap = planSnapshot(s, ctx.config);
   const byBlock = new Map<number, PlanItem[]>();
   for (const it of snap.items) {
     if (!byBlock.has(it.block)) byBlock.set(it.block, []);
