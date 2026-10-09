@@ -1,7 +1,11 @@
-name: Deploy to GitHub Pages
+name: Test and deploy to GitHub Pages
 
+# Pull requests run the checks only. A push to main (a merge) runs the same
+# checks and, if they pass, deploys the app to the phone.
 on:
   push:
+    branches: [main]
+  pull_request:
     branches: [main]
   workflow_dispatch:
 
@@ -11,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: ${{ github.event_name == 'pull_request' && format('checks-{0}', github.ref) || 'pages' }}
   cancel-in-progress: true
 
 jobs:
@@ -26,14 +30,23 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Phone-screen smoke tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+        env:
+          CI: 'true'
       - uses: actions/configure-pages@v5
+        if: github.event_name != 'pull_request'
         with:
           enablement: true
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: dist
 
   deploy:
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
