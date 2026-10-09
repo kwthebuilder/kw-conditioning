@@ -1,7 +1,7 @@
 /**
  * App bootstrap and actions. The clock lives here and nowhere else.
  * Live logging goes through update(); corrections through amend(),
- * previewed first (engine A.23, A.28; ui_spec_v1_0.md).
+ * previewed first (engine A.23, A.28; ui_spec_v1_1.md).
  */
 import { INITIAL_STATE, PROGRAMME_CONFIG } from '../config/load';
 import type { IsoDate, LiftId, State } from '../config/types';

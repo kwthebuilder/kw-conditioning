@@ -1,5 +1,5 @@
 /**
- * The screens (ui_spec_v1_0.md). Four modes decided by the date: live
+ * The screens (ui_spec_v1_1.md). Four modes decided by the date: live
  * (today's session), record (a past date, read-only), edit (corrections,
  * previewed before saving) and preview (a future date).
  *

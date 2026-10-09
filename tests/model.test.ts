@@ -1,5 +1,5 @@
 /**
- * Interface view model (ui_spec_v1_0.md). Synthetic logs only.
+ * Interface view model (ui_spec_v1_1.md). Synthetic logs only.
  */
 import { describe, expect, it } from 'vitest';
 import { INITIAL_STATE, PROGRAMME_CONFIG as cfg } from '../src/config/load';

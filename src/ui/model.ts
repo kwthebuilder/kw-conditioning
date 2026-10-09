@@ -1,5 +1,5 @@
 /**
- * View model for the interface (ui_spec_v1_0.md). Pure: no DOM, no
+ * View model for the interface (ui_spec_v1_1.md). Pure: no DOM, no
  * clock (the caller passes "now"). Everything the screens say about the
  * past comes from replaying the log (engine A.28), so a corrected entry
  * reads the same everywhere.
@@ -32,7 +32,7 @@ import type {
 } from '../engine';
 
 // ---------------------------------------------------------------------
-// words (ui_spec_v1_0.md §2)
+// words (ui_spec_v1_1.md §2)
 // ---------------------------------------------------------------------
 
 export const POSITION_LABEL: Record<Position, string> = { 1: 'Light week', 2: 'Medium week', 3: 'Heavy week' };
