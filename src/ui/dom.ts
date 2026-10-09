@@ -1,5 +1,5 @@
 /**
- * Tiny DOM helpers and the shared input controls (ui_spec_v1_0.md §5):
+ * Tiny DOM helpers and the shared input controls (ui_spec_v1_1.md §5):
  * plus/minus steppers, a row of choice buttons, and the frame-count calculator.
  */
 import { jumpFromFrames, mean, roundHeight, roundRsi } from '../engine';

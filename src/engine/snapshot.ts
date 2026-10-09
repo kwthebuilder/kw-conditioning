@@ -2,9 +2,10 @@
  * A.27: the plan as displayed, frozen when a session's first item is
  * logged. Pure: built from a prescribe() result.
  */
+import type { ProgrammeConfig } from '../config/types';
 import type { PlanItem, PlanSnapshot, Session } from './types';
 
-export function planSnapshot(session: Session): PlanSnapshot {
+export function planSnapshot(session: Session, config: ProgrammeConfig): PlanSnapshot {
   const items: PlanItem[] = [];
   session.blocks.forEach((b, bi) => {
     for (const it of b.items) {
@@ -15,6 +16,10 @@ export function planSnapshot(session: Session): PlanSnapshot {
       if (b.superset) item.superset = true;
       if (t.per_side) item.per_side = true;
       if (t.secs !== undefined) item.secs = t.secs;
+      if (t.variant !== undefined) item.variant = t.variant;
+      if (t.inside_rest) item.inside_rest = true;
+      const landings = config.slots[it.slot]?.landings;
+      if (landings) item.landings = [landings[0], landings[1]];
       switch (p.kind) {
         case 'lift':
           item.load = p.load;
@@ -32,12 +37,14 @@ export function planSnapshot(session: Session): PlanSnapshot {
         case 'rdl':
           item.load = p.load;
           item.sets = t.sets ?? 3;
+          if (t.sets_max !== undefined) item.sets_max = t.sets_max;
           item.rep_range = [p.rep_range[0], p.rep_range[1]];
           item.amrap = true;
           break;
         case 'slot':
           item.load = p.load;
           item.sets = t.sets ?? 3;
+          if (t.sets_max !== undefined) item.sets_max = t.sets_max;
           item.reps = p.reps;
           item.amrap = true;
           break;

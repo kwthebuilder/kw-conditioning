@@ -120,7 +120,7 @@ describe('amend (A.28)', () => {
 describe('plan snapshot (A.27)', () => {
   it('freezes the displayed plan', () => {
     const day = prescribe(INITIAL_STATE, cfg, '2026-09-21', 1) as Session;
-    const snap = planSnapshot(day);
+    const snap = planSnapshot(day, cfg);
     expect(snap.day).toBe(1);
     expect(snap.pre).toEqual(['cmj']);
     const fs = snap.items.find((i) => i.slot === 'front_squat');

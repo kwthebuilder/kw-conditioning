@@ -1,11 +1,12 @@
 /**
- * View model for the interface (ui_spec_v1_0.md). Pure: no DOM, no
+ * View model for the interface (ui_spec_v1_1.md). Pure: no DOM, no
  * clock (the caller passes "now"). Everything the screens say about the
  * past comes from replaying the log (engine A.28), so a corrected entry
  * reads the same everywhere.
  */
 import type { IsoDate, LiftId, MesocycleId, Position, ProgrammeConfig, State } from '../config/types';
 import {
+  daysBetween,
   derivedEqual,
   mesocycleOn,
   planSnapshot,
@@ -32,7 +33,7 @@ import type {
 } from '../engine';
 
 // ---------------------------------------------------------------------
-// words (ui_spec_v1_0.md §2)
+// words (ui_spec_v1_1.md §2)
 // ---------------------------------------------------------------------
 
 export const POSITION_LABEL: Record<Position, string> = { 1: 'Light week', 2: 'Medium week', 3: 'Heavy week' };
@@ -273,8 +274,11 @@ export function didText(log: AnyLog, config: ProgrammeConfig): string {
       return `Day ${log.day} started`;
     case 'session_end':
       return `Day ${log.day} finished${log.minutes !== undefined ? ` · ${log.minutes} min` : ''}`;
-    case 'tissue_check':
-      return 'Tissue check';
+    case 'tissue_check': {
+      const sc = log.scores;
+      const parts = TISSUE_SITES.filter((t) => sc[t.key] !== undefined).map((t) => `${t.label} ${sc[t.key]}`);
+      return `${parts.join(' · ') || 'No scores'}${log.for_date ? ` (after ${prettyDate(log.for_date)})` : ''}`;
+    }
   }
   return displayName((log as { kind: string }).kind, config);
 }
@@ -295,7 +299,12 @@ export function plannedText(item: PlanItem): string {
   else if (sets && item.rep_range) parts.push(`${sets} × ${item.rep_range[0]}–${item.rep_range[1]}`);
   else if (sets && item.secs !== undefined) parts.push(`${sets} × ${item.secs} s${side}`);
   else if (sets) parts.push(`${sets} sets`);
+  else if (item.reps !== undefined) parts.push(`${item.reps} reps${side}`);
+  else if (item.secs !== undefined) parts.push(`${item.secs} s${side}`);
   if (item.contacts !== undefined) parts.push(`${item.contacts} jumps`);
+  if (item.landings) parts.push(`${item.landings[0]}–${item.landings[1]} landings`);
+  if (item.variant) parts.push(item.variant);
+  if (item.inside_rest) parts.push('inside the rests');
   return parts.join(' · ') || 'As planned';
 }
 
@@ -322,6 +331,7 @@ export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
       switch (b.rule) {
         case 'position1':
           line = `Light week: max unchanged at ${f1(b.tm_after)} kg.`;
+          if (log.last_set.reps > log.prescribed.reps + 2) line += ` ${LIGHT_WEEK_EXTRA}`;
           break;
         case 'failure':
           line = `Short of the prescription: max ${f1(b.tm_before)} → ${f1(b.tm_after)} kg (−2.5%).`;
@@ -398,9 +408,99 @@ export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
     }
     case 'depth_jump_height':
       return `Drop height set to ${log.height_cm} cm.`;
+    case 'tissue_check':
+      return Object.values(log.scores).some((v) => (v ?? 0) > 3) ? 'Above 3/10: the flare protocol applies.' : '';
     default:
       return '';
   }
+}
+
+// ---------------------------------------------------------------------
+// release 2 helpers (ui_spec §14)
+// ---------------------------------------------------------------------
+
+/** §14.7: the extra line on a light week taken well past the prescription. */
+export const LIGHT_WEEK_EXTRA = "Light weeks are for recovery; extra reps here don't count towards your max.";
+
+export const TISSUE_SITES = [
+  { key: 'patellar', label: 'Patellar', site: 'patellar' },
+  { key: 'gluteal', label: 'Gluteal', site: 'gluteal' },
+  { key: 'shoulder', label: 'Left shoulder', site: null },
+] as const;
+export type TissueKey = (typeof TISSUE_SITES)[number]['key'];
+
+/**
+ * §14.9: the athlete's flare protocol, word for word from the programme
+ * context transfer (v8, clinical register item 5). Shown above 3/10.
+ */
+export const FLARE_PROTOCOL =
+  'Pain above 3/10 persisting beyond 24 h: drop plyometrics, cut load 30-50%, reintroduce isotonic at 50-60% of pre-flare and progress ~10% every 3-4 sessions. Above 5/10 or worsening night pain: physio. Never cease; reduce. Return to plyometrics only when isotonic work at pre-flare levels is pain-free, restarting at 50% of pre-flare volume. Monitoring is the 24-48 h response.';
+
+const SESSION_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'cmj', 'single']);
+
+/** The most recent date before `date` with a session item logged. */
+export function lastSessionBefore(history: History, date: IsoDate): IsoDate | undefined {
+  for (const d of history.dates) {
+    if (d >= date) continue;
+    if ((history.byDate.get(d) ?? []).some((s) => SESSION_KINDS.has(s.item.log.kind))) return d;
+  }
+  return undefined;
+}
+
+/** §14.9: the session a check-in is due for today (one or two days after it), if not yet done. */
+export function checkInDue(history: History, today: IsoDate): IsoDate | undefined {
+  const last = lastSessionBefore(history, today);
+  if (!last) return undefined;
+  const gap = daysBetween(last, today);
+  if (gap < 1 || gap > 2) return undefined;
+  const done = history.steps.some((s) => s.item.log.kind === 'tissue_check' && (s.item.log.for_date ?? s.item.log.date) === last);
+  return done ? undefined : last;
+}
+
+/** The latest check-in in the last two days, if any. */
+export function recentCheckIn(history: History, today: IsoDate): { date: IsoDate; scores: Partial<Record<TissueKey, number>> } | undefined {
+  for (let i = history.steps.length - 1; i >= 0; i--) {
+    const l = history.steps[i]!.item.log;
+    if (l.kind !== 'tissue_check') continue;
+    const gap = daysBetween(l.date, today);
+    if (gap < 0 || gap > 2) continue;
+    return { date: l.date, scores: l.scores };
+  }
+  return undefined;
+}
+
+/** "Gluteal 2/10 yesterday" for each site an item loads that scored above 0 recently. */
+export function tissueTags(history: History, today: IsoDate, slot: string, config: ProgrammeConfig): string[] {
+  const c = recentCheckIn(history, today);
+  if (!c) return [];
+  const sites = config.slots[slot]?.sites ?? [];
+  const when = c.date === today ? 'today' : daysBetween(c.date, today) === 1 ? 'yesterday' : prettyDate(c.date);
+  const out: string[] = [];
+  for (const t of TISSUE_SITES) {
+    if (t.site === null || !(sites as readonly string[]).includes(t.site)) continue;
+    const v = c.scores[t.key];
+    if (v !== undefined && v > 0) out.push(`${t.label} ${v}/10 ${when}`);
+  }
+  return out;
+}
+
+/** Whole minutes from an ISO timestamp to now, or undefined. */
+export function minutesSince(at: string | undefined, nowMs: number): number | undefined {
+  if (!at) return undefined;
+  const t = Date.parse(at);
+  if (!Number.isFinite(t)) return undefined;
+  const m = Math.round((nowMs - t) / 60_000);
+  return m > 0 && m < 600 ? m : undefined;
+}
+
+/** "1:05", "12:30", "1:02:03". */
+export function clockText(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  const ss = String(sec).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
 }
 
 // ---------------------------------------------------------------------
@@ -499,7 +599,7 @@ export function planFor(history: History, base: State, state: State, config: Pro
   const before = stateBefore(base, state.log, config, date);
   const s = prescribe(before, config, date, day);
   if (s.kind !== 'session') return { source: 'none' };
-  return { plan: planSnapshot(s), source: 'rebuilt' };
+  return { plan: planSnapshot(s, config), source: 'rebuilt' };
 }
 
 export function recordFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, dayHint?: SessionDay): RecordView {

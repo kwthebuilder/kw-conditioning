@@ -1,9 +1,9 @@
 # CLAUDE.md — Acro Base S&C training app
 
-Version 1.5 | 9 October 2026
+Version 1.6 | 9 October 2026
 
 ## What this is
-A phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The engine computes every load from the athlete's logged sets. The interface is governed by `spec/ui_spec_v1_0.md`: plain, fast, legible with one hand in a gym, and honest about time (a past date is a record, today is live, a future date is a preview).
+A phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The engine computes every load from the athlete's logged sets. The interface is governed by `spec/ui_spec_v1_1.md`: plain, fast, legible with one hand in a gym, and honest about time (a past date is a record, today is live, a future date is a preview).
 
 ## Non-negotiables
 1. `/spec` is read-only. It holds the engine spec, test vectors, programme config, initial state and the golden log. Never edit these files and never change what a rule means.
@@ -13,11 +13,11 @@ A phone-first, offline web app that prescribes and logs a two-day-a-week strengt
 5. State holds unrounded floats. Rounding happens only when a load is displayed (nearest 2.5 kg, ties down).
 6. No backend, accounts or analytics. The only network call after load is the optional backup to the athlete's own private GitHub repo (`spec/engine_spec_v1_8.md` §12 Backup). No training data in this repo, ever: it is public.
 7. Device storage is losable. Prompt an export at the end of every session. Import must restore state exactly or refuse without touching state.
-8. Bugs: write the failing test first.
+8. Bugs: write the failing test first. Interface changes come with a phone-screen smoke test in `e2e/` (synthetic data only); `npm run e2e` runs them, and every pull request runs them.
 9. Work one phase at a time. Start each phase in plan mode; end it by running the full test suite and reporting: test output, open spec questions, decisions taken.
 
 ## Scope
-This is a straightforward programme giver. Build only what `spec/engine_spec_v1_8.md` lists as in the app, with the screens and words in `spec/ui_spec_v1_0.md`. No flags, flare logic, time cuts, gap rules or auto-progression for jumps and prehab, except the explosive carry-load slots in A.24. Every prescribed number is editable by the athlete.
+This is a straightforward programme giver. Build only what `spec/engine_spec_v1_8.md` lists as in the app, with the screens and words in `spec/ui_spec_v1_1.md`. No flags, flare logic, time cuts, gap rules or auto-progression for jumps and prehab, except the explosive carry-load slots in A.24. Every prescribed number is editable by the athlete.
 
 ## Yours to choose
 Framework, styling, storage mechanism, hosting, file layout, component design. Prefer fewer dependencies.

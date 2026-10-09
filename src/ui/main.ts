@@ -1,19 +1,36 @@
 /**
  * App bootstrap and actions. The clock lives here and nowhere else.
  * Live logging goes through update(); corrections through amend(),
- * previewed first (engine A.23, A.28; ui_spec_v1_0.md).
+ * previewed first (engine A.23, A.28; ui_spec_v1_1.md).
  */
 import { INITIAL_STATE, PROGRAMME_CONFIG } from '../config/load';
 import type { IsoDate, LiftId, State } from '../config/types';
-import { amend, AmendError, defaultDay, planSnapshot, prescribe, sameTarget, stateBefore, update } from '../engine';
-import type { AnyLog, CorrectionAction, CorrectionLog, SessionDay, SessionResult } from '../engine';
+import { amend, AmendError, defaultDay, planSnapshot, prescribe, roundLoad, sameTarget, stateBefore, update } from '../engine';
+import type { AnyLog, BarbellOutcome, CorrectionAction, CorrectionLog, ReplayStep, SessionDay, SessionResult } from '../engine';
 import { exportMarkdown, importMarkdown, localStorageStore, memoryStore, type Store } from '../storage';
 import { checkRepo, pullLatest, pushExport, SyncError, type SyncSettings } from '../storage/sync';
 import { browserDeps, lastBackup, loadSettings, pending, saveSettings, whenText } from './backup';
 import { APP_VERSION } from '../version';
 import { readTextFile, shareOrDownload } from './io';
-import { buildHistory, dayFor, didText, displayName, liveDate, prettyDate, recordFor, stateDiff, type History } from './model';
-import { renderApp, type App, type Ctx, type Mode } from './view';
+import {
+  addDays,
+  buildHistory,
+  checkInDue,
+  clockText,
+  dayFor,
+  didText,
+  displayName,
+  kg,
+  liveDate,
+  minutesSince,
+  nextFor,
+  outcomeLine,
+  prettyDate,
+  recordFor,
+  stateDiff,
+  type History,
+} from './model';
+import { renderApp, type App, type Ctx, type FinishView, type Mode } from './view';
 
 const cfg = PROGRAMME_CONFIG;
 const BASE = INITIAL_STATE;
@@ -34,6 +51,30 @@ function pickStore(): Store {
 }
 
 const store = pickStore();
+
+// ---------------------------------------------------------------------
+// set ticks (ui_spec §14.2), kept on the phone for a few days; not engine state
+// ---------------------------------------------------------------------
+
+const TICKS_KEY = 'acro-base-sc/ticks';
+function loadTicks(): Map<string, boolean[]> {
+  try {
+    const raw = window.localStorage.getItem(TICKS_KEY);
+    if (!raw) return new Map();
+    const cutoff = addDays(isoToday(), -3);
+    const o = JSON.parse(raw) as Record<string, boolean[]>;
+    return new Map(Object.entries(o).filter(([k]) => k.slice(0, 10) >= cutoff));
+  } catch {
+    return new Map();
+  }
+}
+function saveTicks(m: Map<string, boolean[]>): void {
+  try {
+    window.localStorage.setItem(TICKS_KEY, JSON.stringify(Object.fromEntries(m)));
+  } catch {
+    /* preference only */
+  }
+}
 const root = document.getElementById('app');
 if (!root) throw new Error('#app missing');
 
@@ -44,6 +85,10 @@ const app: App = {
   live: today0,
   today: today0,
   editing: null,
+  ticks: loadTicks(),
+  focus: null,
+  setsAsk: null,
+  tissueOpen: false,
   open: new Set(),
   forms: new Map(),
   skipOpen: null,
@@ -147,7 +192,7 @@ function logLive(logs: AnyLog[], label: string): void {
     if (!steps.some((x) => x.item.log.kind === 'session_start')) {
       const sess = prescribe(s, cfg, app.live, liveDay());
       if (sess.kind === 'session') {
-        s = update(s, { kind: 'session_start', date: app.live, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess) }, cfg).state;
+        s = update(s, { kind: 'session_start', date: app.live, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess, cfg) }, cfg).state;
         rememberDay(app.live, sess.day);
       }
     }
@@ -159,6 +204,8 @@ function logLive(logs: AnyLog[], label: string): void {
   }
   app.skipOpen = null;
   app.zeroAsk = null;
+  app.setsAsk = null;
+  app.focus = null;
   setState(s);
   render();
   showToast(`Logged: ${label}`, () => {
@@ -246,11 +293,77 @@ function render(): void {
     const hint = app.editing?.date === app.date ? app.editing.day : undefined;
     record = recordFor(h, BASE, app.state, cfg, app.date, hint);
   }
+  const tissueDue = mode === 'live' && app.live === app.today ? checkInDue(h, app.today) : undefined;
   const ctx: Ctx = {
     config: cfg,
     base: BASE,
     history: h,
     mode,
+    ...(app.sheet?.kind === 'finish' ? { finishView: finishView(h, session) } : {}),
+    ...(tissueDue && !tissueDismissed(tissueDue) ? { tissueDue } : {}),
+    tissueProtocol: mode === 'live' && app.live === app.today && (h.byDate.get(app.today) ?? []).some((st) => st.item.log.kind === 'tissue_check' && Object.values(st.item.log.scores).some((v) => (v ?? 0) > 3)),
+    finishNow,
+    skipRest: (slots) => {
+      let s = app.state;
+      try {
+        for (const slot of slots) s = update(s, { kind: 'skip', slot, date: app.live }, cfg).state;
+      } catch (e) {
+        app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
+        render();
+        return;
+      }
+      setState(s);
+      finishNow();
+    },
+    backToSession: (slot) => {
+      app.sheet = null;
+      const sess = prescribe(app.state, cfg, app.live, liveDay());
+      if (sess.kind === 'session') {
+        const i = sess.blocks.findIndex((b) => b.items.some((it) => it.kind === 'slot' && it.slot === slot));
+        app.focus = slot === 'cmj' ? { date: app.live, block: 0 } : i >= 0 ? { date: app.live, block: i + 1 } : null;
+      }
+      render();
+      document.querySelector('.card.focus')?.scrollIntoView({ block: 'start' });
+    },
+    tick: (key, index, on, label, slot) => {
+      const t = [...(app.ticks.get(key) ?? [])];
+      t[index] = on;
+      for (let i = 0; i < t.length; i++) t[i] = t[i] ?? false;
+      app.ticks.set(key, t);
+      saveTicks(app.ticks);
+      if (on) startRest(label, slot);
+    },
+    focusBlock: (block) => {
+      app.focus = { date: app.date, block };
+      render();
+      document.querySelector('.card.focus')?.scrollIntoView({ block: 'start' });
+    },
+    previewLift,
+    saveTissue: (forDate, scores) => {
+      const prev = app.state;
+      try {
+        setState(update(app.state, { kind: 'tissue_check', date: app.today, for_date: forDate, scores }, cfg).state);
+      } catch (e) {
+        app.banner = `Not saved: ${e instanceof Error ? e.message : String(e)}`;
+        render();
+        return;
+      }
+      app.tissueOpen = false;
+      render();
+      showToast('Check-in saved', () => {
+        setState(prev);
+        render();
+        showToast('Undone');
+      });
+    },
+    dismissTissue: (forDate) => {
+      try {
+        window.localStorage.setItem(`acro-base-sc/tissue-dismissed/${forDate}`, '1');
+      } catch {
+        /* preference only */
+      }
+      render();
+    },
     ...(session ? { session } : {}),
     ...(record ? { record } : {}),
     rerender: render,
@@ -338,24 +451,8 @@ function render(): void {
       }
     },
     finish: () => {
-      const steps = history().byDate.get(app.live) ?? [];
-      const day = liveDay() ?? (session?.kind === 'session' ? session.day : 1);
-      const finished = steps.some((s) => s.item.log.kind === 'session_end' && s.item.log.day === day);
-      if (!finished) {
-        const start = [...steps].reverse().find((s) => s.item.log.kind === 'session_start');
-        const at = new Date();
-        let minutes: number | undefined;
-        if (start && start.item.log.kind === 'session_start' && start.item.log.at) {
-          const m = Math.round((at.getTime() - Date.parse(start.item.log.at)) / 60_000);
-          if (m > 0 && m < 600) minutes = m;
-        }
-        try {
-          setState(update(app.state, { kind: 'session_end', date: app.live, day, at: at.toISOString(), ...(minutes !== undefined ? { minutes } : {}) }, cfg).state);
-        } catch (e) {
-          app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
-        }
-      }
-      app.showExport = true;
+      document.querySelector('.toast')?.remove();
+      app.sheet = { kind: 'finish' };
       render();
     },
     openExport: () => {
@@ -480,6 +577,220 @@ function render(): void {
   };
   root!.replaceChildren(renderApp(app, ctx, APP_VERSION));
   refreshBackupStatus();
+  drawRestBar();
+  void syncWakeLock();
+}
+
+// ---------------------------------------------------------------------
+// live preview, finish summary (ui_spec §14.3, §14.6)
+// ---------------------------------------------------------------------
+
+/** What logging this barbell set would do, computed by the engine without saving. */
+function previewLift(log: AnyLog): string {
+  try {
+    const r = update(app.state, log, cfg);
+    const o = r.outcome as BarbellOutcome | null;
+    if (!o) return '';
+    const step = { item: { origin: -1, log, corrections: [] }, entry: r.state.log[r.state.log.length - 1], explanation: r.explanation, outcome: o } as unknown as ReplayStep;
+    let line = `If you log this: ${outcomeLine(step, cfg)}`;
+    if (log.kind === 'barbell' && log.mode === 'wave' && o.rule !== 'position1') {
+      line += ` Next heavy week ${kg(roundLoad(o.tm_after * cfg.wave.positions['3'].pct, cfg.equipment.barbell_round_kg))} kg.`;
+    }
+    return line;
+  } catch (e) {
+    return `Can't preview: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+function sessionSteps(): ReturnType<History['byDate']['get']> {
+  return history().byDate.get(app.live) ?? [];
+}
+
+function sessionOpen(): boolean {
+  const steps = sessionSteps() ?? [];
+  return steps.some((s) => s.item.log.kind === 'session_start') && !steps.some((s) => s.item.log.kind === 'session_end');
+}
+
+/** The date a lift is likely next done, for which block its next load comes from. */
+function nextDateFor(lift: 'front_squat' | 'deadlift', day: SessionDay | undefined): string {
+  const own = lift === 'front_squat' ? 1 : 2;
+  if (day === undefined) return addDays(app.live, 1);
+  if (day === own) return addDays(app.live, 7);
+  return addDays(app.live, own === 2 ? 3 : 4);
+}
+
+function finishView(h: History, session: SessionResult | undefined): FinishView {
+  const steps = h.byDate.get(app.live) ?? [];
+  const day = liveDay() ?? (session?.kind === 'session' ? session.day : undefined);
+  const end = [...steps].reverse().find((s) => s.item.log.kind === 'session_end');
+  const finished = end !== undefined;
+  const rec = recordFor(h, BASE, app.state, cfg, app.live, day);
+  const unlogged = rec.rows.filter((r) => r.status === 'not_logged').map((r) => ({ slot: r.item.slot, name: displayName(r.item.slot, cfg) }));
+  const start = steps.find((s) => s.item.log.kind === 'session_start');
+  let minutes: number | undefined;
+  if (end && end.item.log.kind === 'session_end') minutes = end.item.log.minutes;
+  else if (start && start.item.log.kind === 'session_start') minutes = minutesSince(start.item.log.at, Date.now());
+  let moved: string[] = [];
+  try {
+    moved = stateDiff(stateBefore(BASE, app.state.log, cfg, app.live), app.state, cfg, app.live).filter((l) => !l.includes('next session'));
+  } catch {
+    moved = [];
+  }
+  const next = (['front_squat', 'deadlift'] as const).map((lift) => `${displayName(lift, cfg)}: ${nextFor(app.state, lift, cfg, nextDateFor(lift, day))}`);
+  const v: FinishView = { unlogged, finished, moved, next, backupOk: app.backup.settings !== null && backupError === null };
+  if (minutes !== undefined) v.minutes = minutes;
+  return v;
+}
+
+function finishNow(): void {
+  const steps = sessionSteps() ?? [];
+  const day = liveDay() ?? 1;
+  if (!steps.some((s) => s.item.log.kind === 'session_end')) {
+    const start = steps.find((s) => s.item.log.kind === 'session_start');
+    const at = new Date();
+    const minutes = start && start.item.log.kind === 'session_start' ? minutesSince(start.item.log.at, at.getTime()) : undefined;
+    try {
+      setState(update(app.state, { kind: 'session_end', date: app.live, day, at: at.toISOString(), ...(minutes !== undefined ? { minutes } : {}) }, cfg).state);
+    } catch (e) {
+      app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  rest = null;
+  document.querySelector('.toast')?.remove();
+  app.sheet = { kind: 'finish' };
+  render();
+}
+
+function tissueDismissed(forDate: string): boolean {
+  try {
+    return window.localStorage.getItem(`acro-base-sc/tissue-dismissed/${forDate}`) === '1';
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------
+// rest timer, session clock, screen awake (ui_spec §14.5)
+// ---------------------------------------------------------------------
+
+let rest: { since: number; label: string; slot: string; buzzed: boolean } | null = null;
+const REST_TARGETS = [0, 90, 120, 180];
+
+function restTarget(slot: string): number {
+  try {
+    return Number(window.localStorage.getItem(`acro-base-sc/rest/${slot}`) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+function setRestTarget(slot: string, secs: number): void {
+  try {
+    if (secs) window.localStorage.setItem(`acro-base-sc/rest/${slot}`, String(secs));
+    else window.localStorage.removeItem(`acro-base-sc/rest/${slot}`);
+  } catch {
+    /* preference only */
+  }
+}
+
+function startRest(label: string, slot: string): void {
+  rest = { since: Date.now(), label, slot, buzzed: false };
+  drawRestBar();
+}
+
+const restBar = document.createElement('div');
+restBar.className = 'restbar';
+restBar.hidden = true;
+document.body.append(restBar);
+
+/** Builds the bar when what it shows changes; tickRestBar() updates the times each second. */
+function drawRestBar(): void {
+  const live = currentMode() === 'live' && !app.showExport;
+  const open = live && sessionOpen();
+  const showRest = live && rest !== null && Date.now() - rest.since < 20 * 60_000;
+  restBar.hidden = !open && !showRest;
+  restBar.replaceChildren();
+  if (restBar.hidden) return;
+  const line = document.createElement('div');
+  line.className = 'restline';
+  if (open) {
+    const clock = document.createElement('span');
+    clock.className = 'session-clock';
+    line.append(clock);
+  }
+  if (showRest && rest) {
+    const r = document.createElement('span');
+    r.className = 'rest-clock';
+    line.append(r);
+  }
+  if (showRest && rest) {
+    // One button cycles the athlete's target for this exercise: none, 1:30, 2:00, 3:00.
+    const cur = restTarget(rest.slot);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'rest-target';
+    b.textContent = cur ? `Target ${clockText(cur * 1000)}` : 'Set target';
+    b.setAttribute('aria-label', `Rest target for ${rest.label}: ${cur ? clockText(cur * 1000) : 'none'}. Tap to change.`);
+    b.addEventListener('click', () => {
+      if (!rest) return;
+      const i = REST_TARGETS.indexOf(restTarget(rest.slot));
+      setRestTarget(rest.slot, REST_TARGETS[(i + 1) % REST_TARGETS.length]!);
+      rest.buzzed = false;
+      drawRestBar();
+    });
+    line.append(b);
+  }
+  restBar.append(line);
+  tickRestBar();
+}
+
+function tickRestBar(): void {
+  if (restBar.hidden) return;
+  const now = Date.now();
+  const clock = restBar.querySelector('.session-clock');
+  if (clock) {
+    const start = (sessionSteps() ?? []).find((s) => s.item.log.kind === 'session_start');
+    const at = start && start.item.log.kind === 'session_start' && start.item.log.at ? Date.parse(start.item.log.at) : NaN;
+    clock.textContent = Number.isFinite(at) ? `Session ${clockText(now - at)}` : '';
+  }
+  const rc = restBar.querySelector('.rest-clock');
+  if (rc && rest) {
+    const el = now - rest.since;
+    const target = restTarget(rest.slot);
+    rc.textContent = `Rest ${clockText(el)}${target ? ` of ${clockText(target * 1000)}` : ''} · ${rest.label}`;
+    const due = target > 0 && el >= target * 1000;
+    restBar.classList.toggle('due', due);
+    if (due && !rest.buzzed) {
+      rest.buzzed = true;
+      try {
+        navigator.vibrate?.([200, 100, 200]);
+      } catch {
+        /* not supported */
+      }
+    }
+  } else restBar.classList.remove('due');
+}
+setInterval(tickRestBar, 1000);
+
+type WakeLockSentinelLike = { release: () => Promise<void>; addEventListener: (t: 'release', f: () => void) => void };
+let wakeLock: WakeLockSentinelLike | null = null;
+async function syncWakeLock(): Promise<void> {
+  const want = currentMode() === 'live' && sessionOpen() && document.visibilityState === 'visible';
+  const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> } }).wakeLock;
+  if (!wl) return;
+  try {
+    if (want && !wakeLock) {
+      wakeLock = await wl.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    } else if (!want && wakeLock) {
+      const w = wakeLock;
+      wakeLock = null;
+      await w.release();
+    }
+  } catch {
+    /* the browser said no; the session runs as normal */
+  }
 }
 
 /** A whole new state from a file or the backup: reset everything on screen. */
@@ -602,6 +913,7 @@ window.addEventListener('online', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   refreshClock();
+  void syncWakeLock();
   if (pending.get()) void runBackup();
 });
 window.addEventListener('focus', refreshClock);

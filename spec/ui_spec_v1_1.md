@@ -1,6 +1,14 @@
-# Interface Specification v1.0
+# Interface Specification v1.1
 
-**Version 1.0 | 9 October 2026 | New.** Governs the app's screens, words and inputs. The rules that compute numbers stay in `engine_spec_v1_8.md`; where this document needs a new kind of log entry, that spec defines it (Appendix A items 26 to 31). Approved by the athlete on 9 October 2026 with four rulings: a skipped session neither counts towards nor breaks a "two in a row" streak; any date can be corrected, with every correction kept visible; the tissue check-in is record only, showing the flare protocol above 3/10; the light week carries a one-line note that never blocks logging.
+**Version 1.1 | 9 October 2026 | Supersedes v1.0 (same day).** Governs the app's screens, words and inputs. The rules that compute numbers stay in `engine_spec_v1_8.md`; where this document needs a new kind of log entry, that spec defines it (Appendix A items 26 to 31). Approved by the athlete on 9 October 2026 with four rulings: a skipped session neither counts towards nor breaks a "two in a row" streak; any date can be corrected, with every correction kept visible; the tissue check-in is record only, showing the flare protocol above 3/10; the light week carries a one-line note that never blocks logging.
+
+**v1.1 change note (athlete-approved 9 Oct 2026).** Release 1 shipped on 9 Oct. Release 2 is refined before it is built, and one item moves into it. No change to the programme itself: doses, rest periods and progression stay with the programme documents.
+1. The tissue check-in moves from release 3 into release 2 (§14.9). Block 2, from 9 November, is the season's biggest step up in jumping and fast lifting, and the programme judges tendon work on the 24 to 48 hour response; nothing has been recorded since week 1. Q19.
+2. The rest timer counts up from the tick. The programme sets no rest periods, so the app does not invent one: the athlete may set a target per exercise on the phone, and the phone vibrates at it (§14.5). Q20.
+3. An unticked earlier set asks, never counts silently as "fell short", because "fell short" cuts the training max 2.5% (§14.2). Q21.
+4. The finish summary keeps a "Save a copy" button, because the build rules require an export prompt at the end of every session; the full save-a-copy panel opens by itself only when the automatic backup is off or failing (§14.6).
+5. Focus is by block, so a superset or contrast pair opens together (§14.1). Contrast rounds are a grid of ticks (§14.8).
+6. Release 1 fix: items given as reps without sets (skater bound, 6 per side, stuck landing) and drop landings (4 to 6) lost their dose on screen; restored, with a phone-screen test (§13.14).
 
 **Why this exists.** The 8 October audit found the numbers right and the screen misleading. Every date showed the *next* prescription under that date's label, so Monday's 3 × 4 front squat became 3 × 3 on Thursday, past dates looked like blank forms, and there was no way to record "not done" or to fix a mistake. A 0-rep entry typed to mean "skipped" cut the Romanian deadlift by 5 kg. This document fixes that first and then makes the app fast to use with one hand between sets.
 
@@ -159,21 +167,43 @@ Each is checked on a phone-width browser with a log built to match the shape of 
 11. Typed values in one item survive logging another item.
 12. Export, then import, restores exactly, including corrections. The export lists corrections in plain words.
 13. The full test suite passes, including every vector in `engine_test_vectors_v1_4.json`.
+14. (v1.1) A future Block 2 date shows the skater bound as "6 reps each side · stuck landing" and drop landings as "4–6 landings". The phone-screen smoke tests in `e2e/` run on every pull request.
 
 ## 14. Release 2: built for the gym floor
 
-1. **One item in focus.** The current item is expanded. Done items are one line, and the rest of the session is a short "Up next" list. Tapping any item focuses it.
-2. **Set ticking.** Each set is a tickable row (warm-up sets in one row). Ticking starts the rest timer. Only the last set needs numbers. An unticked earlier set replaces the "An earlier set fell short" checkbox.
-3. **Live preview while entering.** Before reps are entered, the item shows the aim ("About 7 reps keeps your max where it is"). As reps and reps left are set, it shows the training max change and the next heavy-week load, computed by the engine without saving.
-4. **Last time, like for like.** Barbell lifts show the last session of the same week type ("Last medium week: 77.5 × 9, 2 left"); other items show the last logged session.
+1. **One block in focus.** The first block with anything not yet logged is open. A superset or contrast block opens as a whole, because its items alternate. Blocks already done collapse to one line per item, with Change. Later blocks are a short "Up next" list showing each item's plan. Tapping any block opens it.
+2. **Set ticking.**
+   - Each set is a tickable row, with the warm-up sets in one row. Ticking a set starts the rest timer.
+   - Only the last set needs numbers: load, reps and reps left.
+   - Earlier sets are assumed done as prescribed only when ticked. If any earlier set is unticked when the last set is logged, the app asks: "Set 2 isn't ticked. Was every earlier set done as prescribed?" with **All done** and **One fell short**. It never records "fell short" on its own, because that cuts the training max 2.5% (engine §2.6).
+   - The "An earlier set fell short" checkbox is replaced by that question.
+3. **Live preview while entering.** Before reps are entered, a primary lift shows the aim ("About 7 reps keeps your max where it is"). As reps and reps left are set, it shows what logging would do: "Max 96.9 → 98.1 kg · next heavy week 87.5 kg". The engine computes it without saving.
+4. **Last time, like for like.** Shipped in release 1.
 5. **Rest timer and session clock.**
-   - The timer starts on a tick and vibrates at the end where the phone allows it.
-   - The screen stays awake during a session where the browser allows it.
-   - The clock runs from session start and is recorded at Finish.
+   - The timer counts up from the last tick and shows on the open block and at the foot of the screen.
+   - The programme sets no rest periods, so there is no default target. The athlete may pick one per exercise (1:30, 2:00, 3:00 or none), remembered on the phone; at the target the phone vibrates where the browser allows it.
+   - The session clock runs from the session's start and is recorded at Finish.
+   - The screen stays awake while a session is open, where the browser allows it.
    - A web app cannot show a lock-screen timer or reliable background alerts without a server; out of scope.
-6. **Finish summary.** What moved (training maxes, steps earned, "1 of 2 towards 28 kg"), what's next, and the backup status. The save-a-copy panel appears instead only when the automatic backup is off or failing.
-7. **Light-week note.** The light-week card says "3 × 4 and stop. Light weeks don't change your max." Logging more than 2 reps above the prescription adds one line: "Light weeks are for recovery; extra reps here don't count towards your max." It never blocks logging.
-8. **Contrast rounds (Block 2, from 9 November).** A contrast block runs as rounds: "Round 2 of 4: heavy set, then jump". Each round is one tick per item, and the round range (3 to 4) is chosen by finishing or stopping.
+6. **Finish summary.** Finish opens a summary instead of the save-a-copy panel:
+   - session length;
+   - anything planned but not logged, with **Log them** (back to the session) and **Skip the rest** (one skip each, no reason);
+   - what moved, in plain words, compared with the start of the session (training maxes, loads, streaks);
+   - what's next (each lift's next session and load);
+   - the backup status, and a **Save a copy** button.
+   The full save-a-copy panel opens by itself only when the automatic backup is off or failing.
+7. **Light-week note.** The light-week card says "3 × 4 and stop. Light weeks don't change your max." (shipped in release 1). Logging more than 2 reps above the prescription on a light week adds one line to the outcome: "Light weeks are for recovery; extra reps here don't count towards your max." It never blocks logging.
+8. **Contrast rounds (Block 2, from 9 November).**
+   - A contrast block shows a grid: one row per round up to the top of the range ("Round 3 of 3–4"), one tick per item in the block.
+   - Ticking an item in a round starts the rest timer.
+   - Below the grid, each item logs once at the end: the heavy lift's last set (reps and reps left), the jump as done, and any item done inside the rests with its own last set.
+   - The heavy lift's logged sets are the rounds ticked for it, so stopping at 3 or going to 4 is recorded as done.
+9. **Tissue check-in (moved from release 3; engine A.29).**
+   - On the first or second day after a session, the live screen opens with a card: "How do they feel today? For Tue 6 Oct's session."
+   - **All clear** logs 0 for patellar, gluteal and left shoulder in one tap. **Something's sore** opens the three, each 0 to 10, and **Save**.
+   - It is recorded only; no rule reads it.
+   - Any score above 3 shows the athlete's flare protocol, word for word from the programme context transfer (v8, clinical register item 5).
+   - For two days after a check-in, any site above 0 is shown as a tag on the items that load it, from the programme's site list ("Gluteal 2/10 yesterday"). The shoulder has no site list in the programme, so it shows on the card only.
 
 ## 15. Release 3: the season, visible
 
@@ -189,10 +219,7 @@ Each is checked on a phone-width browser with a log built to match the shape of 
    - A shaded band about one rep either side (about 2.5% at these loads), so a single session's noise isn't read as change.
    - Accessory loads over time.
    - Jump test readings with their running average.
-4. **Tissue check-in** (engine A.29).
-   - The morning after each session, a one-tap card asks patellar, gluteal and shoulder from 0 to 10.
-   - It is recorded only and shown beside the exercises that load each site.
-   - Above 3/10 it shows the athlete's flare protocol text, unchanged.
+4. **Tissue check-in history.** The check-ins from release 2 shown over time beside the training they followed.
 5. **Adherence, not overreach.** Prehab items done per week. No streak counters or celebrations on rep-outs.
 
 ## 16. Out of scope
