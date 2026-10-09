@@ -1,5 +1,5 @@
 /**
- * Backup to GitHub (engine_spec_v1_7.md §12), against an in-memory fake
+ * Backup to GitHub (engine_spec_v1_8.md §12), against an in-memory fake
  * of the GitHub contents API. No network.
  */
 import { describe, expect, it } from 'vitest';

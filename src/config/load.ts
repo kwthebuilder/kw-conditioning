@@ -7,7 +7,7 @@
  */
 import configJson from '../../spec/programme_config_v1_3.json';
 import stateJson from '../../spec/initial_state_v1_1.json';
-import vectorsJson from '../../spec/engine_test_vectors_v1_3.json';
+import vectorsJson from '../../spec/engine_test_vectors_v1_4.json';
 import { crossCheck, parseProgrammeConfig, parseState, parseTestVectors } from './validate';
 import type { ProgrammeConfig, State, TestVectors } from './types';
 

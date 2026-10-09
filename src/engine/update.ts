@@ -10,6 +10,7 @@ import type { ProgrammeConfig, State } from '../config/types';
 import { updateAccessory } from './accessory';
 import { updateLift, updateSingle } from './barbell';
 import { cmjSummary, recordCmj } from './cmj';
+import { describeLog, skipReasonText } from './describe';
 import { explainStep } from './explain';
 import { updateExplosive } from './explosive';
 import { overrideTm } from './overrides';
@@ -87,6 +88,27 @@ export function update(state: State, log: AnyLog, config: ProgrammeConfig): Engi
     case 'session_end': {
       r = plain(structuredClone(state), `Day ${log.day} session ended${log.minutes !== undefined ? ` after ${log.minutes} min` : ''}${log.note ? `: ${log.note}` : ''}. Export now.`);
       break;
+    }
+    case 'skip': {
+      // A.26: a skip moves nothing.
+      const name = log.slot === 'cmj' ? 'CMJ' : (config.slots[log.slot]?.name ?? log.slot);
+      r = plain(structuredClone(state), `${name}: skipped${log.reason ? ` (${skipReasonText(log.reason)})` : ''}. Nothing moves.`);
+      break;
+    }
+    case 'session_start': {
+      // A.27: the plan snapshot is a record; no state changes.
+      r = plain(structuredClone(state), `Day ${log.day} started: ${log.plan.items.length} items planned.`);
+      break;
+    }
+    case 'tissue_check': {
+      // A.29: record only.
+      r = plain(structuredClone(state), `${describeLog(log, config)}.`);
+      break;
+    }
+    default: {
+      const kind = (log as { kind?: unknown }).kind;
+      if (kind === 'correction') throw new Error('corrections go through amend(), not update() (A.28)');
+      throw new Error(`unknown log kind ${String(kind)}`);
     }
   }
   const entry: LogEntry = { kind: log.kind, date: log.date, summary: r.explanation.summary, log };
