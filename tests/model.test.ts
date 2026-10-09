@@ -45,7 +45,8 @@ describe('record of a past date (ui_spec §4.2, Q17)', () => {
     expect(plannedText(row.item)).toBe('Light week · 75 kg · 3 × 4');
     expect(row.status).toBe('done');
     expect(didText(row.step!.item.log, cfg)).toBe('80 kg · last set 7, 1 left');
-    expect(outcomeLine(row.step!, cfg)).toBe('Light week: max unchanged at 93.0 kg.');
+    // 7 reps against 4 prescribed: more than 2 over, so the light-week line is added (ui_spec §14.7).
+    expect(outcomeLine(row.step!, cfg)).toBe("Light week: max unchanged at 93.0 kg. Light weeks are for recovery; extra reps here don't count towards your max.");
     // The next Day 1 is a medium week; never shown under 5 Oct.
     const next = prescribe(state, cfg, '2026-10-12', 1) as Session;
     const p = planSnapshot(next, cfg).items.find((i) => i.slot === 'front_squat')!;
@@ -110,5 +111,33 @@ describe('day and live date (ui_spec §9)', () => {
     const h = buildHistory(INITIAL_STATE, apply(LOGS), cfg);
     const last = lastLogged(h, 'front_squat', '2026-10-12', 2);
     expect(last?.item.log.date).toBe('2026-09-21');
+  });
+});
+
+describe('release 2 helpers (ui_spec §14)', () => {
+  it('a check-in is due one or two days after a session, once', async () => {
+    const { checkInDue } = await import('../src/ui/model');
+    const s = apply([fs('2026-09-21', 2, 77.5, 8, 2, 3)]);
+    const h = buildHistory(INITIAL_STATE, s, cfg);
+    expect(checkInDue(h, '2026-09-21')).toBeUndefined();
+    expect(checkInDue(h, '2026-09-22')).toBe('2026-09-21');
+    expect(checkInDue(h, '2026-09-23')).toBe('2026-09-21');
+    expect(checkInDue(h, '2026-09-24')).toBeUndefined();
+    const done = apply([{ kind: 'tissue_check', date: '2026-09-22', for_date: '2026-09-21', scores: { patellar: 0, gluteal: 2, shoulder: 0 } }], s);
+    const h2 = buildHistory(INITIAL_STATE, done, cfg);
+    expect(checkInDue(h2, '2026-09-22')).toBeUndefined();
+  });
+  it('tags the items that load a sore site', async () => {
+    const { tissueTags } = await import('../src/ui/model');
+    const s = apply([fs('2026-09-21', 2, 77.5, 8, 2, 3), { kind: 'tissue_check', date: '2026-09-22', for_date: '2026-09-21', scores: { patellar: 0, gluteal: 2, shoulder: 4 } }]);
+    const h = buildHistory(INITIAL_STATE, s, cfg);
+    expect(tissueTags(h, '2026-09-23', 'rdl', cfg)).toEqual(['Gluteal 2/10 yesterday']);
+    expect(tissueTags(h, '2026-09-23', 'pull_up', cfg)).toEqual([]);
+    expect(tissueTags(h, '2026-09-26', 'rdl', cfg)).toEqual([]);
+  });
+  it('clock text', async () => {
+    const { clockText } = await import('../src/ui/model');
+    expect(clockText(65_000)).toBe('1:05');
+    expect(clockText(3_723_000)).toBe('1:02:03');
   });
 });

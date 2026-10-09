@@ -42,6 +42,8 @@ import {
   prettyDate,
   recordFor,
   SKIP_LABEL,
+  FLARE_PROTOCOL,
+  tissueTags,
   type History,
   type RecordRow,
   type RecordView,
@@ -64,6 +66,12 @@ export interface FormValues {
   sets?: number | null;
   cut?: boolean;
   single?: number | null;
+  /** §14.2: the athlete answered the earlier-sets question. */
+  setsConfirmed?: boolean;
+  /** §14.9 */
+  patellar?: number | null;
+  gluteal?: number | null;
+  shoulder?: number | null;
 }
 
 /** One pending change in edit mode, per item. */
@@ -76,7 +84,19 @@ export interface Draft {
 
 export type Sheet =
   | { kind: 'preview'; changes: string[]; effects: string[]; error?: string }
-  | { kind: 'tm'; lift: LiftId };
+  | { kind: 'tm'; lift: LiftId }
+  | { kind: 'finish' };
+
+/** §14.6: what the finish sheet shows. */
+export interface FinishView {
+  /** Planned items not logged yet. */
+  unlogged: { slot: string; name: string }[];
+  finished: boolean;
+  minutes?: number;
+  moved: string[];
+  next: string[];
+  backupOk: boolean;
+}
 
 export interface App {
   state: State;
@@ -89,6 +109,14 @@ export interface App {
   /** The phone's local date. */
   today: IsoDate;
   editing: { date: IsoDate; day?: SessionDay; drafts: Draft[] } | null;
+  /** §14.2, §14.8: set ticks by key ("date|slot", or "date|bN" for a contrast grid, flattened round by round). */
+  ticks: Map<string, boolean[]>;
+  /** §14.1: the block the athlete opened on the live date. */
+  focus: { date: IsoDate; block: number } | null;
+  /** Item key asking whether every earlier set was done. */
+  setsAsk: string | null;
+  /** §14.9: the check-in card is showing the three sites. */
+  tissueOpen: boolean;
   /** Keys of expanded explanations and open forms. */
   open: Set<string>;
   forms: Map<string, FormValues>;
@@ -129,6 +157,21 @@ export interface Ctx {
   openTm: (lift: LiftId) => void;
   saveTm: (lift: LiftId, tm: number, note: string) => void;
   finish: () => void;
+  /** §14.6 */
+  finishView?: FinishView;
+  finishNow: () => void;
+  skipRest: (slots: string[]) => void;
+  backToSession: (slot: string) => void;
+  /** §14.2: tick or untick one set; ticking starts the rest timer. */
+  tick: (key: string, index: number, on: boolean, label: string, slot: string) => void;
+  focusBlock: (block: number) => void;
+  /** §14.3: what logging this would do, computed without saving. */
+  previewLift: (log: AnyLog) => string;
+  /** §14.9 */
+  tissueDue?: IsoDate;
+  tissueProtocol?: boolean;
+  saveTissue: (forDate: IsoDate, scores: { patellar: number; gluteal: number; shoulder: number }) => void;
+  dismissTissue: (forDate: IsoDate) => void;
   openExport: () => void;
   closeExport: () => void;
   exportNow: () => void;
@@ -370,6 +413,13 @@ interface FormOpts {
   onCancel?: () => void;
   /** Live only: the test-single callout and "last time". */
   live?: boolean;
+  /** §14.2: tick key and the number of sets before the last one; the barbell asks if any is unticked. */
+  ticksKey?: string;
+  earlierSets?: number;
+  /** §14.3: show what logging would do. */
+  preview?: boolean;
+  /** §14.8: sets or rounds ticked for this item, for the logged set count. */
+  ticked?: () => number;
 }
 
 function valuesFor(app: App, key: string, spec: Spec, initial?: AnyLog): FormValues {
@@ -427,6 +477,7 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
     app.errors.delete(key);
     app.forms.delete(key);
     app.zeroAsk = null;
+    app.setsAsk = null;
     opts.onSubmit(logs);
   };
 
@@ -436,12 +487,44 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
   switch (spec.type) {
     case 'barbell': {
       const lift = spec.slot as LiftId;
+      const usesTicks = opts.ticksKey !== undefined && (opts.earlierSets ?? 0) > 0;
+      const build = (): AnyLog | null => {
+        if (v.load == null || v.reps == null || v.rir == null) return null;
+        const init = opts.initial?.kind === 'barbell' ? opts.initial : undefined;
+        const planned = init ? (init.override?.from ?? init.prescribed.load) : (spec.load ?? v.load);
+        const ticked = opts.ticked ? opts.ticked() : 0;
+        const sets = init?.prescribed.sets ?? (spec.sets_max !== undefined && ticked > 0 ? Math.max(spec.sets ?? 1, ticked) : (spec.sets ?? 3));
+        const log: AnyLog = {
+          kind: 'barbell',
+          lift,
+          date: spec.date,
+          mode: init?.mode ?? spec.mode ?? 'wave',
+          prescribed: { load: v.load, reps: init?.prescribed.reps ?? spec.reps ?? v.reps, sets },
+          last_set: { load: v.load, reps: v.reps, rir: v.rir },
+          missed: v.missed ?? false,
+        };
+        const pos = init?.position ?? spec.position;
+        if (pos !== undefined) log.position = pos;
+        if (init?.single) log.single = init.single;
+        if (v.load !== planned) log.override = { from: planned };
+        return log;
+      };
+      const pv = opts.preview ? h('div', { class: 'preview', 'aria-live': 'polite' }) : null;
+      const refresh = () => {
+        if (!pv) return;
+        const log = build();
+        pv.textContent = log ? ctx.previewLift(log) : spec.amrap && spec.par !== undefined ? `Aim for about ${spec.par} reps with 2 left.` : 'Set the reps and reps left to see what this does to your max.';
+      };
       fields.append(
-        stepper({ label: 'Load', unit: 'kg', value: v.load ?? null, step: 2.5, start: spec.load ?? 0, onChange: (x) => (v.load = x), invalid: err !== undefined && v.load == null }).el,
-        stepper({ label: spec.amrap ? 'Reps, last set' : 'Reps per set', value: v.reps ?? null, step: 1, start: spec.reps ?? 1, integer: true, onChange: (x) => (v.reps = x), invalid: err !== undefined && v.reps == null }).el,
-        choices({ label: 'Reps left in the tank, last set', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => (v.rir = x), invalid: err !== undefined && v.rir == null }),
-        checkbox('An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)),
+        stepper({ label: 'Load', unit: 'kg', value: v.load ?? null, step: 2.5, start: spec.load ?? 0, onChange: (x) => { v.load = x; refresh(); }, invalid: err !== undefined && v.load == null }).el,
+        stepper({ label: spec.amrap ? 'Reps, last set' : 'Reps per set', value: v.reps ?? null, step: 1, start: spec.reps ?? 1, integer: true, onChange: (x) => { v.reps = x; refresh(); }, invalid: err !== undefined && v.reps == null }).el,
+        choices({ label: 'Reps left in the tank, last set', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => { v.rir = x; refresh(); }, invalid: err !== undefined && v.rir == null }),
       );
+      if (!usesTicks) fields.append(checkbox(spec.type === 'barbell' && spec.mode === 'band_87_90' ? 'An earlier double fell short' : 'An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)));
+      if (pv) {
+        fields.append(pv);
+        refresh();
+      }
       submit = () => {
         if (v.load == null) return fail('Enter the load.');
         if (v.reps == null) return fail('Enter the reps.');
@@ -450,22 +533,17 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
           app.zeroAsk = key;
           return ctx.rerender();
         }
-        const init = opts.initial?.kind === 'barbell' ? opts.initial : undefined;
-        const planned = init ? (init.override?.from ?? init.prescribed.load) : (spec.load ?? v.load);
-        const log: AnyLog = {
-          kind: 'barbell',
-          lift,
-          date: spec.date,
-          mode: init?.mode ?? spec.mode ?? 'wave',
-          prescribed: { load: v.load, reps: init?.prescribed.reps ?? spec.reps ?? v.reps, sets: init?.prescribed.sets ?? spec.sets ?? 3 },
-          last_set: { load: v.load, reps: v.reps, rir: v.rir },
-          missed: v.missed ?? false,
-        };
-        const pos = init?.position ?? spec.position;
-        if (pos !== undefined) log.position = pos;
-        if (init?.single) log.single = init.single;
-        if (v.load !== planned) log.override = { from: planned };
-        done([log]);
+        if (usesTicks && !v.setsConfirmed) {
+          const t = app.ticks.get(opts.ticksKey!) ?? [];
+          const unticked: number[] = [];
+          for (let i = 0; i < opts.earlierSets!; i++) if (!t[i]) unticked.push(i + 1);
+          if (unticked.length) {
+            app.setsAsk = key;
+            return ctx.rerender();
+          }
+        }
+        const log = build();
+        if (log) done([log]);
       };
       break;
     }
@@ -488,7 +566,8 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
         const init = opts.initial && (opts.initial.kind === 'rdl' || opts.initial.kind === 'slot') ? opts.initial : undefined;
         const planned = init ? (init.override?.from ?? init.load) : spec.load;
         const last = { reps: v.reps, rir: v.rir, ...(v.tempo ? { tempo_break: true } : {}) };
-        const sets = init?.sets_done ?? spec.sets ?? 3;
+        const tickedSets = opts.ticked ? opts.ticked() : 0;
+        const sets = init?.sets_done ?? (spec.sets_max !== undefined && tickedSets > 0 ? Math.max(spec.sets ?? 1, tickedSets) : (spec.sets ?? 3));
         const override = planned !== null && v.load !== planned ? { override: { from: planned } } : {};
         const log: AnyLog =
           spec.type === 'rdl'
@@ -499,6 +578,10 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
       break;
     }
     case 'explosive': {
+      if (opts.ticked && !opts.initial) {
+        const n = opts.ticked();
+        if (n > 0 && (v.sets == null || v.sets === spec.sets)) v.sets = n;
+      }
       fields.append(
         stepper({ label: 'Load', unit: spec.slot === 'db_pp_explosive' ? 'kg per hand' : 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? 0, onChange: (x) => (v.load = x), invalid: err !== undefined && v.load == null }).el,
         stepper({ label: 'Sets done', value: v.sets ?? null, step: 1, start: spec.sets ?? 3, integer: true, onChange: (x) => (v.sets = x), invalid: err !== undefined && v.sets == null }).el,
@@ -551,6 +634,26 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
           { class: 'row' },
           opts.onSkip ? h('button', { type: 'button', onclick: () => { app.zeroAsk = null; app.skipOpen = key; ctx.rerender(); } }, 'Skip instead') : null,
           h('button', { type: 'button', class: 'danger', onclick: () => submit() }, 'Log 0 reps'),
+        ),
+      ),
+    );
+  }
+  if (app.setsAsk === key) {
+    const t = app.ticks.get(opts.ticksKey ?? '') ?? [];
+    const n = opts.earlierSets ?? 0;
+    const unticked: number[] = [];
+    for (let i = 0; i < n; i++) if (!t[i]) unticked.push(i + 1);
+    const which = unticked.length === 1 ? `Set ${unticked[0]} isn't ticked.` : `Sets ${unticked.join(' and ')} aren't ticked.`;
+    out.push(
+      h(
+        'div',
+        { class: 'callout warn' },
+        h('div', {}, h('strong', {}, which), ' Was every earlier set done as prescribed?'),
+        h(
+          'div',
+          { class: 'row' },
+          h('button', { type: 'button', class: 'primary', onclick: () => { v.missed = false; v.setsConfirmed = true; app.setsAsk = null; submit(); } }, 'All done'),
+          h('button', { type: 'button', onclick: () => { v.missed = true; v.setsConfirmed = true; app.setsAsk = null; submit(); } }, 'One fell short'),
         ),
       ),
     );
@@ -670,7 +773,57 @@ function singleCallout(app: App, ctx: Ctx, spec: Spec): HTMLElement | null {
   );
 }
 
-function liveItem(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
+/** §14.2: one tickable set row. Ticking updates in place and starts the rest timer. */
+function tickRow(app: App, ctx: Ctx, key: string, index: number, text: string, slot: string, name: string): HTMLElement {
+  const on = (app.ticks.get(key) ?? [])[index] ?? false;
+  const box = h('span', { class: 'box', 'aria-hidden': 'true' }, on ? '✓' : '');
+  const b = h('button', { type: 'button', class: `tick${on ? ' on' : ''}`, 'aria-pressed': String(on) }, box, h('span', {}, text));
+  b.addEventListener('click', () => {
+    const now = !b.classList.contains('on');
+    b.classList.toggle('on', now);
+    b.setAttribute('aria-pressed', String(now));
+    box.textContent = now ? '✓' : '';
+    ctx.tick(key, index, now, name, slot);
+  });
+  return b;
+}
+
+function countTicks(app: App, key: string, pick?: (i: number) => boolean): number {
+  return (app.ticks.get(key) ?? []).filter((t, i) => t && (!pick || pick(i))).length;
+}
+
+/** Earlier-set rows for an item: everything before the last set, whose numbers are logged. */
+function setRows(app: App, ctx: Ctx, spec: Spec, name: string, tk: string): { rows: HTMLElement[]; earlier: number; lastLabel?: string } {
+  const rows: HTMLElement[] = [];
+  const side = spec.per_side ? ' each side' : '';
+  const sets = spec.sets ?? 0;
+  if (spec.type === 'barbell') {
+    if (spec.ramp?.length) rows.push(tickRow(app, ctx, `${tk}|warm`, 0, `Warm-up ${spec.ramp.map((r) => `${kg(r.load)} × ${r.reps}`).join(' · ')}`, spec.slot, name));
+    const earlier = Math.max(0, sets - 1);
+    for (let i = 0; i < earlier; i++) rows.push(tickRow(app, ctx, tk, i, `Set ${i + 1} · ${spec.load !== null ? `${kg(spec.load)} kg × ` : ''}${spec.reps ?? ''}`, spec.slot, name));
+    return { rows, earlier, lastLabel: `Set ${sets}, the last` };
+  }
+  if (spec.type === 'rdl' || spec.type === 'slot') {
+    const earlier = Math.max(0, sets - 1);
+    const reps = spec.rep_range ? `${spec.rep_range[0]}–${spec.rep_range[1]}` : `${spec.reps ?? ''}`;
+    for (let i = 0; i < earlier; i++) rows.push(tickRow(app, ctx, tk, i, `Set ${i + 1} · ${spec.load !== null ? `${spec.slot === 'pull_up' && spec.load === 0 ? 'bodyweight' : `${kg(spec.load)} kg`} × ` : '× '}${reps}${side}`, spec.slot, name));
+    return { rows, earlier, lastLabel: `Set ${sets}, the last` };
+  }
+  if (spec.type === 'fixed' || spec.type === 'explosive') {
+    const n = spec.sets_max ?? sets;
+    const what = spec.reps !== undefined ? ` · ${spec.reps}${side}` : spec.secs !== undefined ? ` · ${spec.secs} s${side}` : '';
+    for (let i = 0; i < n; i++) rows.push(tickRow(app, ctx, tk, i, `Set ${i + 1}${i + 1 > sets ? ' (optional)' : ''}${what}`, spec.slot, name));
+    return { rows, earlier: 0 };
+  }
+  return { rows, earlier: 0 };
+}
+
+interface LiveOpts {
+  /** §14.8: in a contrast block the grid holds the ticks. */
+  contrast?: { ticked: () => number };
+}
+
+function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}): HTMLElement {
   const date = app.date;
   const name = displayName(item.slot, ctx.config);
   const key = `live|${date}|${item.slot}`;
@@ -715,11 +868,13 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
 
   const right = spec.type === 'barbell' && spec.position !== undefined ? `${POSITION_LABEL[spec.position]} · ${POSITION_PCT[spec.position]}` : spec.type === 'barbell' && spec.pct !== undefined ? `${Math.round(spec.pct * 100)}% of max` : undefined;
   const box = h('div', { class: 'item' }, itemHead(name, right));
+  const tags = tissueTags(ctx.history, app.today, item.slot, ctx.config);
+  if (tags.length) box.append(h('div', { class: 'tags' }, ...tags.map((t) => h('span', { class: 'tag warn' }, t))));
   if (spec.refer) {
     box.append(h('p', { class: 'refer' }, `Ask the coach: ${spec.refer}`));
     return box;
   }
-  const single = spec.type === 'barbell' ? singleCallout(app, ctx, spec) : null;
+  const single = spec.type === 'barbell' && !lo.contrast ? singleCallout(app, ctx, spec) : null;
   if (single) box.append(single);
   if (spec.singleTaken) box.append(h('div', { class: 'callout info' }, "Single logged. Straight sets today from the new training max."));
   if (spec.forced) box.append(h('div', { class: 'callout info' }, 'Two sessions down in a row: light day, two sets.'));
@@ -727,17 +882,28 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem): HTMLElement {
   if (spec.type === 'slot' && spec.pending) box.append(h('div', { class: 'callout info' }, h('strong', {}, `Go ${spec.pending} ${spec.incText}`), ' this session. Log whatever you lift.'));
   const ins = instruction(spec);
   if (ins) box.append(h('p', { class: 'sub' }, ins));
-  if (spec.ramp?.length) box.append(h('p', { class: 'ramp' }, 'Warm-up ', ...spec.ramp.map((r) => h('span', {}, `${kg(r.load)} × ${r.reps}`))));
   const prev = lastLogged(ctx.history, item.slot, date, spec.type === 'barbell' ? spec.position : undefined);
   if (prev) {
     const label = spec.type === 'barbell' && spec.position !== undefined ? `Last ${POSITION_LABEL[spec.position].toLowerCase()}` : 'Last time';
     box.append(h('p', { class: 'last' }, `${label} (${prettyDate(prev.item.log.date)}): ${didText(prev.item.log, ctx.config)}`));
+  }
+  const tk = `${date}|${item.slot}`;
+  let earlier = 0;
+  if (!lo.contrast) {
+    const sr = setRows(app, ctx, spec, name, tk);
+    earlier = sr.earlier;
+    if (sr.rows.length) box.append(h('div', { class: 'sets-list' }, ...sr.rows));
+    if (sr.lastLabel && (spec.type === 'barbell' || spec.type === 'rdl' || spec.type === 'slot')) box.append(h('p', { class: 'lastset' }, sr.lastLabel));
+  } else if (spec.type === 'barbell' && spec.ramp?.length) {
+    box.append(h('div', { class: 'sets-list' }, tickRow(app, ctx, `${tk}|warm`, 0, `Warm-up ${spec.ramp.map((r) => `${kg(r.load)} × ${r.reps}`).join(' · ')}`, spec.slot, name)));
   }
   box.append(
     ...itemForm(app, ctx, spec, {
       key,
       submitLabel: spec.type === 'fixed' ? 'Done' : 'Log',
       live: true,
+      ...(lo.contrast ? { ticked: lo.contrast.ticked } : { ticksKey: tk, earlierSets: earlier, ticked: () => countTicks(app, tk) }),
+      preview: spec.type === 'barbell',
       onSubmit: (logs) => ctx.logLive(logs, name),
       onSkip: (reason) => ctx.logLive([{ kind: 'skip', slot: item.slot, date, ...(reason ? { reason } : {}) }], `${name} skipped`),
     }),
@@ -755,7 +921,7 @@ function blockCard(app: App, ctx: Ctx, b: SessionBlock, index: number, render: (
   if (b.contrast) kicker = `Contrast pairs: heavy lift, then a jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
   return h(
     'section',
-    { class: 'card' },
+    { class: 'card focus' },
     h('div', { class: 'head' }, h('span', { class: 'kicker' }, kicker), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
     ...b.items.map((it) => (it.kind === 'warmup' ? h('p', { class: 'warm' }, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')) : render(it))),
   );
@@ -792,11 +958,172 @@ function cmjLive(app: App, ctx: Ctx, date: IsoDate): HTMLElement {
   return box;
 }
 
+function kickerFor(b: SessionBlock, index: number): string {
+  if (b.contrast) return `Contrast: heavy set, then jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
+  if (b.superset) return 'Superset: alternate the two';
+  return `Block ${index}`;
+}
+
+/** §14.8: a contrast block as a grid of rounds, one tick per item, then each item logs once. */
+function contrastBlock(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElement {
+  const items = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot');
+  const [lo, hi] = Array.isArray(b.rounds) ? b.rounds : [b.rounds ?? 3, b.rounds ?? 3];
+  const gk = `${app.date}|b${index}`;
+  const grid = h('div', { class: 'grid' });
+  for (let r = 0; r < hi; r++) {
+    const row = h('div', { class: 'grid-row' }, h('span', { class: 'lab' }, `Round ${r + 1}${r + 1 > lo ? ' (optional)' : ''}`));
+    items.forEach((it, i) => {
+      const t = it.template;
+      const reps = it.prescription.kind === 'lift' || it.prescription.kind === 'slot' ? it.prescription.reps : t.reps;
+      const short = it.slot === 'pull_up' ? 'Pull-up' : displayName(it.slot, ctx.config);
+      row.append(tickRow(app, ctx, gk, r * items.length + i, `${short}${reps !== undefined ? ` × ${reps}` : ''}`, it.slot, displayName(it.slot, ctx.config)));
+    });
+    grid.append(row);
+  }
+  const cols = items.length;
+  // A test single comes before the rounds, so its callout sits above the grid.
+  const lift = items.find((it) => it.prescription.kind === 'lift');
+  const liftLogged = lift ? itemLogged(ctx, app.date, lift.slot) : true;
+  const single = lift && !liftLogged ? singleCallout(app, ctx, specFromLive(lift, app.date, ctx.config)) : null;
+  return h(
+    'section',
+    { class: 'card focus' },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, kickerFor(b, index)), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
+    single,
+    h('p', { class: 'sub' }, `Tick each item as you finish it in a round. Stop after round ${lo} or go to ${hi}; then log each item once below.`),
+    grid,
+    ...items.map((it, i) => liveItem(app, ctx, it, { contrast: { ticked: () => countTicks(app, gk, (k) => k % cols === i) } })),
+  );
+}
+
+function itemLogged(ctx: Ctx, date: IsoDate, slot: string): boolean {
+  return stepsFor(ctx, date, slot).length > 0;
+}
+
+/** A finished block, one line per item (§14.1). Tapping opens it. */
+function doneCard(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElement {
+  const rows = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot').map((it) => {
+    const steps = stepsFor(ctx, app.date, it.slot);
+    const st = steps[steps.length - 1]!;
+    const log = st.item.log;
+    const skipped = log.kind === 'skip' || (log.kind === 'fixed' && !log.done);
+    const line = outcomeLine(st, ctx.config);
+    return h('div', { class: `line${skipped ? ' skipped' : ''}` }, h('span', { class: 'mark', 'aria-hidden': 'true' }, skipped ? '–' : '✓'), h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, didText(log, ctx.config)), line ? h('span', { class: 'oc' }, line) : null);
+  });
+  return h(
+    'section',
+    { class: 'card compact-card done-card', role: 'button', tabindex: '0', 'aria-label': `${kickerFor(b, index)}, done. Open to change.`, onclick: () => ctx.focusBlock(index) },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, kickerFor(b, index)), h('span', { class: 'status ok' }, 'Done')),
+    ...rows,
+  );
+}
+
+/** A block still to come, with each item's plan (§14.1). Tapping opens it. */
+function nextCard(app: App, ctx: Ctx, b: SessionBlock, index: number, plan: Map<string, PlanItem>): HTMLElement {
+  const rows = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot').map((it) => {
+    const p = plan.get(it.slot);
+    const logged = itemLogged(ctx, app.date, it.slot);
+    return h('div', { class: 'line' }, h('span', { class: 'mark', 'aria-hidden': 'true' }, logged ? '✓' : ''), h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, p ? plannedText(p) : ''));
+  });
+  return h(
+    'section',
+    { class: 'card compact-card next-card', role: 'button', tabindex: '0', 'aria-label': `${kickerFor(b, index)}. Open.`, onclick: () => ctx.focusBlock(index) },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, `Up next · ${kickerFor(b, index)}`), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
+    ...rows,
+  );
+}
+
+/** §14.9: the morning-after card, and the flare protocol on a day a score was above 3. */
+function tissueCard(app: App, ctx: Ctx): HTMLElement | null {
+  if (ctx.tissueProtocol) {
+    return h(
+      'section',
+      { class: 'card protocol' },
+      h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Above 3/10 today: your flare protocol')),
+      h('p', {}, FLARE_PROTOCOL),
+      h('p', { class: 'sub' }, 'Recorded only; the app changes no load for it. Adjust today with the coach in mind.'),
+    );
+  }
+  const due = ctx.tissueDue;
+  if (!due) return null;
+  const v = app.forms.get('tissue') ?? { patellar: 0, gluteal: 0, shoulder: 0 };
+  app.forms.set('tissue', v);
+  const head = h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Check-in'));
+  if (!app.tissueOpen) {
+    return h(
+      'section',
+      { class: 'card checkin' },
+      head,
+      h('h2', {}, 'How do they feel today?'),
+      h('p', { class: 'sub' }, `After ${prettyDate(due)}'s session: patellar, gluteal and left shoulder, 0 to 10.`),
+      h(
+        'div',
+        { class: 'row actions' },
+        h('button', { type: 'button', class: 'primary', onclick: () => ctx.saveTissue(due, { patellar: 0, gluteal: 0, shoulder: 0 }) }, 'All clear'),
+        h('button', { type: 'button', onclick: () => { app.tissueOpen = true; ctx.rerender(); } }, "Something's sore"),
+        h('button', { type: 'button', class: 'subtle', onclick: () => ctx.dismissTissue(due) }, 'Not now'),
+      ),
+    );
+  }
+  const err = app.errors.get('tissue');
+  const field = (label: string, k: 'patellar' | 'gluteal' | 'shoulder') =>
+    stepper({ label, unit: 'out of 10', value: v[k] ?? 0, step: 1, start: 0, integer: true, onChange: (x) => (v[k] = x) }).el;
+  return h(
+    'section',
+    { class: 'card checkin' },
+    head,
+    h('h2', {}, 'How do they feel today?'),
+    h('p', { class: 'sub' }, `After ${prettyDate(due)}'s session. 0 is nothing at all.`),
+    h('div', { class: 'fields' }, field('Patellar tendon', 'patellar'), field('Gluteal tendon', 'gluteal'), field('Left shoulder', 'shoulder')),
+    err ? h('p', { class: 'err' }, err) : null,
+    h(
+      'div',
+      { class: 'row actions' },
+      h('button', { type: 'button', class: 'primary', onclick: () => {
+        const vals = [v.patellar, v.gluteal, v.shoulder];
+        if (vals.some((x) => x == null || x < 0 || x > 10 || !Number.isInteger(x))) {
+          app.errors.set('tissue', 'Each score is a whole number from 0 to 10.');
+          return ctx.rerender();
+        }
+        app.errors.delete('tissue');
+        app.tissueOpen = false;
+        app.forms.delete('tissue');
+        ctx.saveTissue(due, { patellar: v.patellar!, gluteal: v.gluteal!, shoulder: v.shoulder! });
+      } }, 'Save'),
+      h('button', { type: 'button', class: 'subtle', onclick: () => { app.tissueOpen = false; ctx.rerender(); } }, 'Cancel'),
+    ),
+  );
+}
+
+/** §14.1: one block open; done blocks one line per item; later blocks as "Up next". */
 function liveBody(app: App, ctx: Ctx, s: Session): HTMLElement[] {
   const out: HTMLElement[] = [];
-  if (s.pre.includes('cmj')) out.push(cmjLive(app, ctx, s.date));
-  let n = 0;
-  for (const b of s.blocks) out.push(blockCard(app, ctx, b, ++n, (it) => liveItem(app, ctx, it)));
+  const tc = tissueCard(app, ctx);
+  if (tc) out.push(tc);
+  const plan = new Map(planSnapshot(s, ctx.config).items.map((i) => [i.slot, i] as const));
+  const slotsOf = (b: SessionBlock) => b.items.filter((it): it is SessionSlotItem => it.kind === 'slot');
+  const blockDone = (b: SessionBlock) => slotsOf(b).length > 0 && slotsOf(b).every((it) => itemLogged(ctx, s.date, it.slot));
+  const hasCmj = s.pre.includes('cmj');
+  const cmjDone = itemLogged(ctx, s.date, 'cmj');
+  // 0 = the jump test, 1..n = a block, -1 = everything logged.
+  let focus: number;
+  if (app.focus && app.focus.date === s.date) focus = app.focus.block;
+  else if (hasCmj && !cmjDone) focus = 0;
+  else {
+    const i = s.blocks.findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
+    focus = i === -1 ? -1 : i + 1;
+  }
+  if (hasCmj) out.push(cmjLive(app, ctx, s.date));
+  s.blocks.forEach((b, i) => {
+    const index = i + 1;
+    if (slotsOf(b).length === 0) {
+      out.push(blockCard(app, ctx, b, index, () => h('div')));
+      return;
+    }
+    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, b, index) : blockCard(app, ctx, b, index, (it) => liveItem(app, ctx, it)));
+    else if (blockDone(b)) out.push(doneCard(app, ctx, b, index));
+    else out.push(nextCard(app, ctx, b, index, plan));
+  });
   return out;
 }
 
@@ -990,6 +1317,47 @@ function previewSheet(app: App, ctx: Ctx, sheet: Extract<Sheet, { kind: 'preview
   }
   void app;
   return h('div', { class: 'sheet-wrap', onclick: (e: Event) => { if (e.target === e.currentTarget) ctx.closeSheet(); } }, h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Check the change' }, ...body));
+}
+
+/** §14.6: unlogged items first; then what moved, what's next, the backup, and a save-a-copy prompt. */
+function finishSheet(app: App, ctx: Ctx, f: FinishView): HTMLElement {
+  const body: Child[] = [];
+  if (!f.finished && f.unlogged.length) {
+    body.push(
+      h('h2', {}, 'Finish the session?'),
+      h('p', { class: 'sub' }, `${f.unlogged.length} planned ${f.unlogged.length === 1 ? 'item isn\'t' : 'items aren\'t'} logged yet:`),
+      h('ul', { class: 'list' }, ...f.unlogged.map((u) => h('li', {}, u.name))),
+      h(
+        'div',
+        { class: 'col actions' },
+        h('button', { type: 'button', class: 'primary', onclick: () => ctx.backToSession(f.unlogged[0]!.slot) }, 'Log them'),
+        h('button', { type: 'button', onclick: () => ctx.skipRest(f.unlogged.map((u) => u.slot)) }, 'Skip them and finish'),
+        h('button', { type: 'button', class: 'subtle', onclick: ctx.finishNow }, 'Finish without them'),
+      ),
+    );
+  } else {
+    body.push(
+      h('h2', {}, 'Session finished'),
+      f.minutes !== undefined ? h('p', { class: 'sub' }, `${f.minutes} min from the first log.`) : null,
+      h('h3', {}, 'What moved'),
+      f.moved.length ? h('ul', { class: 'list' }, ...f.moved.map((m) => h('li', {}, m))) : h('p', { class: 'sub' }, 'Nothing moved today.'),
+      h('h3', {}, "What's next"),
+      h('ul', { class: 'list' }, ...f.next.map((m) => h('li', {}, m))),
+      h('h3', {}, 'Backup'),
+      h('p', { class: `sub backup-status` }, app.backup.status),
+      h(
+        'div',
+        { class: 'row actions' },
+        f.backupOk
+          ? h('button', { type: 'button', class: 'primary', onclick: ctx.closeSheet }, 'Done')
+          : h('button', { type: 'button', class: 'primary', onclick: () => { ctx.closeSheet(); ctx.openExport(); } }, 'Save a copy'),
+        f.backupOk
+          ? h('button', { type: 'button', onclick: () => { ctx.closeSheet(); ctx.openExport(); } }, 'Save a copy too')
+          : h('button', { type: 'button', onclick: ctx.closeSheet }, 'Done'),
+      ),
+    );
+  }
+  return h('div', { class: 'sheet-wrap', onclick: (e: Event) => { if (e.target === e.currentTarget) ctx.closeSheet(); } }, h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Finish' }, ...body));
 }
 
 function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
@@ -1285,7 +1653,7 @@ export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
   let bar: HTMLElement | null = null;
   if (mode === 'live') {
     const finished = entriesOnDate.length > 0 && (ctx.history.byDate.get(app.date) ?? []).some((s) => s.item.log.kind === 'session_end' && (day === undefined || s.item.log.day === day));
-    bar = h('div', { class: 'end' }, h('button', { type: 'button', class: finished ? '' : 'primary', onclick: ctx.finish }, finished ? 'Session finished · save a copy' : 'Finish session'));
+    bar = h('div', { class: 'end' }, h('button', { type: 'button', class: finished ? '' : 'primary', onclick: ctx.finish }, finished ? 'Session finished · summary' : 'Finish session'));
   } else if (mode === 'record' && ctx.history.ok) {
     bar = h('div', { class: 'end' }, h('button', { type: 'button', class: 'primary', onclick: ctx.startEdit }, ctx.record?.plan ? 'Edit session' : 'Add a missed session'));
   } else if (mode === 'edit') {
@@ -1298,6 +1666,7 @@ export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
   let sheet: HTMLElement | null = null;
   if (app.sheet?.kind === 'preview') sheet = previewSheet(app, ctx, app.sheet);
   if (app.sheet?.kind === 'tm') sheet = tmSheet(app, ctx, app.sheet.lift);
+  if (app.sheet?.kind === 'finish' && ctx.finishView) sheet = finishSheet(app, ctx, ctx.finishView);
 
   return h('div', {}, ...body, bar, app.showExport ? exportPanel(app, ctx) : null, sheet);
 }

@@ -21,6 +21,12 @@ function item(page: Page, name: string) {
   return page.locator('.item', { has: page.getByRole('heading', { name, exact: true }) }).first();
 }
 
+/** Release 2: later blocks are "Up next" cards until opened. */
+async function openBlock(page: Page, name: string): Promise<void> {
+  const card = page.locator('.next-card', { hasText: name });
+  if (await card.count()) await card.first().click();
+}
+
 async function more(scope: ReturnType<typeof item>, label: string, times: number): Promise<void> {
   for (let i = 0; i < times; i++) await scope.getByRole('button', { name: `${label}: more` }).click();
 }
@@ -29,6 +35,7 @@ test('live session: reps left required, 0 reps asks, skip, undo, finish once', a
   await open(page, '2026-09-21T18:00:00+08:00');
   await expect(page.getByText('Mon 21 Sep · Day 1 · Medium week')).toBeVisible();
 
+  await openBlock(page, 'Front squat');
   const fs = item(page, 'Front squat');
   await expect(fs.getByText('77.5', { exact: true })).toBeVisible();
   await more(fs, 'Reps, last set', 5); // 3, 4, 5, 6, 7
@@ -36,14 +43,18 @@ test('live session: reps left required, 0 reps asks, skip, undo, finish once', a
   await expect(fs.getByText('Choose reps left.')).toBeVisible();
   await fs.getByRole('radio', { name: '2' }).click();
   await fs.getByRole('button', { name: 'Log', exact: true }).click();
+  await fs.getByRole('button', { name: 'All done' }).click();
   await expect(page.locator('.toast')).toContainText('Logged: Front squat');
-  await expect(item(page, 'Front squat').getByText('77.5 kg · last set 7, 2 left')).toBeVisible();
+  // A fully logged block folds into a one-line summary.
+  await expect(page.locator('.done-card', { hasText: 'Front squat' })).toContainText('77.5 kg · last set 7, 2 left');
 
   // Undo restores the form.
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await openBlock(page, 'Front squat');
   await expect(item(page, 'Front squat').getByRole('button', { name: 'Log', exact: true })).toBeVisible();
 
   // 0 reps on the Romanian deadlift asks first; skip instead records a reason and moves nothing.
+  await openBlock(page, 'Romanian deadlift');
   const rdl = item(page, 'Romanian deadlift');
   await rdl.getByLabel('Reps, last set', { exact: true }).fill('0');
   await rdl.getByRole('radio', { name: '2' }).click();
@@ -51,23 +62,29 @@ test('live session: reps left required, 0 reps asks, skip, undo, finish once', a
   await expect(rdl.getByText('0 reps logs a failed set and lowers the load.')).toBeVisible();
   await rdl.getByRole('button', { name: 'Skip instead' }).click();
   await rdl.getByRole('button', { name: 'Time' }).click();
-  await expect(item(page, 'Romanian deadlift').getByText('Skipped · Time')).toBeVisible();
-  await expect(item(page, 'Romanian deadlift').getByText('Nothing moves.')).toBeVisible();
+  await expect(page.locator('.done-card', { hasText: 'Romanian deadlift' })).toContainText('Skipped · Time');
+  await expect(page.locator('.done-card', { hasText: 'Romanian deadlift' })).toContainText('Nothing moves.');
 
   // Finish twice logs one finish.
   await page.getByRole('button', { name: 'Finish session' }).click();
-  await page.getByRole('button', { name: 'Back to the session' }).click();
+  await page.getByRole('button', { name: 'Finish without them' }).click();
+  await expect(page.getByRole('dialog', { name: 'Finish' })).toContainText('Session finished');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: /Session finished/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Finish' })).toContainText('Session finished');
   const ends = await page.evaluate(() => (JSON.parse(localStorage.getItem('acro-base-sc/state') ?? '{}').log as { kind: string }[]).filter((e) => e.kind === 'session_end').length);
   expect(ends).toBe(1);
 });
 
 test('a past date is a record; a correction is previewed and kept', async ({ page }) => {
   await open(page, '2026-09-21T18:00:00+08:00');
+  await openBlock(page, 'Front squat');
   const fs = item(page, 'Front squat');
   await more(fs, 'Reps, last set', 5);
   await fs.getByRole('radio', { name: '2' }).click();
   await fs.getByRole('button', { name: 'Log', exact: true }).click();
+  await fs.getByRole('button', { name: 'All done' }).click();
+  await openBlock(page, 'Romanian deadlift');
   const rdl = item(page, 'Romanian deadlift');
   await rdl.getByLabel('Reps, last set', { exact: true }).fill('0');
   await rdl.getByRole('radio', { name: '2' }).click();
