@@ -1,17 +1,21 @@
 /**
- * The screens (ui_spec_v1_1.md). Four modes decided by the date: live
- * (today's session), record (a past date, read-only), edit (corrections,
- * previewed before saving) and preview (a future date).
+ * The screens (ui_spec_v1_3.md). One main screen, Today: the live
+ * session or the next one, then History by programme week, then the
+ * Plan. A past session opens from History as a record and is corrected
+ * in Edit; a session trained but not logged is added with Add a missed
+ * session. Both preview every change before saving. There is no date
+ * bar and no future date anywhere.
  *
  * Builds DOM only. Every change goes back through ctx: live logging
  * through update(), corrections through amend() (engine A.23, A.28).
  */
 import type { BarbellMode, IsoDate, LiftId, Position, ProgrammeConfig, State } from '../config/types';
-import { isCarrySlot, mesocycleOn, planSnapshot, programmeWeek, slotOfLog } from '../engine';
+import { defaultDay, isCarrySlot, mesocycleOn, planSnapshot, programmeWeek, slotOfLog } from '../engine';
 import type {
   AnyLog,
   CorrectionAction,
   PlanItem,
+  PlanSnapshot,
   RampSet,
   ReplayStep,
   Session,
@@ -27,12 +31,18 @@ import { DEFAULT_OWNER, DEFAULT_REPO } from './backup';
 import { calculator, checkbox, choices, h, stepper, type Child } from './dom';
 import {
   BLOCK_LABEL,
-  contextFor,
+  blockWeekText,
+  clockTime,
+  countsText,
   didText,
   displayName,
+  FLARE_PROTOCOL,
+  historyLines,
+  historyLineText,
   kg,
   lastLogged,
   leftText,
+  loadRange,
   loadStep,
   nextFor,
   outcomeLine,
@@ -40,20 +50,22 @@ import {
   POSITION_LABEL,
   POSITION_PCT,
   prettyDate,
-  recordFor,
+  rangeText,
+  RELEASE_1,
   SKIP_LABEL,
-  FLARE_PROTOCOL,
   tissueTags,
+  weekdayName,
+  weekLine,
+  weekTypeOf,
   type History,
   type RecordRow,
   type RecordView,
+  type SessionGroup,
 } from './model';
 
 // ---------------------------------------------------------------------
 // app state shared with main.ts
 // ---------------------------------------------------------------------
-
-export type Mode = 'live' | 'record' | 'edit' | 'preview';
 
 /** Values typed into one item's form; kept across renders (ui_spec §5.7). */
 export interface FormValues {
@@ -74,23 +86,32 @@ export interface FormValues {
   shoulder?: number | null;
 }
 
-/** One pending change in edit mode, per item. */
+/** One pending change in Edit or Add a missed session, per item. */
 export interface Draft {
   slot: string;
   actions: CorrectionAction[];
-  /** What the item will read as once saved. */
+  /** What the item will read as once saved; null when removed. */
   after: AnyLog | null;
 }
+
+/** The draft key for Remove this session (§4.3). */
+export const WHOLE_SESSION = '*session';
+
+export type Screen =
+  | { kind: 'today' }
+  | { kind: 'record'; id: string }
+  | { kind: 'edit'; id: string; drafts: Draft[] }
+  | { kind: 'add'; step: 1 | 2; date: IsoDate; day: SessionDay; separate: boolean; drafts: Draft[]; error?: string };
 
 export type Sheet =
   | { kind: 'preview'; changes: string[]; effects: string[]; error?: string }
   | { kind: 'tm'; lift: LiftId }
-  | { kind: 'finish' };
+  | { kind: 'finish'; id: string };
 
-/** §14.6: what the finish sheet shows. */
+/** §10 and §14.6: what the finish sheet shows. */
 export interface FinishView {
-  /** Planned items not logged yet. */
-  unlogged: { slot: string; name: string }[];
+  /** Planned items with neither a log nor a skip, each with its plan. */
+  unrecorded: { slot: string; name: string; plan: string }[];
   finished: boolean;
   minutes?: number;
   moved: string[];
@@ -100,19 +121,21 @@ export interface FinishView {
 
 export interface App {
   state: State;
-  /** The date on screen. */
-  date: IsoDate;
-  /** Chosen day for the date, while nothing is logged on it. */
-  day?: SessionDay;
-  /** Today's date, or an open session's date (ui_spec §9). */
-  live: IsoDate;
-  /** The phone's local date. */
+  /** The phone's local date (§9). */
   today: IsoDate;
-  editing: { date: IsoDate; day?: SessionDay; drafts: Draft[] } | null;
-  /** §14.2, §14.8: set ticks by key ("date|slot", or "date|bN" for a contrast grid, flattened round by round). */
+  screen: Screen;
+  /** The day switch for the next session, while nothing is logged (§4.4). */
+  day?: SessionDay;
+  /** An earlier open session made live: Carry on, or a live session that ran past midnight (§9). */
+  carry: string | null;
+  /** §4.4: Start it today, after a session has finished today. */
+  startToday: boolean;
+  /** §11: History shows every week, not the last four. */
+  showEarlier: boolean;
+  /** §14.2, §14.8: set ticks by key ("<session key>|slot", or "<session key>|bN" for a contrast grid). */
   ticks: Map<string, boolean[]>;
-  /** §14.1: the block the athlete opened on the live date. */
-  focus: { date: IsoDate; block: number } | null;
+  /** §14.1: the block the athlete opened in a session. */
+  focus: { key: string; block: number } | null;
   /** Item key asking whether every earlier set was done. */
   setsAsk: string | null;
   /** §14.9: the check-in card is showing the three sites. */
@@ -134,30 +157,84 @@ export interface App {
   backup: { settings: SyncSettings | null; status: string };
 }
 
+/** The session being logged on Today, or the next one ready to start (§4.1, §4.4). */
+export interface LiveView {
+  /** The date its entries carry: the session's own date, or today for the next session. */
+  date: IsoDate;
+  day: SessionDay;
+  session: SessionResult;
+  /** Set once the first item is logged. */
+  group?: SessionGroup;
+  /** Entries logged into it so far. */
+  steps: ReplayStep[];
+  carried: boolean;
+  /** Key for ticks, focus and forms. */
+  key: string;
+}
+
+/** What Today shows under the status line (§3, §4.4). */
+export type TodayState = 'live' | 'next' | 'blocked' | 'done';
+
+/** Add a missed session (§11A). */
+export interface AddView {
+  /** The plan for the chosen date and day, from the log up to where it will be inserted. */
+  plan?: PlanSnapshot;
+  rotationDay: SessionDay;
+  dayLines: Record<SessionDay, string>;
+  /** Sessions already on the chosen date. */
+  existing: SessionGroup[];
+  firstDate: IsoDate;
+}
+
 export interface Ctx {
   config: ProgrammeConfig;
   base: State;
   history: History;
-  mode: Mode;
-  /** The live or preview session for the date (undefined in record and edit). */
-  session?: SessionResult;
-  record?: RecordView;
-  setDate: (date: string) => void;
-  setDay: (day: SessionDay) => void;
+  sessions: SessionGroup[];
+  todayState: TodayState;
+  live?: LiveView;
+  /** §9: an earlier session still open and not carried on. */
+  unfinished?: { group: SessionGroup; view: RecordView };
+  /** The session finished today, while Today reads "Done today". */
+  doneToday?: { group: SessionGroup; view: RecordView };
+  /** The record or edit screen's session. */
+  record?: { group: SessionGroup; view: RecordView; open: boolean };
+  add?: AddView;
+  /** §5.5: the one drop-jump box, from the stored height. */
+  boxCm?: number;
+  recordOf: (g: SessionGroup) => RecordView;
+  isOpen: (g: SessionGroup) => boolean;
   rerender: () => void;
+  setDay: (day: SessionDay) => void;
   logLive: (logs: AnyLog[], label: string) => void;
-  previewCorrection: (on: IsoDate, actions: CorrectionAction[]) => void;
+  previewCorrection: (on: IsoDate, actions: CorrectionAction[], changes?: string[]) => void;
   saveCorrection: (note: string) => void;
   closeSheet: () => void;
+  openRecord: (id: string) => void;
+  goToday: () => void;
   startEdit: () => void;
   cancelEdit: () => void;
   setDraft: (draft: Draft) => void;
   dropDraft: (slot: string) => void;
   reviewEdit: () => void;
+  removeSession: () => void;
+  openAdd: () => void;
+  addDate: (date: string) => void;
+  addDay: (day: SessionDay) => void;
+  addNext: () => void;
+  addToExisting: (id: string) => void;
+  addSeparate: () => void;
+  addBack: () => void;
+  cancelAdd: () => void;
+  reviewAdd: () => void;
+  carryOn: () => void;
+  closeIt: () => void;
+  startToday: () => void;
+  showEarlier: () => void;
   openTm: (lift: LiftId) => void;
   saveTm: (lift: LiftId, tm: number, note: string) => void;
   finish: () => void;
-  /** §14.6 */
+  /** §10, §14.6 */
   finishView?: FinishView;
   finishNow: () => void;
   skipRest: (slots: string[]) => void;
@@ -200,6 +277,8 @@ interface Spec {
   secs?: number;
   per_side?: boolean;
   contacts?: number;
+  /** §5.5: the drop-jump box height. */
+  box?: number;
   variant?: string;
   landings?: [number, number];
   inside_rest?: boolean;
@@ -227,7 +306,7 @@ interface Spec {
 const LIFT_IDS = new Set(['front_squat', 'deadlift']);
 const PER_HAND = new Set(['db_pp_strength', 'bss', 'db_pp_explosive']);
 
-function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeConfig): Spec {
+function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeConfig, box?: number): Spec {
   const p = item.prescription;
   const t = item.template;
   const base: Spec = { slot: item.slot, type: 'fixed', date, load: null };
@@ -280,6 +359,7 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
       if (t.sets_max !== undefined) s.sets_max = t.sets_max;
       if (t.reps !== undefined) s.reps = t.reps;
       if (p.contacts !== undefined) s.contacts = p.contacts;
+      if (item.slot === 'depth_jump' && box !== undefined) s.box = box;
       return s;
     }
   }
@@ -313,6 +393,12 @@ function specFromPlan(item: PlanItem, date: IsoDate, config: ProgrammeConfig): S
   return s;
 }
 
+/** A plan line, with the drop-jump box on live and next sessions (§5.5). */
+function planLine(item: PlanItem, box?: number): string {
+  const t = plannedText(item);
+  return item.slot === 'depth_jump' && box !== undefined ? `${t} · ${box} cm box` : t;
+}
+
 // ---------------------------------------------------------------------
 // help text
 // ---------------------------------------------------------------------
@@ -320,7 +406,6 @@ function specFromPlan(item: PlanItem, date: IsoDate, config: ProgrammeConfig): S
 const REACTIVE = 'reactive strength: bounce height divided by time on the floor; quick and high wins';
 
 const SLOT_HELP: Record<string, string> = {
-  rsi_ladder: 'Step off the box, do not jump off. Land and rebound as fast and as high as you can. Three jumps from 20 cm, three from 30 cm, three from 40 cm. The height that feels quickest and springiest wins; then three more jumps from that height.',
   depth_jump: 'Step off the box, do not jump off. Land and rebound as fast and as high as you can, with the least time on the floor. Full rest between jumps.',
   depth_landing: 'Step off a box a little higher than your usual drop height. Land soft, quiet and balanced, and hold it. No rebound.',
   skater_bound: 'Push off one leg sideways, land on the other and stick the landing before the next bound.',
@@ -352,7 +437,6 @@ const WARMUP_NAMES: Record<string, string> = {
 };
 
 const RIR_OPTIONS = [0, 1, 2, 3, 4].map((v) => ({ value: v, text: v === 4 ? '4+' : String(v) }));
-const LADDER_OPTIONS = [20, 30, 40].map((v) => ({ value: v, text: `${v} cm` }));
 
 function setsText(sets: number | undefined, max?: number): string {
   if (sets === undefined) return '';
@@ -374,7 +458,7 @@ function rxLine(spec: Spec): HTMLElement {
   if (spec.landings) rx.append(h('span', { class: 'sets' }, `${spec.landings[0]}–${spec.landings[1]} landings`));
   if (spec.variant) rx.append(h('span', { class: 'unit' }, spec.variant));
   if (spec.inside_rest) rx.append(h('span', { class: 'unit' }, 'inside the rests'));
-  if (spec.contacts !== undefined) rx.append(h('span', { class: 'sets' }, spec.slot === 'rsi_ladder' ? `${spec.contacts} jumps in total` : `${spec.contacts} jumps`));
+  if (spec.contacts !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.contacts} jumps${spec.box !== undefined ? ` · ${spec.box} cm box` : ''}`));
   if (spec.load === null && (spec.type === 'slot' || spec.type === 'explosive')) rx.append(h('span', { class: 'unit' }, spec.hint !== undefined ? `pick a load, try ${spec.hint} kg` : 'first time: pick a load'));
   if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
   return rx;
@@ -393,7 +477,7 @@ function instruction(spec: Spec): string {
     case 'explosive':
       return [help, spec.load === null ? 'Work up in small jumps until a rep slows down. Log the heaviest load that stayed fast; the app keeps it from here.' : spec.streakNote].filter(Boolean).join(' ');
     case 'fixed':
-      return [help, spec.slot === 'rsi_ladder' || spec.slot === 'depth_jump' ? `Scored on ${REACTIVE}.` : ''].filter(Boolean).join(' ');
+      return [help, spec.slot === 'depth_jump' ? `Scored on ${REACTIVE}.` : ''].filter(Boolean).join(' ');
     case 'cmj':
       return help ?? '';
   }
@@ -411,8 +495,6 @@ interface FormOpts {
   onSkip?: (reason?: SkipReason) => void;
   onRemove?: () => void;
   onCancel?: () => void;
-  /** Live only: the test-single callout and "last time". */
-  live?: boolean;
   /** §14.2: tick key and the number of sets before the last one; the barbell asks if any is unticked. */
   ticksKey?: string;
   earlierSets?: number;
@@ -480,9 +562,12 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
     app.setsAsk = null;
     opts.onSubmit(logs);
   };
+  // §5.1: dumbbell loads stay on the rack.
+  const range = loadRange(spec.slot, ctx.config);
+  const outOfRange = (x: number | null | undefined): boolean => range !== undefined && x != null && (x < range[0] || x > range[1]);
+  const loadLimits = range ? { min: range[0], max: range[1] } : {};
 
   let submit: () => void = () => undefined;
-  const isChange = opts.initial !== undefined;
 
   switch (spec.type) {
     case 'barbell': {
@@ -520,7 +605,7 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
         stepper({ label: spec.amrap ? 'Reps, last set' : 'Reps per set', value: v.reps ?? null, step: 1, start: spec.reps ?? 1, integer: true, onChange: (x) => { v.reps = x; refresh(); }, invalid: err !== undefined && v.reps == null }).el,
         choices({ label: 'Reps left in the tank, last set', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => { v.rir = x; refresh(); }, invalid: err !== undefined && v.rir == null }),
       );
-      if (!usesTicks) fields.append(checkbox(spec.type === 'barbell' && spec.mode === 'band_87_90' ? 'An earlier double fell short' : 'An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)));
+      if (!usesTicks) fields.append(checkbox(spec.mode === 'band_87_90' ? 'An earlier double fell short' : 'An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)));
       if (pv) {
         fields.append(pv);
         refresh();
@@ -550,13 +635,14 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
     case 'rdl':
     case 'slot': {
       fields.append(
-        stepper({ label: 'Load', unit: PER_HAND.has(spec.slot) ? 'kg per hand' : 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? spec.hint ?? 0, onChange: (x) => (v.load = x), invalid: err !== undefined && v.load == null }).el,
+        stepper({ label: 'Load', unit: PER_HAND.has(spec.slot) ? 'kg per hand' : 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? spec.hint ?? range?.[0] ?? 0, ...loadLimits, onChange: (x) => (v.load = x), invalid: err !== undefined && (v.load == null || outOfRange(v.load)) }).el,
         stepper({ label: 'Reps, last set', value: v.reps ?? null, step: 1, start: spec.reps ?? spec.rep_range?.[0] ?? 1, integer: true, onChange: (x) => (v.reps = x), invalid: err !== undefined && v.reps == null }).el,
         choices({ label: 'Reps left in the tank, last set', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => (v.rir = x), invalid: err !== undefined && v.rir == null }),
       );
       if (spec.tempo) fields.append(checkbox('The 3-second lowering sped up on the last set', v.tempo ?? false, (x) => (v.tempo = x)));
       submit = () => {
         if (v.load == null) return fail('Enter the load.');
+        if (range && outOfRange(v.load)) return fail(rangeText(range));
         if (v.reps == null) return fail('Enter the reps.');
         if (v.rir == null) return fail('Choose reps left.');
         if (v.reps === 0 && app.zeroAsk !== key) {
@@ -583,12 +669,13 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
         if (n > 0 && (v.sets == null || v.sets === spec.sets)) v.sets = n;
       }
       fields.append(
-        stepper({ label: 'Load', unit: spec.slot === 'db_pp_explosive' ? 'kg per hand' : 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? 0, onChange: (x) => (v.load = x), invalid: err !== undefined && v.load == null }).el,
+        stepper({ label: 'Load', unit: spec.slot === 'db_pp_explosive' ? 'kg per hand' : 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? range?.[0] ?? 0, ...loadLimits, onChange: (x) => (v.load = x), invalid: err !== undefined && (v.load == null || outOfRange(v.load)) }).el,
         stepper({ label: 'Sets done', value: v.sets ?? null, step: 1, start: spec.sets ?? 3, integer: true, onChange: (x) => (v.sets = x), invalid: err !== undefined && v.sets == null }).el,
         checkbox('A rep slowed and I cut a set short', v.cut ?? false, (x) => (v.cut = x)),
       );
       submit = () => {
         if (v.load == null) return fail('Enter the load.');
+        if (range && outOfRange(v.load)) return fail(rangeText(range));
         if (v.sets == null) return fail('Enter the sets done.');
         done([{ kind: 'explosive', slot: spec.slot, date: spec.date, load: v.load, sets_done: v.sets, cut: v.cut ?? false }]);
       };
@@ -604,13 +691,7 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
       break;
     }
     case 'fixed': {
-      if (spec.slot === 'rsi_ladder') {
-        fields.append(choices({ label: 'Winning drop height', options: LADDER_OPTIONS, value: (v.value as 20 | 30 | 40 | null) ?? null, onChange: (x) => (v.value = x), invalid: err !== undefined && v.value == null }), calculator('ladder', (x) => { v.value = x; ctx.rerender(); }));
-        submit = () => {
-          if (v.value == null) return fail('Choose the winning height.');
-          done([{ kind: 'fixed', slot: spec.slot, date: spec.date, done: true, value: v.value }, { kind: 'depth_jump_height', date: spec.date, height_cm: v.value }]);
-        };
-      } else if (spec.slot === 'depth_jump') {
+      if (spec.slot === 'depth_jump') {
         const s = stepper({ label: 'Reactive strength, optional', value: v.value ?? null, step: 0.05, start: 1.5, onChange: (x) => (v.value = x) });
         fields.append(s.el, calculator('rsi', (x) => { v.value = x; s.input.value = String(x); }));
         submit = () => done([{ kind: 'fixed', slot: spec.slot, date: spec.date, done: true, ...(v.value != null ? { value: v.value } : {}) }]);
@@ -668,7 +749,6 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
     const sr = skipRow(app, ctx, key, opts.onSkip);
     if (sr) out.push(sr);
   }
-  void isChange;
   return out;
 }
 
@@ -678,6 +758,20 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
 
 function itemHead(name: string, right?: Child): HTMLElement {
   return h('div', { class: 'title' }, h('h2', {}, name), right ? h('span', { class: 'meta' }, right) : null);
+}
+
+function chevron(): SVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('width', '20');
+  svg.setAttribute('height', '20');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'chev');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', 'M9 6l6 6-6 6');
+  svg.append(path);
+  return svg;
 }
 
 function mathsToggle(app: App, ctx: Ctx, key: string, step: ReplayStep): HTMLElement[] {
@@ -706,7 +800,7 @@ function loadTag(log: AnyLog): HTMLElement | null {
   return h('span', { class: 'tag warn' }, `Load ${d > 0 ? 'raised' : 'lowered'} ${kg(Math.abs(d))} kg`);
 }
 
-/** A logged item in live mode: one line of what was done and what it changed. */
+/** A logged item in a live session: one line of what was done and what it changed. */
 function doneItem(app: App, ctx: Ctx, name: string, step: ReplayStep, key: string, onChange: () => void): HTMLElement {
   const log = step.item.log;
   const skipped = log.kind === 'skip' || (log.kind === 'fixed' && !log.done);
@@ -724,8 +818,13 @@ function doneItem(app: App, ctx: Ctx, name: string, step: ReplayStep, key: strin
 
 const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj']);
 
-function stepsFor(ctx: Ctx, date: IsoDate, slot: string): ReplayStep[] {
-  return (ctx.history.byDate.get(date) ?? []).filter((s) => ROW_KINDS.has(s.item.log.kind) && slotOfLog(s.item.log) === slot);
+/** The live session's entries for a slot. */
+function stepsFor(live: LiveView, slot: string): ReplayStep[] {
+  return live.steps.filter((s) => ROW_KINDS.has(s.item.log.kind) && slotOfLog(s.item.log) === slot);
+}
+
+function itemLogged(live: LiveView, slot: string): boolean {
+  return stepsFor(live, slot).length > 0;
 }
 
 /** Actions to replace an existing item with new logs (the first replaces, the rest are added). */
@@ -737,7 +836,7 @@ function replaceActions(step: ReplayStep, logs: AnyLog[]): CorrectionAction[] {
 }
 
 // ---------------------------------------------------------------------
-// live mode
+// live session (§4.1) and the next session ready to start (§4.4)
 // ---------------------------------------------------------------------
 
 function singleCallout(app: App, ctx: Ctx, spec: Spec): HTMLElement | null {
@@ -751,11 +850,7 @@ function singleCallout(app: App, ctx: Ctx, spec: Spec): HTMLElement | null {
     'div',
     { class: 'callout warn' },
     h('div', {}, h('strong', {}, 'Test single suggested'), ` because ${why}. Work up to one clean rep with 2 left, log it, and today's sets are recomputed from it. Or skip it.`),
-    h(
-      'div',
-      { class: 'fields' },
-      stepper({ label: 'Single', unit: 'kg', value: v.single ?? null, step: 2.5, start: spec.load ?? 0, onChange: (x) => (v.single = x) }).el,
-    ),
+    h('div', { class: 'fields' }, stepper({ label: 'Single', unit: 'kg', value: v.single ?? null, step: 2.5, start: spec.load ?? 0, onChange: (x) => (v.single = x) }).el),
     h(
       'div',
       { class: 'row actions' },
@@ -823,13 +918,13 @@ interface LiveOpts {
   contrast?: { ticked: () => number };
 }
 
-function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}): HTMLElement {
-  const date = app.date;
+function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo: LiveOpts = {}): HTMLElement {
+  const date = live.date;
   const name = displayName(item.slot, ctx.config);
-  const key = `live|${date}|${item.slot}`;
-  const changeKey = `change|${date}|${item.slot}`;
-  const spec = specFromLive(item, date, ctx.config);
-  const mine = stepsFor(ctx, date, item.slot);
+  const key = `live|${live.key}|${item.slot}`;
+  const changeKey = `change|${live.key}|${item.slot}`;
+  const spec = specFromLive(item, date, ctx.config, ctx.boxCm);
+  const mine = stepsFor(live, item.slot);
   const last = mine[mine.length - 1];
 
   if (last && !app.open.has(changeKey)) {
@@ -876,7 +971,7 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}):
   }
   const single = spec.type === 'barbell' && !lo.contrast ? singleCallout(app, ctx, spec) : null;
   if (single) box.append(single);
-  if (spec.singleTaken) box.append(h('div', { class: 'callout info' }, "Single logged. Straight sets today from the new training max."));
+  if (spec.singleTaken) box.append(h('div', { class: 'callout info' }, 'Single logged. Straight sets today from the new training max.'));
   if (spec.forced) box.append(h('div', { class: 'callout info' }, 'Two sessions down in a row: light day, two sets.'));
   box.append(rxLine(spec));
   if (spec.type === 'slot' && spec.pending) box.append(h('div', { class: 'callout info' }, h('strong', {}, `Go ${spec.pending} ${spec.incText}`), ' this session. Log whatever you lift.'));
@@ -887,7 +982,7 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}):
     const label = spec.type === 'barbell' && spec.position !== undefined ? `Last ${POSITION_LABEL[spec.position].toLowerCase()}` : 'Last time';
     box.append(h('p', { class: 'last' }, `${label} (${prettyDate(prev.item.log.date)}): ${didText(prev.item.log, ctx.config)}`));
   }
-  const tk = `${date}|${item.slot}`;
+  const tk = `${live.key}|${item.slot}`;
   let earlier = 0;
   if (!lo.contrast) {
     const sr = setRows(app, ctx, spec, name, tk);
@@ -901,7 +996,6 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}):
     ...itemForm(app, ctx, spec, {
       key,
       submitLabel: spec.type === 'fixed' ? 'Done' : 'Log',
-      live: true,
       ...(lo.contrast ? { ticked: lo.contrast.ticked } : { ticksKey: tk, earlierSets: earlier, ticked: () => countTicks(app, tk) }),
       preview: spec.type === 'barbell',
       onSubmit: (logs) => ctx.logLive(logs, name),
@@ -911,28 +1005,31 @@ function liveItem(app: App, ctx: Ctx, item: SessionSlotItem, lo: LiveOpts = {}):
   return box;
 }
 
-function blockCard(app: App, ctx: Ctx, b: SessionBlock, index: number, render: (it: SessionSlotItem) => HTMLElement): HTMLElement {
+function kickerFor(b: SessionBlock, index: number): string {
+  if (b.contrast) return `Contrast: heavy set, then jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
+  if (b.superset) return 'Superset: alternate the two';
+  return `Block ${index}`;
+}
+
+function blockCard(b: SessionBlock, index: number, render: (it: SessionSlotItem) => HTMLElement): HTMLElement {
   const onlyWarmup = b.items.every((it) => it.kind === 'warmup');
   if (onlyWarmup) {
     return h('section', { class: 'card' }, ...b.items.map((it) => (it.kind === 'warmup' ? itemHead(WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' '), b.min !== undefined ? `${b.min} min` : undefined) : null)));
   }
-  let kicker = `Block ${index}`;
-  if (b.superset) kicker = 'Superset: alternate the two';
-  if (b.contrast) kicker = `Contrast pairs: heavy lift, then a jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
   return h(
     'section',
     { class: 'card focus' },
-    h('div', { class: 'head' }, h('span', { class: 'kicker' }, kicker), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, kickerFor(b, index)), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
     ...b.items.map((it) => (it.kind === 'warmup' ? h('p', { class: 'warm' }, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')) : render(it))),
   );
 }
 
-function cmjLive(app: App, ctx: Ctx, date: IsoDate): HTMLElement {
-  const fake: SessionSlotItem = { kind: 'slot', slot: 'cmj', cls: 'E', name: 'Jump test', log_kind: 'fixed', template: {}, prescription: { kind: 'fixed', slot: 'cmj', cls: 'E', name: 'Jump test', text: '', notes: [] } };
-  const mine = stepsFor(ctx, date, 'cmj');
+function cmjLive(app: App, ctx: Ctx, live: LiveView): HTMLElement {
+  const date = live.date;
+  const mine = stepsFor(live, 'cmj');
   const last = mine[mine.length - 1];
-  const key = `live|${date}|cmj`;
-  const changeKey = `change|${date}|cmj`;
+  const key = `live|${live.key}|cmj`;
+  const changeKey = `change|${live.key}|cmj`;
   if (last && !app.open.has(changeKey)) return h('section', { class: 'card' }, doneItem(app, ctx, 'Jump test', last, key, () => { app.open.add(changeKey); ctx.rerender(); }));
   const spec: Spec = { slot: 'cmj', type: 'cmj', date, load: null };
   const box = h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', 'before the warm-up'), h('p', { class: 'sub' }, instruction(spec))));
@@ -954,21 +1051,14 @@ function cmjLive(app: App, ctx: Ctx, date: IsoDate): HTMLElement {
       onSkip: (reason) => ctx.logLive([{ kind: 'skip', slot: 'cmj', date, ...(reason ? { reason } : {}) }], 'Jump test skipped'),
     }));
   }
-  void fake;
   return box;
 }
 
-function kickerFor(b: SessionBlock, index: number): string {
-  if (b.contrast) return `Contrast: heavy set, then jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
-  if (b.superset) return 'Superset: alternate the two';
-  return `Block ${index}`;
-}
-
 /** §14.8: a contrast block as a grid of rounds, one tick per item, then each item logs once. */
-function contrastBlock(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElement {
+function contrastBlock(app: App, ctx: Ctx, live: LiveView, b: SessionBlock, index: number): HTMLElement {
   const items = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot');
   const [lo, hi] = Array.isArray(b.rounds) ? b.rounds : [b.rounds ?? 3, b.rounds ?? 3];
-  const gk = `${app.date}|b${index}`;
+  const gk = `${live.key}|b${index}`;
   const grid = h('div', { class: 'grid' });
   for (let r = 0; r < hi; r++) {
     const row = h('div', { class: 'grid-row' }, h('span', { class: 'lab' }, `Round ${r + 1}${r + 1 > lo ? ' (optional)' : ''}`));
@@ -983,8 +1073,8 @@ function contrastBlock(app: App, ctx: Ctx, b: SessionBlock, index: number): HTML
   const cols = items.length;
   // A test single comes before the rounds, so its callout sits above the grid.
   const lift = items.find((it) => it.prescription.kind === 'lift');
-  const liftLogged = lift ? itemLogged(ctx, app.date, lift.slot) : true;
-  const single = lift && !liftLogged ? singleCallout(app, ctx, specFromLive(lift, app.date, ctx.config)) : null;
+  const liftLogged = lift ? itemLogged(live, lift.slot) : true;
+  const single = lift && !liftLogged ? singleCallout(app, ctx, specFromLive(lift, live.date, ctx.config)) : null;
   return h(
     'section',
     { class: 'card focus' },
@@ -992,18 +1082,14 @@ function contrastBlock(app: App, ctx: Ctx, b: SessionBlock, index: number): HTML
     single,
     h('p', { class: 'sub' }, `Tick each item as you finish it in a round. Stop after round ${lo} or go to ${hi}; then log each item once below.`),
     grid,
-    ...items.map((it, i) => liveItem(app, ctx, it, { contrast: { ticked: () => countTicks(app, gk, (k) => k % cols === i) } })),
+    ...items.map((it, i) => liveItem(app, ctx, live, it, { contrast: { ticked: () => countTicks(app, gk, (k) => k % cols === i) } })),
   );
 }
 
-function itemLogged(ctx: Ctx, date: IsoDate, slot: string): boolean {
-  return stepsFor(ctx, date, slot).length > 0;
-}
-
 /** A finished block, one line per item (§14.1). Tapping opens it. */
-function doneCard(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLElement {
+function doneCard(ctx: Ctx, live: LiveView, b: SessionBlock, index: number): HTMLElement {
   const rows = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot').map((it) => {
-    const steps = stepsFor(ctx, app.date, it.slot);
+    const steps = stepsFor(live, it.slot);
     const st = steps[steps.length - 1]!;
     const log = st.item.log;
     const skipped = log.kind === 'skip' || (log.kind === 'fixed' && !log.done);
@@ -1019,17 +1105,83 @@ function doneCard(app: App, ctx: Ctx, b: SessionBlock, index: number): HTMLEleme
 }
 
 /** A block still to come, with each item's plan (§14.1). Tapping opens it. */
-function nextCard(app: App, ctx: Ctx, b: SessionBlock, index: number, plan: Map<string, PlanItem>): HTMLElement {
+function nextCard(ctx: Ctx, live: LiveView, b: SessionBlock, index: number, plan: Map<string, PlanItem>): HTMLElement {
   const rows = b.items.filter((it): it is SessionSlotItem => it.kind === 'slot').map((it) => {
     const p = plan.get(it.slot);
-    const logged = itemLogged(ctx, app.date, it.slot);
-    return h('div', { class: 'line' }, h('span', { class: 'mark', 'aria-hidden': 'true' }, logged ? '✓' : ''), h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, p ? plannedText(p) : ''));
+    const logged = itemLogged(live, it.slot);
+    return h('div', { class: 'line' }, h('span', { class: 'mark', 'aria-hidden': 'true' }, logged ? '✓' : ''), h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, p ? planLine(p, ctx.boxCm) : ''));
   });
   return h(
     'section',
     { class: 'card compact-card next-card', role: 'button', tabindex: '0', 'aria-label': `${kickerFor(b, index)}. Open.`, onclick: () => ctx.focusBlock(index) },
     h('div', { class: 'head' }, h('span', { class: 'kicker' }, `Up next · ${kickerFor(b, index)}`), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
     ...rows,
+  );
+}
+
+/** §14.1: one block open; done blocks one line per item; later blocks as "Up next". */
+function liveBody(app: App, ctx: Ctx, live: LiveView, s: Session): HTMLElement[] {
+  const out: HTMLElement[] = [];
+  const plan = new Map(planSnapshot(s, ctx.config).items.map((i) => [i.slot, i] as const));
+  const slotsOf = (b: SessionBlock) => b.items.filter((it): it is SessionSlotItem => it.kind === 'slot');
+  const blockDone = (b: SessionBlock) => slotsOf(b).length > 0 && slotsOf(b).every((it) => itemLogged(live, it.slot));
+  const hasCmj = s.pre.includes('cmj');
+  const cmjDone = itemLogged(live, 'cmj');
+  // 0 = the jump test, 1..n = a block, -1 = everything logged.
+  let focus: number;
+  if (app.focus && app.focus.key === live.key) focus = app.focus.block;
+  else if (hasCmj && !cmjDone) focus = 0;
+  else {
+    const i = s.blocks.findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
+    focus = i === -1 ? -1 : i + 1;
+  }
+  if (hasCmj) out.push(cmjLive(app, ctx, live));
+  s.blocks.forEach((b, i) => {
+    const index = i + 1;
+    if (slotsOf(b).length === 0) {
+      out.push(blockCard(b, index, () => h('div')));
+      return;
+    }
+    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, live, b, index) : blockCard(b, index, (it) => liveItem(app, ctx, live, it)));
+    else if (blockDone(b)) out.push(doneCard(ctx, live, b, index));
+    else out.push(nextCard(ctx, live, b, index, plan));
+  });
+  return out;
+}
+
+/** §4.4: the next session, read-only, after a session has finished today. */
+function nextReadOnly(ctx: Ctx, s: Session): HTMLElement[] {
+  const snap = planSnapshot(s, ctx.config);
+  const out: HTMLElement[] = [];
+  const rows: HTMLElement[] = [];
+  if (s.pre.includes('cmj')) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, 'Jump test'), h('span', { class: 'dt' }, 'Before the warm-up')));
+  for (const it of snap.items) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, planLine(it, ctx.boxCm))));
+  out.push(h('div', { class: 'plan-lines' }, ...rows));
+  return out;
+}
+
+// ---------------------------------------------------------------------
+// Today (§3)
+// ---------------------------------------------------------------------
+
+function weekTypeOfSession(s: SessionResult | undefined): string | undefined {
+  if (!s || s.kind !== 'session') return undefined;
+  const lift = s.blocks.flatMap((b) => b.items).find((it): it is SessionSlotItem => it.kind === 'slot' && it.prescription.kind === 'lift');
+  return lift && lift.prescription.kind === 'lift' && lift.prescription.position !== undefined ? POSITION_LABEL[lift.prescription.position] : undefined;
+}
+
+/** §9: the unfinished-session card. */
+function unfinishedCard(ctx: Ctx, u: NonNullable<Ctx['unfinished']>): HTMLElement {
+  const g = u.group;
+  const at = g.start && g.start.item.log.kind === 'session_start' ? clockTime(g.start.item.log.at) : undefined;
+  const day = g.day !== undefined ? `Day ${g.day}` : 'session';
+  return h(
+    'section',
+    { class: 'card attention unfinished' },
+    h('h2', {}, `${prettyDate(g.date)}'s ${day} isn't finished`),
+    h('p', { class: 'sub' }, `${countsText(u.view.counts)}${at ? ` · started ${at}` : ''}. Carry on to log the rest into ${weekdayName(g.date)}'s session, or close it.`),
+    h('div', { class: 'row actions' }, h('button', { type: 'button', class: 'primary', onclick: ctx.carryOn }, 'Carry on'), h('button', { type: 'button', onclick: ctx.closeIt }, 'Close it')),
+    h('p', { class: 'sub' }, 'Carry on is open until the end of today.'),
   );
 }
 
@@ -1095,111 +1247,218 @@ function tissueCard(app: App, ctx: Ctx): HTMLElement | null {
   );
 }
 
-/** §14.1: one block open; done blocks one line per item; later blocks as "Up next". */
-function liveBody(app: App, ctx: Ctx, s: Session): HTMLElement[] {
-  const out: HTMLElement[] = [];
-  const tc = tissueCard(app, ctx);
-  if (tc) out.push(tc);
-  const plan = new Map(planSnapshot(s, ctx.config).items.map((i) => [i.slot, i] as const));
-  const slotsOf = (b: SessionBlock) => b.items.filter((it): it is SessionSlotItem => it.kind === 'slot');
-  const blockDone = (b: SessionBlock) => slotsOf(b).length > 0 && slotsOf(b).every((it) => itemLogged(ctx, s.date, it.slot));
-  const hasCmj = s.pre.includes('cmj');
-  const cmjDone = itemLogged(ctx, s.date, 'cmj');
-  // 0 = the jump test, 1..n = a block, -1 = everything logged.
-  let focus: number;
-  if (app.focus && app.focus.date === s.date) focus = app.focus.block;
-  else if (hasCmj && !cmjDone) focus = 0;
-  else {
-    const i = s.blocks.findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
-    focus = i === -1 ? -1 : i + 1;
-  }
-  if (hasCmj) out.push(cmjLive(app, ctx, s.date));
-  s.blocks.forEach((b, i) => {
-    const index = i + 1;
-    if (slotsOf(b).length === 0) {
-      out.push(blockCard(app, ctx, b, index, () => h('div')));
-      return;
-    }
-    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, b, index) : blockCard(app, ctx, b, index, (it) => liveItem(app, ctx, it)));
-    else if (blockDone(b)) out.push(doneCard(app, ctx, b, index));
-    else out.push(nextCard(app, ctx, b, index, plan));
-  });
-  return out;
+function sessionLabel(ctx: Ctx, g: SessionGroup): string {
+  const v = ctx.recordOf(g);
+  if (!v.plan) return `${g.steps.filter((s) => ROW_KINDS.has(s.item.log.kind)).length} logged`;
+  return `Day ${v.day} · ${countsText(v.counts)}`;
 }
 
-// ---------------------------------------------------------------------
-// preview mode (future dates)
-// ---------------------------------------------------------------------
+function sessionTags(ctx: Ctx, g: SessionGroup): HTMLElement[] {
+  const v = ctx.recordOf(g);
+  const tags: HTMLElement[] = [];
+  if (ctx.isOpen(g)) tags.push(h('span', { class: 'tag warn' }, 'Not finished'));
+  if (v.rows.some((r) => r.twice)) tags.push(h('span', { class: 'tag' }, 'Logged twice'));
+  return tags;
+}
 
-function previewBody(app: App, ctx: Ctx, s: Session): HTMLElement[] {
-  const snap = planSnapshot(s, ctx.config);
-  const byBlock = new Map<number, PlanItem[]>();
-  for (const it of snap.items) {
-    if (!byBlock.has(it.block)) byBlock.set(it.block, []);
-    byBlock.get(it.block)!.push(it);
-  }
-  const out: HTMLElement[] = [];
-  if (s.pre.includes('cmj')) out.push(h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', 'before the warm-up'))));
-  s.blocks.forEach((b, i) => {
-    const items = byBlock.get(i + 1) ?? [];
-    if (!items.length) {
-      out.push(h('section', { class: 'card' }, ...b.items.map((it) => (it.kind === 'warmup' ? itemHead(WARMUP_NAMES[it.name] ?? it.name, b.min !== undefined ? `${b.min} min` : undefined) : null))));
-      return;
+/** §11: one row per session; tapping opens its record. */
+function sessionRow(ctx: Ctx, g: SessionGroup): HTMLElement {
+  const tags = sessionTags(ctx, g);
+  return h(
+    'button',
+    { type: 'button', class: 'session-row', onclick: () => ctx.openRecord(g.id) },
+    h('span', { class: 'txt' }, h('span', { class: 'd' }, prettyDate(g.date)), h('span', { class: 'muted' }, sessionLabel(ctx, g))),
+    tags.length ? h('span', { class: 'tags' }, ...tags) : null,
+    chevron(),
+  );
+}
+
+/** §11: History, grouped by programme week, then Add a missed session. */
+function historySection(app: App, ctx: Ctx): HTMLElement[] {
+  const out: HTMLElement[] = [h('h2', { class: 'section-title' }, 'History')];
+  const { lines, more } = historyLines(ctx.sessions, ctx.config, app.today, app.showEarlier ? undefined : 4);
+  if (!lines.length) out.push(h('p', { class: 'sub' }, 'No sessions yet.'));
+  for (const line of lines) {
+    const t = historyLineText(line);
+    if (line.kind === 'empty') {
+      out.push(h('div', { class: 'hist-empty' }, t.left));
+      continue;
     }
     out.push(
       h(
         'section',
-        { class: 'card' },
-        h('div', { class: 'head' }, h('span', { class: 'kicker' }, b.superset ? 'Superset: alternate the two' : `Block ${i + 1}`), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
-        ...items.map((it) => h('div', { class: 'item compact' }, itemHead(displayName(it.slot, ctx.config)), h('p', { class: 'planned' }, plannedText(it)))),
+        { class: 'card hist-week' },
+        h('div', { class: 'week-head' }, h('span', {}, t.left), h('span', { class: 'muted' }, t.right)),
+        ...line.sessions.map((g) => sessionRow(ctx, g)),
       ),
     );
-  });
-  void app;
+  }
+  if (more && !app.showEarlier) out.push(h('button', { type: 'button', class: 'subtle wide', onclick: ctx.showEarlier }, 'Show earlier weeks'));
+  out.push(h('button', { type: 'button', class: 'outline wide', onclick: ctx.openAdd }, 'Add a missed session'));
   return out;
 }
 
+/** §3 item 8: one row, opening the blocks with their dates. */
+function planCard(app: App, ctx: Ctx): HTMLElement {
+  const cfg = ctx.config;
+  const current = mesocycleOn(cfg, app.today);
+  const fs = app.state.lifts.front_squat.next_position;
+  const dl = app.state.lifts.deadlift.next_position;
+  return h(
+    'details',
+    { class: 'card hist plan' },
+    h('summary', {}, h('span', {}, 'Plan'), h('span', { class: 'muted plan-where' }, blockWeekText(cfg, app.today))),
+    h('p', { class: 'plan-now' }, `Week ${programmeWeek(cfg, app.today)} of the programme. Next front squat: ${POSITION_LABEL[fs].toLowerCase()}. Next deadlift: ${POSITION_LABEL[dl].toLowerCase()}.`),
+    h(
+      'ul',
+      { class: 'blocks' },
+      ...cfg.mesocycles.map((m) =>
+        h('li', { class: current?.id === m.id ? 'now' : '' }, h('span', { class: 'd' }, `${prettyDate(m.start)} to ${prettyDate(m.end)}`), h('span', {}, BLOCK_LABEL[m.id]), current?.id === m.id ? h('span', { class: 'now-tag' }, 'Now') : null),
+      ),
+    ),
+  );
+}
+
+function statusLine(ctx: Ctx, app: App): string {
+  const live = ctx.live;
+  if (ctx.todayState === 'live' && live) {
+    const g = live.group;
+    const at = g?.start && g.start.item.log.kind === 'session_start' ? clockTime(g.start.item.log.at) : undefined;
+    // The week type as planned when the session started; logging the lift moves the prescription on.
+    const wt = (g ? weekTypeOf(ctx.recordOf(g).plan) : undefined) ?? weekTypeOfSession(live.session);
+    const head = live.carried ? `${prettyDate(live.date)}'s session, carried on` : "Today's session";
+    return [head, `Day ${live.day}`, wt, at ? `started ${at}` : ''].filter(Boolean).join(' · ');
+  }
+  if (ctx.todayState === 'done' && ctx.doneToday) {
+    const v = ctx.doneToday.view;
+    return ['Done today', v.day !== undefined ? `Day ${v.day}` : '', v.minutes !== undefined ? `${v.minutes} min` : ''].filter(Boolean).join(' · ');
+  }
+  const last = [...ctx.sessions].filter((g) => g.date <= app.today).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).at(-1);
+  if (!last) return 'No sessions yet.';
+  return `No session today. Last session: ${last.day !== undefined ? `Day ${last.day} on ` : ''}${prettyDate(last.date)}.`;
+}
+
+function daySwitch(ctx: Ctx, day: SessionDay): HTMLElement {
+  return h('div', { class: 'seg', role: 'group', 'aria-label': 'Day' }, ...([1, 2] as SessionDay[]).map((d) => h('button', { type: 'button', class: day === d ? 'on' : '', 'aria-pressed': String(day === d), onclick: () => ctx.setDay(d) }, `Day ${d}`)));
+}
+
+function todayScreen(app: App, ctx: Ctx, appVersion: string): { body: Child[]; bar: HTMLElement | null } {
+  const cfg = ctx.config;
+  const body: Child[] = [];
+  body.push(h('div', { class: 'top' }, h('h1', {}, 'Acro S&C'), h('span', { class: 'grow' }), backupPill(app), h('button', { type: 'button', class: 'quiet', onclick: ctx.openExport }, 'Backup')));
+  body.push(h('div', { class: 'dateline' }, h('div', { class: 'today-date' }, prettyDate(app.today, true)), h('div', { class: 'muted' }, weekLine(cfg, app.today))));
+  body.push(
+    h(
+      'div',
+      { class: 'tms' },
+      ...(['front_squat', 'deadlift'] as LiftId[]).map((id) => h('button', { type: 'button', class: 'chip', onclick: () => ctx.openTm(id) }, h('span', { class: 'lab' }, `${displayName(id, cfg)} max`), h('b', {}, `${app.state.lifts[id].tm.toFixed(1)} kg`))),
+    ),
+  );
+  if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
+  // §3: at most one attention card; an unfinished session first.
+  const attention = ctx.unfinished ? unfinishedCard(ctx, ctx.unfinished) : tissueCard(app, ctx);
+  if (attention) body.push(attention);
+  body.push(h('p', { class: 'status-line' }, statusLine(ctx, app)));
+
+  const live = ctx.live;
+  const s = live?.session;
+  if (ctx.todayState === 'live' && live && s) {
+    if (s.kind !== 'session') body.push(h('p', { class: 'refer' }, `No session for this date. ${s.reason}`));
+    else body.push(...liveBody(app, ctx, live, s));
+  } else if (ctx.todayState === 'blocked' && live) {
+    const u = ctx.unfinished!.group;
+    body.push(h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session'), h('h2', { class: 'muted' }, `Day ${live.day}`), h('p', { class: 'sub' }, `Ready once ${weekdayName(u.date)}'s session is finished or closed.`)));
+  } else if (ctx.todayState === 'done' && ctx.doneToday && live && s) {
+    const g = ctx.doneToday.group;
+    body.push(h('section', { class: 'card hist-week' }, sessionRow(ctx, g)));
+    const head = h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session · loads assume your training maxes hold'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · about ${s.target_min} min` : ''}`));
+    if (s.kind === 'session') head.append(...nextReadOnly(ctx, s));
+    head.append(h('div', { class: 'row actions' }, h('button', { type: 'button', onclick: ctx.startToday }, 'Start it today')));
+    body.push(head);
+  } else if (live && s) {
+    const rotation = defaultDay(app.state);
+    const line = live.day === rotation
+      ? `Day ${rotation} is next in your rotation. Logging the first item starts the session and fixes the day.`
+      : `You've chosen Day ${live.day}. Day ${rotation} is next in your rotation.`;
+    body.push(h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · about ${s.target_min} min` : ''}`), daySwitch(ctx, live.day), h('p', { class: 'sub' }, line)));
+    if (s.kind !== 'session') body.push(h('p', { class: 'refer' }, `No session for this date. ${s.reason}`));
+    else body.push(...liveBody(app, ctx, live, s));
+  }
+
+  body.push(...historySection(app, ctx));
+  body.push(planCard(app, ctx));
+  body.push(h('p', { class: 'foot backup-status' }, app.backup.status));
+  body.push(h('p', { class: 'foot' }, `Acro Base S&C · v${appVersion}`));
+
+  const bar = ctx.todayState === 'live' ? h('div', { class: 'end' }, h('button', { type: 'button', class: 'primary', onclick: ctx.finish }, 'Finish session')) : null;
+  return { body, bar };
+}
+
 // ---------------------------------------------------------------------
-// record and edit modes (past dates)
+// a record (§4.2) and Edit (§4.3)
 // ---------------------------------------------------------------------
 
 function statusChip(row: RecordRow, draft?: Draft): HTMLElement {
   if (draft) return h('span', { class: 'status pending' }, draft.after === null ? 'Will be removed' : 'Change pending');
   if (row.status === 'done') return h('span', { class: 'status ok' }, 'Done');
   if (row.status === 'skipped') return h('span', { class: 'status skip' }, 'Skipped');
-  return h('span', { class: 'status none' }, 'Not logged');
+  return h('span', { class: 'status none' }, 'Not recorded');
 }
 
-function recordRow(app: App, ctx: Ctx, view: RecordView, row: RecordRow, editing: boolean): HTMLElement {
+function rowTags(row: RecordRow): (HTMLElement | null)[] {
+  if (!row.step) return [];
+  return [
+    loadTag(row.step.item.log),
+    ...correctedTags(row.step),
+    row.twice ? h('span', { class: 'tag' }, 'Logged twice') : null,
+    row.viaLadder ? h('span', { class: 'tag' }, 'Logged on the ladder item') : null,
+  ];
+}
+
+/** A done or skipped item in a record: planned against done, and what it changed. */
+function recordItem(app: App, ctx: Ctx, view: RecordView, row: RecordRow): HTMLElement {
   const name = displayName(row.item.slot, ctx.config);
   const key = `rec|${view.date}|${row.item.slot}`;
-  const draft = editing ? app.editing?.drafts.find((d) => d.slot === row.item.slot) : undefined;
+  const box = h('div', { class: `item rec st-${row.status}` }, itemHead(name, statusChip(row)));
+  const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)));
+  const log = row.step!.item.log;
+  const skipped = row.status === 'skipped';
+  const did = h('div', {}, h('span', { class: 'lab' }, skipped ? 'Recorded' : 'You did'), h('span', {}, skipped && log.kind === 'skip' ? `Skipped${log.reason ? ` · ${SKIP_LABEL[log.reason]}` : ''}` : didText(log, ctx.config)));
+  box.append(h('div', { class: 'pvd' }, planned, did));
+  if (row.single) box.append(h('p', { class: 'outcome' }, `${didText(row.single.item.log, ctx.config)}. ${outcomeLine(row.single, ctx.config)}`));
+  const line = outcomeLine(row.step!, ctx.config);
+  if (line) box.append(h('p', { class: 'outcome' }, line));
+  box.append(h('div', { class: 'tags' }, ...rowTags(row)));
+  box.append(h('div', { class: 'row tight' }, ...mathsToggle(app, ctx, `maths|${key}`, row.step!)));
+  return box;
+}
+
+/** An item in Edit or in Add a missed session, with its controls. */
+function editRow(app: App, ctx: Ctx, date: IsoDate, row: RecordRow, drafts: Draft[], locked: boolean): HTMLElement {
+  const name = displayName(row.item.slot, ctx.config);
+  const draft = drafts.find((d) => d.slot === row.item.slot);
   const box = h('div', { class: `item rec st-${row.status}` }, itemHead(name, statusChip(row, draft)));
   const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)));
   if (row.step) {
-    const log = row.step.item.log;
-    const did = h('div', {}, h('span', { class: 'lab' }, row.status === 'skipped' ? 'Recorded' : 'You did'), h('span', {}, didText(log, ctx.config)));
-    box.append(h('div', { class: 'pvd' }, planned, did));
-    if (row.single) box.append(h('p', { class: 'outcome' }, `${didText(row.single.item.log, ctx.config)}. ${outcomeLine(row.single, ctx.config)}`));
-    const line = outcomeLine(row.step, ctx.config);
-    if (line) box.append(h('p', { class: 'outcome' }, line));
-    const tags = [loadTag(log), ...correctedTags(row.step), row.twice ? h('span', { class: 'tag' }, 'Logged more than once; the last one counts') : null];
-    box.append(h('div', { class: 'tags' }, ...tags));
-    if (!editing) box.append(h('div', { class: 'row tight' }, ...mathsToggle(app, ctx, `maths|${key}`, row.step)));
+    const did = h('div', {}, h('span', { class: 'lab' }, row.status === 'skipped' ? 'Recorded' : 'You did'), h('span', {}, didText(row.step.item.log, ctx.config)));
+    box.append(h('div', { class: 'pvd' }, planned, did), h('div', { class: 'tags' }, ...rowTags(row)));
   } else {
     box.append(h('div', { class: 'pvd' }, planned));
   }
-  if (!editing) return box;
-
-  // Edit mode controls.
+  if (locked) return box;
   if (draft) {
     box.append(h('p', { class: 'pending-text' }, draft.after === null ? 'This entry will be removed.' : `Will read: ${didText(draft.after, ctx.config)}`));
     box.append(h('div', { class: 'row tight' }, h('button', { type: 'button', class: 'quiet', onclick: () => ctx.dropDraft(row.item.slot) }, 'Undo this change')));
     return box;
   }
-  const formKey = `edit|${view.date}|${row.item.slot}`;
-  const spec = specFromPlan(row.item, view.date, ctx.config);
+  const formKey = `edit|${date}|${row.item.slot}`;
+  const spec = specFromPlan(row.item, date, ctx.config);
   const step = row.step;
+  const skipTo = (reason?: SkipReason) => {
+    app.open.delete(formKey);
+    const entry: AnyLog = { kind: 'skip', slot: row.item.slot, date, ...(reason ? { reason } : {}) };
+    ctx.setDraft({ slot: row.item.slot, actions: step ? [{ op: 'replace', target: step.item.origin, entry }] : [{ op: 'insert', entry }], after: entry });
+  };
   if (app.open.has(formKey)) {
     box.classList.add('editing');
     box.append(
@@ -1211,11 +1470,7 @@ function recordRow(app: App, ctx: Ctx, view: RecordView, row: RecordRow, editing
           app.open.delete(formKey);
           ctx.setDraft({ slot: row.item.slot, actions: step ? replaceActions(step, logs) : logs.map((l) => ({ op: 'insert' as const, entry: l })), after: logs[0]! });
         },
-        onSkip: (reason) => {
-          app.open.delete(formKey);
-          const entry: AnyLog = { kind: 'skip', slot: row.item.slot, date: view.date, ...(reason ? { reason } : {}) };
-          ctx.setDraft({ slot: row.item.slot, actions: step ? [{ op: 'replace', target: step.item.origin, entry }] : [{ op: 'insert', entry }], after: entry });
-        },
+        onSkip: skipTo,
         onCancel: () => {
           app.open.delete(formKey);
           ctx.rerender();
@@ -1231,75 +1486,172 @@ function recordRow(app: App, ctx: Ctx, view: RecordView, row: RecordRow, editing
       h('button', { type: 'button', class: 'subtle danger-text', onclick: () => ctx.setDraft({ slot: row.item.slot, actions: [{ op: 'remove', target: step.item.origin }], after: null }) }, 'Remove'),
     );
   } else {
+    const skipKey = `editskip|${date}|${row.item.slot}`;
     buttons.append(
       h('button', { type: 'button', onclick: () => { app.open.add(formKey); ctx.rerender(); } }, 'Add'),
-      h('button', { type: 'button', onclick: () => {
-        const entry: AnyLog = { kind: 'skip', slot: row.item.slot, date: view.date };
-        ctx.setDraft({ slot: row.item.slot, actions: [{ op: 'insert', entry }], after: entry });
-      } }, 'Mark skipped'),
+      h('button', { type: 'button', onclick: () => { app.skipOpen = app.skipOpen === skipKey ? null : skipKey; ctx.rerender(); } }, 'Skip'),
     );
+    box.append(buttons);
+    const sr = skipRow(app, ctx, skipKey, skipTo);
+    if (sr) box.append(sr);
+    return box;
   }
   box.append(buttons);
   return box;
 }
 
-function recordBody(app: App, ctx: Ctx, view: RecordView, editing: boolean): HTMLElement[] {
-  const out: HTMLElement[] = [];
-  if (!view.plan) {
-    out.push(
+function recordHeader(ctx: Ctx, group: SessionGroup, view: RecordView, open: boolean): Child[] {
+  const target = view.plan?.target_min;
+  const status = ['Record', view.day !== undefined ? `Day ${view.day}` : '', weekTypeOf(view.plan) ?? '', target ? `about ${target} min` : ''].filter(Boolean).join(' · ');
+  const counts = [view.plan ? countsText(view.counts) : '', view.minutes !== undefined ? `${view.minutes} min` : ''].filter(Boolean).join(' · ');
+  return [
+    h('button', { type: 'button', class: 'back', onclick: ctx.goToday }, '‹ Today'),
+    h('h1', { class: 'rec-title' }, prettyDate(group.date, true)),
+    h('p', { class: 'status-line' }, status),
+    h('p', { class: 'muted rec-week' }, weekLine(ctx.config, group.date)),
+    open ? h('div', { class: 'tags' }, h('span', { class: 'tag warn' }, 'Not finished')) : null,
+    view.plan ? h('div', { class: 'rec-head' }, h('span', {}, counts), h('span', { class: 'muted' }, view.source === 'snapshot' ? 'Plan as shown on the day' : 'Plan rebuilt from your log')) : null,
+  ];
+}
+
+function alsoLogged(ctx: Ctx, view: RecordView): HTMLElement | null {
+  if (!view.extras.length) return null;
+  return h(
+    'section',
+    { class: 'card' },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Also logged')),
+    ...view.extras.map((s) => {
+      const line = outcomeLine(s, ctx.config);
+      const slot = slotOfLog(s.item.log);
+      const title = s.item.log.kind === 'tm_override' && slot ? `${displayName(slot, ctx.config)} max` : slot ? displayName(slot, ctx.config) : didText(s.item.log, ctx.config);
+      return h('div', { class: 'item compact' }, itemHead(title), h('p', { class: line ? 'outcome' : 'did' }, line || didText(s.item.log, ctx.config)), h('div', { class: 'tags' }, ...correctedTags(s)));
+    }),
+  );
+}
+
+function recordScreen(app: App, ctx: Ctx): { body: Child[]; bar: HTMLElement | null } {
+  const r = ctx.record!;
+  const { group, view } = r;
+  const body: Child[] = [...recordHeader(ctx, group, view, r.open)];
+  if (!ctx.history.ok) body.push(h('div', { class: 'mode warn' }, "Your history can't be replayed, so corrections are off and the record shows the summaries saved at the time. Refer to the project."));
+  if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
+  const recorded = view.rows.filter((x) => x.status !== 'not_logged');
+  const byBlock = new Map<number, RecordRow[]>();
+  for (const row of recorded) byBlock.set(row.item.block, [...(byBlock.get(row.item.block) ?? []), row]);
+  for (const [, rows] of [...byBlock.entries()].sort((a, b) => a[0] - b[0])) body.push(h('section', { class: 'card' }, ...rows.map((row) => recordItem(app, ctx, view, row))));
+  const missing = view.rows.filter((x) => x.status === 'not_logged');
+  if (missing.length) {
+    body.push(
       h(
         'section',
-        { class: 'card empty' },
-        h('h2', {}, `Nothing logged on ${prettyDate(view.date)}`),
-        h('p', { class: 'sub' }, editing ? 'Choose the day above, then add what you did.' : 'Rest day, or a session that was never logged.'),
+        { class: 'card not-recorded' },
+        h('h2', {}, `Not recorded (${missing.length})`),
+        group.date < RELEASE_1 ? h('p', { class: 'sub' }, 'Logged before the app could record a skip. Use Edit to add or skip them; skipping moves nothing.') : null,
+        ...missing.map((row) => h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(row.item.slot, ctx.config)), h('span', { class: 'dt' }, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)))),
       ),
     );
-    if (!editing) return out;
   }
-  if (view.plan) {
-    const summary = [`${view.counts.done} of ${view.counts.planned} logged`];
-    if (view.counts.skipped) summary.push(`${view.counts.skipped} skipped`);
-    if (view.minutes !== undefined) summary.push(`${view.minutes} min`);
-    out.push(
-      h(
-        'div',
-        { class: 'rec-head' },
-        h('span', {}, summary.join(' · ')),
-        h('span', { class: 'muted' }, view.source === 'snapshot' ? 'Plan as shown on the day' : 'Plan rebuilt from your log'),
-      ),
-    );
-    const byBlock = new Map<number, RecordRow[]>();
-    for (const r of view.rows) {
-      if (!byBlock.has(r.item.block)) byBlock.set(r.item.block, []);
-      byBlock.get(r.item.block)!.push(r);
+  const also = alsoLogged(ctx, view);
+  if (also) body.push(also);
+  const bar = ctx.history.ok ? h('div', { class: 'end' }, h('button', { type: 'button', class: 'primary', onclick: ctx.startEdit }, 'Edit session')) : null;
+  return { body, bar };
+}
+
+function editScreen(app: App, ctx: Ctx, drafts: Draft[]): { body: Child[]; bar: HTMLElement | null } {
+  const r = ctx.record!;
+  const { group, view } = r;
+  const removing = drafts.some((d) => d.slot === WHOLE_SESSION);
+  const body: Child[] = [...recordHeader(ctx, group, view, r.open)];
+  body.push(h('div', { class: 'mode edit' }, `Editing ${prettyDate(group.date)}. Nothing is saved until you review the changes.`));
+  if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
+  if (removing) body.push(h('div', { class: 'callout warn' }, h('strong', {}, 'This session will be removed'), ' when you save. Every entry in it is taken out of the replay; nothing else is touched.', h('div', { class: 'row' }, h('button', { type: 'button', onclick: () => ctx.dropDraft(WHOLE_SESSION) }, 'Undo this change'))));
+  const byBlock = new Map<number, RecordRow[]>();
+  for (const row of view.rows) byBlock.set(row.item.block, [...(byBlock.get(row.item.block) ?? []), row]);
+  for (const [, rows] of [...byBlock.entries()].sort((a, b) => a[0] - b[0])) body.push(h('section', { class: 'card' }, ...rows.map((row) => editRow(app, ctx, group.date, row, drafts, removing))));
+  const also = alsoLogged(ctx, view);
+  if (also) body.push(also);
+  if (!removing) body.push(h('button', { type: 'button', class: 'subtle danger-text wide', onclick: ctx.removeSession }, 'Remove this session'));
+  const n = drafts.length;
+  const bar = h('div', { class: 'end two' }, h('button', { type: 'button', class: 'primary', onclick: ctx.reviewEdit }, n ? `Review changes (${n})` : 'Review changes'), h('button', { type: 'button', onclick: ctx.cancelEdit }, 'Cancel'));
+  return { body, bar };
+}
+
+// ---------------------------------------------------------------------
+// Add a missed session (§11A)
+// ---------------------------------------------------------------------
+
+/** §5.8: a button showing the date written out; the phone's own picker opens on tap. */
+function dateButton(value: IsoDate, min: IsoDate, max: IsoDate, onPick: (date: string) => void): HTMLElement {
+  const input = h('input', { type: 'date', min, max, class: 'date-native', 'aria-label': 'When did you train?' });
+  input.value = value;
+  input.addEventListener('change', () => onPick(input.value));
+  input.addEventListener('click', () => {
+    try {
+      (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      /* the tap itself opens the picker on phones */
     }
-    for (const [, rows] of [...byBlock.entries()].sort((a, b) => a[0] - b[0])) {
-      out.push(h('section', { class: 'card' }, ...rows.map((r) => recordRow(app, ctx, view, r, editing))));
+  });
+  return h('label', { class: 'date-btn' }, h('span', { class: 'date-face' }, prettyDate(value, true)), h('span', { class: 'muted' }, 'Change'), input);
+}
+
+function addScreen(app: App, ctx: Ctx, screen: Extract<Screen, { kind: 'add' }>): { body: Child[]; bar: HTMLElement | null } {
+  const add = ctx.add!;
+  const body: Child[] = [h('div', { class: 'flow-top' }, h('button', { type: 'button', class: 'quiet', onclick: ctx.cancelAdd }, 'Cancel'), h('span', { class: 'muted' }, `Step ${screen.step} of 2`))];
+  if (screen.step === 1) {
+    body.push(h('h1', {}, 'Add a missed session'), h('p', { class: 'sub' }, "For a session you trained but didn't log."));
+    body.push(
+      h('div', { class: 'flow-block' }, h('span', { class: 'lab' }, 'When did you train?'), dateButton(screen.date, add.firstDate, app.today, ctx.addDate), h('p', { class: 'sub' }, `Any day from ${prettyDate(add.firstDate)} up to today.`), screen.error ? h('p', { class: 'err', role: 'alert' }, screen.error) : null),
+    );
+    const choice = (d: SessionDay) =>
+      h(
+        'button',
+        { type: 'button', role: 'radio', 'aria-checked': String(screen.day === d), class: `radio-card${screen.day === d ? ' on' : ''}`, onclick: () => ctx.addDay(d) },
+        h('span', { class: 'dot', 'aria-hidden': 'true' }),
+        h('span', {}, h('span', { class: 'rc-title' }, `Day ${d}`), h('span', { class: 'rc-sub' }, add.dayLines[d])),
+      );
+    body.push(h('div', { class: 'flow-block', role: 'radiogroup', 'aria-label': 'Which session?' }, h('span', { class: 'lab' }, 'Which session?'), choice(1), choice(2)));
+    const existing = add.existing;
+    if (existing.length && !screen.separate) {
+      const days = existing.map((g) => (g.day !== undefined ? `Day ${g.day}` : 'a session')).join(' and ');
+      body.push(
+        h(
+          'section',
+          { class: 'card attention' },
+          h('h2', {}, `${prettyDate(screen.date)} already has ${days}`),
+          h('p', { class: 'sub' }, 'Add what you did to that session, or add a separate session. Nothing is duplicated unless you choose a separate one.'),
+          h('div', { class: 'col actions' }, h('button', { type: 'button', class: 'primary', onclick: () => ctx.addToExisting(existing[existing.length - 1]!.id) }, 'Add to that session'), h('button', { type: 'button', onclick: ctx.addSeparate }, 'Add a separate session')),
+        ),
+      );
+    }
+    body.push(h('div', { class: 'callout info' }, "Adding a session can change your loads and your next session. You'll see every change before anything is saved."));
+    if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
+    const blocked = existing.length > 0 && !screen.separate;
+    const bar = blocked ? null : h('div', { class: 'end' }, h('button', { type: 'button', class: 'primary', onclick: ctx.addNext }, 'Next: enter what you did'));
+    return { body, bar };
+  }
+  body.push(h('div', { class: 'mode edit' }, `Adding ${prettyDate(screen.date)} · Day ${screen.day}. Nothing is saved until you check the changes.`));
+  if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
+  if (!add.plan) {
+    body.push(h('p', { class: 'refer' }, 'There is no session in the programme for that date.'));
+  } else {
+    const items: PlanItem[] = [...(add.plan.pre.includes('cmj') ? [{ slot: 'cmj', name: 'Jump test', block: 0 } as PlanItem] : []), ...add.plan.items];
+    const byBlock = new Map<number, PlanItem[]>();
+    for (const it of items) byBlock.set(it.block, [...(byBlock.get(it.block) ?? []), it]);
+    for (const [, list] of [...byBlock.entries()].sort((a, b) => a[0] - b[0])) {
+      body.push(h('section', { class: 'card' }, ...list.map((item) => editRow(app, ctx, screen.date, { item, status: 'not_logged', twice: false }, screen.drafts, false))));
     }
   }
-  if (view.extras.length) {
-    out.push(
-      h(
-        'section',
-        { class: 'card' },
-        h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Also logged')),
-        ...view.extras.map((s) => {
-          const line = outcomeLine(s, ctx.config);
-          const slot = slotOfLog(s.item.log);
-          const title = s.item.log.kind === 'tm_override' && slot ? `${displayName(slot, ctx.config)} max` : slot ? displayName(slot, ctx.config) : didText(s.item.log, ctx.config);
-          return h('div', { class: 'item compact' }, itemHead(title), h('p', { class: line ? 'outcome' : 'did' }, line || didText(s.item.log, ctx.config)), h('div', { class: 'tags' }, ...correctedTags(s)));
-        }),
-      ),
-    );
-  }
-  return out;
+  const n = screen.drafts.length;
+  const bar = h('div', { class: 'end two' }, h('button', { type: 'button', class: 'primary', onclick: ctx.reviewAdd }, n ? `Review changes (${n})` : 'Review changes'), h('button', { type: 'button', onclick: ctx.addBack }, 'Back'));
+  return { body, bar };
 }
 
 // ---------------------------------------------------------------------
 // sheets
 // ---------------------------------------------------------------------
 
-function previewSheet(app: App, ctx: Ctx, sheet: Extract<Sheet, { kind: 'preview' }>): HTMLElement {
+function previewSheet(ctx: Ctx, sheet: Extract<Sheet, { kind: 'preview' }>): HTMLElement {
   const note = h('input', { type: 'text', placeholder: 'Miscounted reps', 'aria-label': 'Note, optional' });
   const body: Child[] = [h('h2', {}, 'Check the change')];
   if (sheet.error) {
@@ -1311,29 +1663,29 @@ function previewSheet(app: App, ctx: Ctx, sheet: Extract<Sheet, { kind: 'preview
       h('h3', {}, 'What else changes'),
       sheet.effects.length ? h('ul', { class: 'list' }, ...sheet.effects.map((c) => h('li', {}, c))) : h('p', { class: 'sub' }, 'Nothing else changes.'),
       h('label', { class: 'f' }, 'Note, optional', note),
-      h('p', { class: 'sub' }, 'The original entry stays in your log, marked as corrected.'),
+      h('p', { class: 'sub' }, 'The original entries stay in your log, marked as corrected.'),
       h('div', { class: 'row actions' }, h('button', { type: 'button', class: 'primary', onclick: () => ctx.saveCorrection(note.value.trim()) }, 'Save correction'), h('button', { type: 'button', onclick: ctx.closeSheet }, 'Cancel')),
     );
   }
-  void app;
   return h('div', { class: 'sheet-wrap', onclick: (e: Event) => { if (e.target === e.currentTarget) ctx.closeSheet(); } }, h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Check the change' }, ...body));
 }
 
-/** §14.6: unlogged items first; then what moved, what's next, the backup, and a save-a-copy prompt. */
+/** §10: the not-recorded question first; then release 2's summary (§14.6). */
 function finishSheet(app: App, ctx: Ctx, f: FinishView): HTMLElement {
   const body: Child[] = [];
-  if (!f.finished && f.unlogged.length) {
+  if (!f.finished && f.unrecorded.length) {
+    const n = f.unrecorded.length;
     body.push(
-      h('h2', {}, 'Finish the session?'),
-      h('p', { class: 'sub' }, `${f.unlogged.length} planned ${f.unlogged.length === 1 ? 'item isn\'t' : 'items aren\'t'} logged yet:`),
-      h('ul', { class: 'list' }, ...f.unlogged.map((u) => h('li', {}, u.name))),
+      h('h2', {}, `${n} ${n === 1 ? 'item' : 'items'} not recorded`),
+      h('ul', { class: 'plan-list' }, ...f.unrecorded.map((u) => h('li', {}, h('span', {}, u.name), h('span', { class: 'muted' }, u.plan)))),
+      h('p', { class: 'sub' }, "Log them now, or skip them so this session's record is complete. Skipping moves nothing."),
       h(
         'div',
-        { class: 'col actions' },
-        h('button', { type: 'button', class: 'primary', onclick: () => ctx.backToSession(f.unlogged[0]!.slot) }, 'Log them'),
-        h('button', { type: 'button', onclick: () => ctx.skipRest(f.unlogged.map((u) => u.slot)) }, 'Skip them and finish'),
-        h('button', { type: 'button', class: 'subtle', onclick: ctx.finishNow }, 'Finish without them'),
+        { class: 'row actions' },
+        h('button', { type: 'button', class: 'primary', onclick: () => ctx.backToSession(f.unrecorded[0]!.slot) }, 'Log them'),
+        h('button', { type: 'button', onclick: () => ctx.skipRest(f.unrecorded.map((u) => u.slot)) }, 'Skip the rest'),
       ),
+      h('p', { class: 'sub center' }, 'Either way, saving a copy comes next.'),
     );
   } else {
     body.push(
@@ -1394,7 +1746,7 @@ function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
       h('h2', {}, `${name} training max`),
       h('div', { class: 'rx' }, h('span', { class: 'big' }, cur.toFixed(1)), h('span', { class: 'unit' }, 'kg')),
       loads,
-      h('p', { class: 'sub' }, `Next session: ${nextFor(app.state, lift, cfg, app.live)}`),
+      h('p', { class: 'sub' }, `Next session: ${nextFor(app.state, lift, cfg, app.today)}`),
       history.length ? h('h3', {}, 'History') : null,
       history.length ? h('ul', { class: 'list hist-list' }, ...history) : null,
       h('h3', {}, 'Set it by hand'),
@@ -1418,67 +1770,8 @@ function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
 }
 
 // ---------------------------------------------------------------------
-// recent sessions, plan, export panel
+// save-a-copy panel
 // ---------------------------------------------------------------------
-
-const recordCache = new WeakMap<History, Map<string, RecordView>>();
-
-function cachedRecord(app: App, ctx: Ctx, date: IsoDate): RecordView {
-  let m = recordCache.get(ctx.history);
-  if (!m) {
-    m = new Map();
-    recordCache.set(ctx.history, m);
-  }
-  let v = m.get(date);
-  if (!v) {
-    v = recordFor(ctx.history, ctx.base, app.state, ctx.config, date);
-    m.set(date, v);
-  }
-  return v;
-}
-
-function recentCard(app: App, ctx: Ctx): HTMLElement {
-  const dates = ctx.history.dates.slice(0, 8);
-  return h(
-    'details',
-    { class: 'card hist', open: true },
-    h('summary', {}, 'Recent sessions'),
-    dates.length
-      ? h(
-          'ul',
-          { class: 'recent' },
-          ...dates.map((d) => {
-            const v = cachedRecord(app, ctx, d);
-            const label = v.plan ? `Day ${v.day} · ${v.counts.done} of ${v.counts.planned} logged${v.counts.skipped ? `, ${v.counts.skipped} skipped` : ''}` : 'Other entries';
-            return h('li', {}, h('button', { type: 'button', class: d === app.date ? 'on' : '', onclick: () => ctx.setDate(d) }, h('span', { class: 'd' }, prettyDate(d)), h('span', { class: 'muted' }, label)));
-          }),
-        )
-      : h('p', { class: 'sub' }, 'Nothing logged yet.'),
-  );
-}
-
-function shortDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y!, m! - 1, d!)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-}
-
-function planCard(app: App, ctx: Ctx): HTMLElement {
-  const cfg = ctx.config;
-  const current = mesocycleOn(cfg, app.live);
-  const fs = app.state.lifts.front_squat.next_position;
-  const dl = app.state.lifts.deadlift.next_position;
-  return h(
-    'details',
-    { class: 'card hist plan' },
-    h('summary', {}, 'Plan'),
-    h('p', { class: 'plan-now' }, `Week ${programmeWeek(cfg, app.live)} of the programme. Next front squat: ${POSITION_LABEL[fs].toLowerCase()}. Next deadlift: ${POSITION_LABEL[dl].toLowerCase()}.`),
-    h(
-      'ul',
-      { class: 'blocks' },
-      ...cfg.mesocycles.map((m) => h('li', { class: current?.id === m.id ? 'now' : '' }, h('span', { class: 'd' }, shortDate(m.start)), h('span', {}, BLOCK_LABEL[m.id]), current?.id === m.id ? h('span', { class: 'now-tag' }, 'Now') : null)),
-    ),
-  );
-}
 
 function allEntries(app: App, ctx: Ctx): HTMLElement {
   const steps = [...ctx.history.steps].reverse().slice(0, 200);
@@ -1486,7 +1779,7 @@ function allEntries(app: App, ctx: Ctx): HTMLElement {
     'details',
     { class: 'card hist' },
     h('summary', {}, `All log entries (${app.state.log.length})`),
-    h('ul', { class: 'raw' }, ...steps.map((s) => h('li', {}, h('time', {}, s.item.log.date.slice(5)), h('span', {}, s.entry.summary)))),
+    h('ul', { class: 'raw' }, ...steps.map((s) => h('li', {}, h('time', {}, prettyDate(s.item.log.date)), h('span', {}, s.entry.summary)))),
   );
 }
 
@@ -1510,7 +1803,7 @@ function exportPanel(app: App, ctx: Ctx): HTMLElement {
     h('section', { class: 'card' }, h('h2', {}, 'Restore from a file'), h('p', {}, 'Choose a file you exported earlier. Nothing changes unless the file is valid.'), h('div', { class: 'row' }, file)),
     backupSection(app, ctx),
     allEntries(app, ctx),
-    h('div', { class: 'row' }, h('button', { type: 'button', onclick: ctx.closeExport }, 'Back to the session')),
+    h('div', { class: 'row' }, h('button', { type: 'button', onclick: ctx.closeExport }, 'Back to Today')),
   );
 }
 
@@ -1567,108 +1860,19 @@ function backupPill(app: App): HTMLElement {
 }
 
 export function renderApp(app: App, ctx: Ctx, appVersion: string): HTMLElement {
-  const cfg = ctx.config;
-  const mode = ctx.mode;
-  const entriesOnDate = (ctx.history.byDate.get(app.date) ?? []).filter((s) => s.item.log.kind !== 'tm_override');
-
-  // Header and date bar.
-  const top = h('div', { class: 'top' }, h('h1', {}, 'Acro S&C'), h('span', { class: 'grow' }), backupPill(app), h('button', { type: 'button', class: 'quiet', onclick: ctx.openExport }, 'Backup'));
-  const dateInput = h('input', { type: 'date', 'aria-label': 'Session date' });
-  dateInput.value = app.date;
-  dateInput.addEventListener('change', () => ctx.setDate(dateInput.value));
-  const shift = (n: number) => {
-    const [y, m, d] = app.date.split('-').map(Number);
-    ctx.setDate(new Date(Date.UTC(y!, m! - 1, d! + n)).toISOString().slice(0, 10));
-  };
-  const dateBar = h(
-    'div',
-    { class: 'datebar' },
-    h('button', { type: 'button', class: 'nav', 'aria-label': 'Previous day', onclick: () => shift(-1) }, '‹'),
-    dateInput,
-    h('button', { type: 'button', class: 'nav', 'aria-label': 'Next day', onclick: () => shift(1) }, '›'),
-    app.date !== app.live ? h('button', { type: 'button', class: 'today', onclick: () => ctx.setDate(app.live) }, 'Today') : null,
-  );
-
-  // Day: switchable only while nothing is logged on the date.
-  let day: SessionDay | undefined;
-  if (mode === 'live' || mode === 'preview') day = ctx.session?.kind === 'session' ? ctx.session.day : app.day;
-  else day = ctx.record?.day ?? app.editing?.day;
-  const daySwitchable = (mode === 'live' && entriesOnDate.length === 0) || mode === 'preview' || (mode === 'edit' && !ctx.history.byDate.get(app.date)?.length);
-  const dayEl = daySwitchable
-    ? h('div', { class: 'seg', role: 'group', 'aria-label': 'Day' }, ...([1, 2] as SessionDay[]).map((d) => h('button', { type: 'button', class: day === d ? 'on' : '', onclick: () => ctx.setDay(d) }, `Day ${d}`)))
-    : null;
-
-  // Context line.
-  const c = contextFor(cfg, app.date);
-  let weekType = '';
-  if (mode === 'live' || mode === 'preview') {
-    const lift = ctx.session?.kind === 'session' ? ctx.session.blocks.flatMap((b) => b.items).find((it): it is SessionSlotItem => it.kind === 'slot' && it.prescription.kind === 'lift') : undefined;
-    if (lift && lift.prescription.kind === 'lift' && lift.prescription.position !== undefined) weekType = POSITION_LABEL[lift.prescription.position];
-  } else {
-    const lr = ctx.record?.rows.find((r) => r.item.position !== undefined);
-    if (lr?.item.position !== undefined) weekType = POSITION_LABEL[lr.item.position];
-  }
-  const target = ctx.session?.kind === 'session' ? ctx.session.target_min : ctx.record?.plan?.target_min;
-  const context = h(
-    'div',
-    { class: 'context' },
-    h('strong', {}, `${prettyDate(app.date)}${day !== undefined ? ` · Day ${day}` : ''}${weekType ? ` · ${weekType}` : ''}`),
-    h('span', { class: 'muted' }, [c.week >= 1 ? `Week ${c.week} of ${c.total}` : '', c.block ?? '', target ? `about ${target} min` : ''].filter(Boolean).join(' · ')),
-  );
-
-  const chips = h(
-    'div',
-    { class: 'tms' },
-    ...(['front_squat', 'deadlift'] as LiftId[]).map((id) => h('button', { type: 'button', class: 'chip', onclick: () => ctx.openTm(id) }, h('span', { class: 'lab' }, `${displayName(id, cfg)} max`), h('b', {}, `${app.state.lifts[id].tm.toFixed(1)} kg`))),
-  );
-
-  // Mode banner.
-  let banner: HTMLElement | null = null;
-  if (mode === 'record') banner = h('div', { class: 'mode record' }, 'Record of what you logged.');
-  if (mode === 'edit') banner = h('div', { class: 'mode edit' }, `Editing ${prettyDate(app.date)}. Nothing is saved until you review the changes.`);
-  if (mode === 'preview') banner = h('div', { class: 'mode preview' }, "Preview. Loads assume your training maxes hold; they update as you log.");
-  if (mode === 'live' && app.live !== app.date) banner = h('div', { class: 'mode' }, 'Viewing another date.');
-  if (mode === 'live' && app.live !== app.today && app.date === app.live) {
-    banner = h('div', { class: 'mode' }, `Session still open: logging to ${prettyDate(app.live)}.`);
-  }
-  if (!ctx.history.ok && (mode === 'record' || mode === 'edit')) {
-    banner = h('div', { class: 'mode warn' }, "Your history can't be replayed, so corrections are off and the record shows the summaries saved at the time. Refer to the project.");
-  }
-
-  const body: Child[] = [top, dateBar, dayEl ? h('div', { class: 'dayrow' }, dayEl) : null, context, chips, banner, app.banner ? h('div', { class: 'banner', role: 'alert' }, app.banner) : null];
-
-  if (mode === 'live' || mode === 'preview') {
-    const s = ctx.session;
-    if (!s || s.kind === 'refer') body.push(h('p', { class: 'refer' }, `No session for this date. ${s?.kind === 'refer' ? s.reason : ''}`));
-    else body.push(...(mode === 'live' ? liveBody(app, ctx, s) : previewBody(app, ctx, s)));
-  } else if (ctx.record) {
-    body.push(...recordBody(app, ctx, ctx.record, mode === 'edit'));
-  }
-
-  body.push(recentCard(app, ctx), planCard(app, ctx));
-  body.push(h('p', { class: 'foot backup-status' }, app.backup.status));
-  body.push(h('p', { class: 'foot' }, `Acro Base S&C · v${appVersion}`));
-
-  // Bottom bar: one main action per mode.
-  let bar: HTMLElement | null = null;
-  if (mode === 'live') {
-    const finished = entriesOnDate.length > 0 && (ctx.history.byDate.get(app.date) ?? []).some((s) => s.item.log.kind === 'session_end' && (day === undefined || s.item.log.day === day));
-    bar = h('div', { class: 'end' }, h('button', { type: 'button', class: finished ? '' : 'primary', onclick: ctx.finish }, finished ? 'Session finished · summary' : 'Finish session'));
-  } else if (mode === 'record' && ctx.history.ok) {
-    bar = h('div', { class: 'end' }, h('button', { type: 'button', class: 'primary', onclick: ctx.startEdit }, ctx.record?.plan ? 'Edit session' : 'Add a missed session'));
-  } else if (mode === 'edit') {
-    const n = app.editing?.drafts.length ?? 0;
-    bar = h('div', { class: 'end two' }, h('button', { type: 'button', class: 'primary', onclick: ctx.reviewEdit }, n ? `Review changes (${n})` : 'Review changes'), h('button', { type: 'button', onclick: ctx.cancelEdit }, 'Cancel'));
-  } else if (mode === 'preview') {
-    bar = h('div', { class: 'end' }, h('button', { type: 'button', onclick: () => ctx.setDate(app.live) }, 'Back to today'));
-  }
+  let screen: { body: Child[]; bar: HTMLElement | null };
+  const sc = app.screen;
+  if (sc.kind === 'record' && ctx.record) screen = recordScreen(app, ctx);
+  else if (sc.kind === 'edit' && ctx.record) screen = editScreen(app, ctx, sc.drafts);
+  else if (sc.kind === 'add' && ctx.add) screen = addScreen(app, ctx, sc);
+  else screen = todayScreen(app, ctx, appVersion);
 
   let sheet: HTMLElement | null = null;
-  if (app.sheet?.kind === 'preview') sheet = previewSheet(app, ctx, app.sheet);
+  if (app.sheet?.kind === 'preview') sheet = previewSheet(ctx, app.sheet);
   if (app.sheet?.kind === 'tm') sheet = tmSheet(app, ctx, app.sheet.lift);
   if (app.sheet?.kind === 'finish' && ctx.finishView) sheet = finishSheet(app, ctx, ctx.finishView);
 
-  return h('div', {}, ...body, bar, app.showExport ? exportPanel(app, ctx) : null, sheet);
+  return h('div', { class: `screen-${sc.kind}` }, ...screen.body, screen.bar, app.showExport ? exportPanel(app, ctx) : null, sheet);
 }
 
 export { leftText };
