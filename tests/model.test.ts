@@ -1,12 +1,12 @@
 /**
- * Interface view model (ui_spec_v1_1.md). Synthetic logs only.
+ * Interface view model (ui_spec_v1_3.md). Synthetic logs only.
  */
 import { describe, expect, it } from 'vitest';
 import { INITIAL_STATE, PROGRAMME_CONFIG as cfg } from '../src/config/load';
 import { amend, planSnapshot, prescribe, update } from '../src/engine';
 import type { AnyLog, Session } from '../src/engine';
 import type { State } from '../src/config/types';
-import { buildHistory, dayFor, didText, lastLogged, liveDate, outcomeLine, plannedText, recordFor, stateDiff } from '../src/ui/model';
+import { buildHistory, dayFor, didText, lastLogged, outcomeLine, plannedText, recordFor, stateDiff } from '../src/ui/model';
 
 function fs(date: string, position: 1 | 2 | 3, load: number, reps: number, rir: number, presc: number, extra: Record<string, unknown> = {}): AnyLog {
   return { kind: 'barbell', lift: 'front_squat', date, mode: 'wave', position, prescribed: { load, reps: presc, sets: 3 }, last_set: { load, reps, rir }, missed: false, ...extra } as AnyLog;
@@ -93,19 +93,10 @@ describe('outcome lines (ui_spec §12)', () => {
   });
 });
 
-describe('day and live date (ui_spec §9)', () => {
+describe('day and last time (ui_spec §4)', () => {
   it('day from the logged lift', () => {
     const h = buildHistory(INITIAL_STATE, apply(LOGS), cfg);
     expect(dayFor(h.byDate.get('2026-09-28')!, '2026-09-28', cfg)).toBe(1);
-  });
-  it('an open session started before midnight keeps its date for 6 hours', () => {
-    const plan = planSnapshot(prescribe(INITIAL_STATE, cfg, '2026-09-21', 1) as Session, cfg);
-    const s = apply([{ kind: 'session_start', date: '2026-09-21', day: 1, at: '2026-09-21T23:30:00+08:00', plan }, { kind: 'cmj', date: '2026-09-21', value: 40 }]);
-    const h = buildHistory(INITIAL_STATE, s, cfg);
-    expect(liveDate('2026-09-22', Date.parse('2026-09-22T00:40:00+08:00'), h)).toBe('2026-09-21');
-    expect(liveDate('2026-09-22', Date.parse('2026-09-22T06:00:00+08:00'), h)).toBe('2026-09-22');
-    const ended = apply([{ kind: 'session_end', date: '2026-09-21', day: 1 }], s);
-    expect(liveDate('2026-09-22', Date.parse('2026-09-22T00:40:00+08:00'), buildHistory(INITIAL_STATE, ended, cfg))).toBe('2026-09-22');
   });
   it('last like-for-like session for a lift', () => {
     const h = buildHistory(INITIAL_STATE, apply(LOGS), cfg);

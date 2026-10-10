@@ -17,7 +17,7 @@ function session(state: State, date: string, day?: 1 | 2): Session {
 const slots = (s: Session): string[] => s.blocks.flatMap((b) => b.items.map((it) => (it.kind === 'slot' ? it.slot : `warmup:${it.name}`)));
 const item = (s: Session, slot: string) => s.blocks.flatMap((b) => b.items).find((it) => it.kind === 'slot' && it.slot === slot);
 
-describe('session vectors: ladder days (A.21)', () => {
+describe('session vectors: ladder days (A.21, config v1.5: no ladder weeks)', () => {
   for (const c of v.ladder) {
     it(`${c.date} day ${c.day}: ${c.expect}`, () => {
       const s = session(INITIAL_STATE, c.date, c.day);
@@ -33,9 +33,13 @@ describe('session vectors: ladder days (A.21)', () => {
         expect(hasLadder).toBe(false);
         expect(s.ladder_day).toBe(false);
       }
-      if (/depth_jump, 6 contacts/.test(c.expect)) {
+      if (/depth_jump,? \(?6 contacts/.test(c.expect)) {
         const p = item(s, 'depth_jump')!;
         expect(p.kind === 'slot' && p.prescription.kind === 'fixed' && p.prescription.contacts).toBe(6);
+      }
+      if (/depth_jump and depth_landing both present/.test(c.expect)) {
+        expect(ids).toContain('depth_jump');
+        expect(ids).toContain('depth_landing');
       }
       if (/no reactive item/.test(c.expect)) {
         for (const id of ['depth_jump', 'depth_landing', 'rsi_ladder', 'skater_bound']) expect(ids).not.toContain(id);
@@ -45,14 +49,27 @@ describe('session vectors: ladder days (A.21)', () => {
     });
   }
 
-  it('the ladder replaces the first named slot in template order and drops the rest (M2 has both)', () => {
-    const m2week = cfg.ladder!.weeks.find((w) => w >= meso('M2').weeks[0])!;
-    const d = new Date(cfg.mesocycles[0]!.start + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() + (m2week - 1) * 7);
-    const s = session(INITIAL_STATE, d.toISOString().slice(0, 10), cfg.ladder!.day);
+  it('the ladder rule still replaces the first named slot and drops the rest when a config lists a week (M2 has both)', () => {
+    // Config v1.5 lists no ladder weeks, so A.21 never fires in the app; the rule itself is unchanged.
+    const withLadder = structuredClone(cfg);
+    withLadder.ladder!.weeks = [9];
+    const s = prescribe(INITIAL_STATE, withLadder, '2026-11-09', 1);
+    if (s.kind !== 'session') throw new Error('refer');
     const reactive = s.blocks[1]!;
     expect(reactive.items.map((it) => (it.kind === 'slot' ? it.slot : it.name))).toEqual(['rsi_ladder']);
   });
+
+  // ui_spec_v1_3.md §13A test 19: the old ladder weeks show the block's normal reactive items.
+  for (const [date, contacts] of [['2026-11-09', 6], ['2026-12-21', 9], ['2027-01-25', 12]] as const) {
+    it(`${date} Day 1 (an old ladder week): drop jump with ${contacts} jumps, no ladder`, () => {
+      const s = session(INITIAL_STATE, date, 1);
+      const ids = slots(s);
+      expect(s.ladder_day).toBe(false);
+      expect(ids).not.toContain('rsi_ladder');
+      const p = item(s, 'depth_jump')!;
+      expect(p.kind === 'slot' && p.prescription.kind === 'fixed' && p.prescription.contacts).toBe(contacts);
+    });
+  }
 });
 
 describe('session vectors: default day (A.22)', () => {
