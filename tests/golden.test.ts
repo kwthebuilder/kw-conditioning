@@ -6,11 +6,16 @@
  * transcribed from the log, item by item.
  */
 import { describe, expect, it } from 'vitest';
-import { INITIAL_STATE, PROGRAMME_CONFIG, TEST_VECTORS } from '../src/config/load';
+import configV13 from '../spec/programme_config_v1_3.json';
+import { INITIAL_STATE, TEST_VECTORS } from '../src/config/load';
+import { parseProgrammeConfig } from '../src/config/validate';
 import { prescribe, update } from '../src/engine';
 import type { Session, SessionSlotItem } from '../src/engine';
 
-const cfg = PROGRAMME_CONFIG;
+// Pinned to the config in force on 21 Sep (vectors v1.5 golden_sessions):
+// config v1.5 empties the ladder schedule, but this is the record of what
+// the app prescribed then.
+const cfg = parseProgrammeConfig(configV13 as unknown);
 const DAY1 = '2026-09-21';
 const DAY2 = '2026-09-24';
 

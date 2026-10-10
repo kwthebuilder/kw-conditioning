@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import configJson from '../spec/programme_config_v1_4.json';
+import configJson from '../spec/programme_config_v1_5.json';
+import configV14 from '../spec/programme_config_v1_4.json';
 import configV13 from '../spec/programme_config_v1_3.json';
 import stateJson from '../spec/initial_state_v1_1.json';
-import vectorsJson from '../spec/engine_test_vectors_v1_4.json';
+import vectorsJson from '../spec/engine_test_vectors_v1_5.json';
+import vectorsV14 from '../spec/engine_test_vectors_v1_4.json';
 import {
   CONFIG_VERSION,
   INITIAL_STATE,
@@ -14,27 +16,29 @@ import {
 import { ConfigError, parseProgrammeConfig, parseState, parseTestVectors } from '../src/config/validate';
 
 const files: Record<string, unknown> = {
-  'programme_config_v1_4.json': configJson,
+  'programme_config_v1_5.json': configJson,
+  'programme_config_v1_4.json': configV14,
   'programme_config_v1_3.json': configV13,
   'initial_state_v1_1.json': stateJson,
-  'engine_test_vectors_v1_4.json': vectorsJson,
+  'engine_test_vectors_v1_5.json': vectorsJson,
+  'engine_test_vectors_v1_4.json': vectorsV14,
 };
 const raw = (name: string): unknown => files[name];
 
 describe('spec loader', () => {
   it('loads and validates all three files', () => {
-    expect(PROGRAMME_CONFIG.version).toBe('1.4');
-    expect(TEST_VECTORS.version).toBe('1.4');
+    expect(PROGRAMME_CONFIG.version).toBe('1.5');
+    expect(TEST_VECTORS.version).toBe('1.5');
     expect(INITIAL_STATE.schema).toBe(1);
-    expect(CONFIG_VERSION).toBe('1.4');
-    expect(VECTORS_VERSION).toBe('1.4');
+    expect(CONFIG_VERSION).toBe('1.5');
+    expect(VECTORS_VERSION).toBe('1.5');
     expect(STATE_SCHEMA).toBe(1);
   });
 
   it('returns values structurally identical to the files (nothing dropped or coerced)', () => {
-    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_4.json'));
+    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_5.json'));
     expect(INITIAL_STATE).toEqual(raw('initial_state_v1_1.json'));
-    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_4.json'));
+    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_5.json'));
   });
 
   it('carries the shapes the types promise', () => {
@@ -66,10 +70,53 @@ describe('config v1.4 (SPEC_QUESTIONS Q18)', () => {
   });
 });
 
+describe('config v1.5 (ui_spec_v1_3.md §13A test 20)', () => {
+  it('confirms the trap bar and empties the ladder schedule', () => {
+    expect(PROGRAMME_CONFIG.equipment.trap_bar_kg_confirmed).toBe(true);
+    expect(PROGRAMME_CONFIG.equipment.trap_bar_kg).toBe(24);
+    expect(PROGRAMME_CONFIG.ladder?.weeks).toEqual([]);
+  });
+
+  it('differs from v1.4 only in trap_bar_kg_confirmed and the ladder weeks', () => {
+    const strip = (c: unknown): Record<string, unknown> => {
+      const o = structuredClone(c) as Record<string, unknown> & { equipment: Record<string, unknown>; ladder: Record<string, unknown> };
+      delete o.version;
+      delete o.date;
+      delete o.equipment.trap_bar_kg_confirmed;
+      delete o.ladder.weeks;
+      return o;
+    };
+    expect(strip(raw('programme_config_v1_5.json'))).toEqual(strip(raw('programme_config_v1_4.json')));
+    expect((raw('programme_config_v1_4.json') as { equipment: { trap_bar_kg_confirmed: boolean } }).equipment.trap_bar_kg_confirmed).toBe(false);
+  });
+});
+
+describe('test vectors v1.5 (ui_spec_v1_3.md §13A test 19)', () => {
+  it('changes only the ladder cases that expected rsi_ladder', () => {
+    const a = structuredClone(raw('engine_test_vectors_v1_5.json')) as Record<string, unknown> & { session: { ladder: { date: string; expect: string }[] } };
+    const b = structuredClone(raw('engine_test_vectors_v1_4.json')) as typeof a;
+    const changed = a.session.ladder.filter((c, i) => c.expect !== b.session.ladder[i]!.expect).map((c) => c.date);
+    expect(changed).toEqual(['2026-09-21', '2026-11-09']);
+    for (const c of b.session.ladder.filter((x) => changed.includes(x.date))) expect(c.expect).toMatch(/rsi_ladder (present|\()/);
+    for (const c of a.session.ladder) expect(c.expect).not.toMatch(/rsi_ladder present|holds rsi_ladder/);
+    for (const o of [a, b]) {
+      delete (o as Record<string, unknown>).version;
+      delete (o as Record<string, unknown>).date;
+      delete (o as Record<string, unknown>).notes;
+      o.session.ladder = [];
+    }
+    expect(a).toEqual(b);
+  });
+
+  it('keeps the golden sessions pinned to the config in force on 21 Sep', () => {
+    expect(TEST_VECTORS.golden_sessions).toContain('programme_config_v1_3.json');
+  });
+});
+
 describe('validators reject malformed input with a JSON path', () => {
   const state = (): Record<string, unknown> => structuredClone(raw('initial_state_v1_1.json')) as Record<string, unknown>;
-  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_4.json')) as Record<string, unknown>;
-  const vectors = (): Record<string, unknown> => structuredClone(raw('engine_test_vectors_v1_4.json')) as Record<string, unknown>;
+  const config = (): Record<string, unknown> => structuredClone(raw('programme_config_v1_5.json')) as Record<string, unknown>;
+  const vectors = (): Record<string, unknown> => structuredClone(raw('engine_test_vectors_v1_5.json')) as Record<string, unknown>;
 
   it('rejects a non-object', () => {
     expect(() => parseState(null)).toThrow(ConfigError);
