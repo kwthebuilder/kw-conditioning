@@ -1,6 +1,7 @@
 /**
- * Release 2 on a phone-sized screen (ui_spec_v1_1.md §14). Starts from the
- * initial state with a fixed clock. Synthetic numbers only.
+ * Release 2 on a phone-sized screen (ui_spec_v1_3.md §14), in the
+ * date-free layout of release 1.1. Starts from the initial state with a
+ * fixed clock. Synthetic numbers only.
  */
 import { expect, test, type Page } from '@playwright/test';
 
@@ -37,7 +38,8 @@ test('one block open at a time; logging moves on', async ({ page }) => {
   await cmj.getByRole('button', { name: 'Log', exact: true }).click();
   // The first block with work in it opens next.
   await expect(page.locator('.card.focus')).toHaveCount(1);
-  await expect(page.locator('.card.focus')).toContainText('Drop jump ladder');
+  await expect(page.locator('.card.focus')).toContainText('Drop jump');
+  await expect(page.locator('.card.focus')).not.toContainText('ladder');
 });
 
 test('unticked earlier sets ask; the live preview shows the change first', async ({ page }) => {
@@ -80,7 +82,8 @@ test('finish lists what is not logged; skipping the rest finishes with a summary
   await page.getByRole('button', { name: 'Finish session' }).click();
   const sheet = page.getByRole('dialog', { name: 'Finish' });
   await expect(sheet).toContainText('Romanian deadlift');
-  await sheet.getByRole('button', { name: 'Skip them and finish' }).click();
+  await expect(sheet).toContainText('items not recorded');
+  await sheet.getByRole('button', { name: 'Skip the rest' }).click();
   await expect(sheet).toContainText('Session finished');
   await expect(sheet).toContainText('Jump test readings 0 → 1');
   await expect(sheet).toContainText("What's next");

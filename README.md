@@ -1,6 +1,6 @@
 # Acro Base S&C training app
 
-Phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The rules live in `spec/` (read-only); the code lives in `src/`. See `CLAUDE.md` for the standing rules and `spec/app_build_plan_v1.md` for the phases.
+Phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The rules live in `spec/` (read-only); the code lives in `src/`. See `CLAUDE.md` for the standing rules and `spec/app_build_plan_v1_4.md` for the phases. Superseded spec versions stay in `spec/` for reference; `CLAUDE.md` names the current ones.
 
 ## Run
 

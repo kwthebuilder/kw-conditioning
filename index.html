@@ -222,10 +222,6 @@
       .pill { font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
       .pill.ok { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
       .pill.wait { color: var(--warn); border-color: transparent; background: var(--warn-soft); }
-      .datebar { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
-      .datebar input[type='date'] { flex: 1; min-width: 0; min-height: 46px; font-size: 16px; }
-      .datebar .nav { min-width: 46px; padding: 0; font-size: 24px; line-height: 1; }
-      .datebar .today { padding: 0 14px; color: var(--accent); }
       .dayrow { display: flex; margin-top: 8px; min-height: 8px; }
       .dayrow .seg { width: 100%; }
       .dayrow .seg button { flex: 1; min-height: 44px; }
@@ -371,6 +367,58 @@
       .restbar .rest-clock { color: var(--ink); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .restbar.due { background: var(--accent); }
       .restbar.due .rest-clock, .restbar.due .session-clock { color: var(--accent-ink); }
+      /* ---- release 1.1 (ui_spec_v1_3.md §13A): one screen, History, records, Add a missed session ---- */
+      .dateline { margin: 12px 0 2px; display: flex; flex-direction: column; gap: 2px; }
+      .today-date { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+      .dateline .muted { font-size: 14px; }
+      .status-line { font-size: 15px; color: var(--muted); margin: 4px 0 12px; }
+      .card.attention { border: 1.5px solid var(--accent); }
+      .card.attention h2 { font-size: 18px; margin-bottom: 4px; line-height: 1.3; }
+      .card.attention .sub { font-size: 15px; line-height: 1.45; }
+      .next-head { display: flex; flex-direction: column; gap: 8px; }
+      .next-head h2 { font-size: 20px; }
+      .next-head .seg { width: 100%; }
+      .next-head .seg button { flex: 1; min-height: 44px; }
+      .next-head .kicker { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+      .section-title { font-size: 19px; margin: 22px 0 10px; }
+      .card.hist-week { padding: 2px 14px; }
+      .week-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 0 8px; border-bottom: 1px solid var(--line); font-size: 15px; font-weight: 650; }
+      .week-head .muted { font-weight: 500; font-size: 14px; }
+      button.session-row { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 6px 0; border: 0; border-radius: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; font-weight: 500; }
+      button.session-row:last-child { border-bottom: 0; }
+      .session-row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+      .session-row .d { font-size: 16px; font-weight: 650; }
+      .session-row .muted { font-size: 14px; }
+      .session-row .tags { margin-top: 0; flex-wrap: nowrap; }
+      .chev { flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+      .hist-empty { font-size: 14px; color: var(--muted); padding: 4px 4px 14px; }
+      button.wide { width: 100%; margin: 4px 0 12px; }
+      button.outline { border: 1.5px solid var(--accent); color: var(--accent); min-height: 52px; font-size: 16px; }
+      details.plan summary .plan-where { font-size: 14px; font-weight: 500; margin-left: auto; margin-right: 8px; }
+      .blocks .d { width: auto; min-width: 9.5rem; }
+      button.back { background: transparent; border-color: transparent; color: var(--accent); padding: 0 4px; min-height: 44px; font-size: 16px; }
+      .rec-title { font-size: 24px; margin-top: 4px; }
+      .rec-week { font-size: 14px; margin: -8px 0 10px; }
+      .not-recorded h2 { margin-bottom: 4px; }
+      .not-recorded .line, .plan-lines .line { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; }
+      .not-recorded .line .dt, .plan-lines .line .dt { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+      .plan-lines { margin-top: 2px; }
+      .flow-top { display: flex; align-items: center; justify-content: space-between; min-height: 44px; margin-bottom: 8px; }
+      .flow-top .quiet { padding-left: 0; font-size: 16px; }
+      .flow-block { display: flex; flex-direction: column; gap: 8px; margin: 18px 0; }
+      .date-btn { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 56px; padding: 0 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); font-size: 18px; font-weight: 600; cursor: pointer; }
+      .date-btn .muted { font-size: 14px; font-weight: 500; }
+      .date-btn input.date-native { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; padding: 0; border: 0; cursor: pointer; }
+      button.radio-card { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 64px; padding: 14px 16px; text-align: left; border: 1px solid var(--line); border-radius: 14px; background: var(--card); font-weight: 500; }
+      button.radio-card.on { border: 1.5px solid var(--accent); }
+      .radio-card .dot { flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 50%; border: 2px solid var(--line); }
+      .radio-card.on .dot { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 45%, transparent 50%); }
+      .rc-title { display: block; font-size: 17px; font-weight: 650; }
+      .rc-sub { display: block; font-size: 14px; color: var(--muted); margin-top: 2px; }
+      .sheet .plan-list { list-style: none; padding: 0; margin: 4px 0; }
+      .sheet .plan-list li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 15px; }
+      .sheet .plan-list li:last-child { border-bottom: 1px solid var(--line); }
+      .center { text-align: center; }
       body { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
     </style>
   </head>

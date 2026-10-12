@@ -1,12 +1,13 @@
 /**
  * App bootstrap and actions. The clock lives here and nowhere else.
- * Live logging goes through update(); corrections through amend(),
- * previewed first (engine A.23, A.28; ui_spec_v1_1.md).
+ * Live logging goes through update(); corrections, added and removed
+ * sessions through amend(), previewed first (engine A.23, A.28;
+ * ui_spec_v1_3.md).
  */
 import { INITIAL_STATE, PROGRAMME_CONFIG } from '../config/load';
 import type { IsoDate, LiftId, State } from '../config/types';
-import { amend, AmendError, defaultDay, planSnapshot, prescribe, roundLoad, sameTarget, stateBefore, update } from '../engine';
-import type { AnyLog, BarbellOutcome, CorrectionAction, CorrectionLog, ReplayStep, SessionDay, SessionResult } from '../engine';
+import { amend, AmendError, defaultDay, planSnapshot, prescribe, roundLoad, sameTarget, update } from '../engine';
+import type { AnyLog, BarbellOutcome, CorrectionAction, CorrectionLog, ReplayStep, SessionDay } from '../engine';
 import { exportMarkdown, importMarkdown, localStorageStore, memoryStore, type Store } from '../storage';
 import { checkRepo, pullLatest, pushExport, SyncError, type SyncSettings } from '../storage/sync';
 import { browserDeps, lastBackup, loadSettings, pending, saveSettings, whenText } from './backup';
@@ -17,23 +18,35 @@ import {
   buildHistory,
   checkInDue,
   clockText,
-  dayFor,
   didText,
   displayName,
+  isOpen,
   kg,
-  liveDate,
+  lastSessionOfDay,
   minutesSince,
   nextFor,
+  openSession,
   outcomeLine,
+  plannedText,
   prettyDate,
-  recordFor,
+  recordOf,
+  sessionRemoval,
+  sessionsFrom,
+  stateAtInsert,
+  stateBeforeSession,
   stateDiff,
   type History,
+  type RecordView,
+  type SessionGroup,
 } from './model';
-import { renderApp, type App, type Ctx, type FinishView, type Mode } from './view';
+import { renderApp, WHOLE_SESSION, type AddView, type App, type Ctx, type Draft, type FinishView, type LiveView, type Screen, type TodayState } from './view';
 
 const cfg = PROGRAMME_CONFIG;
 const BASE = INITIAL_STATE;
+/** §11A: the first day a session can be added. */
+const FIRST_DATE: IsoDate = cfg.mesocycles[0]!.start;
+/** §5.5: the one drop-jump box (SPEC_QUESTIONS Q32). */
+const BOX_CM = 51;
 
 function isoToday(): IsoDate {
   const d = new Date();
@@ -53,13 +66,30 @@ function pickStore(): Store {
 const store = pickStore();
 
 // ---------------------------------------------------------------------
-// set ticks (ui_spec §14.2), kept on the phone for a few days; not engine state
+// preferences kept on the phone; not engine state
 // ---------------------------------------------------------------------
 
+function pref(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function setPref(key: string, value: string | null): void {
+  try {
+    if (value === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, value);
+  } catch {
+    /* preference only */
+  }
+}
+
+/** Set ticks (ui_spec §14.2), kept for a few days. */
 const TICKS_KEY = 'acro-base-sc/ticks';
 function loadTicks(): Map<string, boolean[]> {
   try {
-    const raw = window.localStorage.getItem(TICKS_KEY);
+    const raw = pref(TICKS_KEY);
     if (!raw) return new Map();
     const cutoff = addDays(isoToday(), -3);
     const o = JSON.parse(raw) as Record<string, boolean[]>;
@@ -69,22 +99,34 @@ function loadTicks(): Map<string, boolean[]> {
   }
 }
 function saveTicks(m: Map<string, boolean[]>): void {
-  try {
-    window.localStorage.setItem(TICKS_KEY, JSON.stringify(Object.fromEntries(m)));
-  } catch {
-    /* preference only */
-  }
+  setPref(TICKS_KEY, JSON.stringify(Object.fromEntries(m)));
 }
+
+/** The next session's day as switched, so a reload shows the same day. */
+function rememberDay(date: string, day: SessionDay | undefined): void {
+  setPref(`acro-base-sc/day/${date}`, day === undefined ? null : String(day));
+}
+function recallDay(date: string): SessionDay | undefined {
+  const v = pref(`acro-base-sc/day/${date}`);
+  return v === '1' ? 1 : v === '2' ? 2 : undefined;
+}
+
+/** §9: the earlier session made live by Carry on, as "<session id>@<date>". */
+const CARRY_KEY = 'acro-base-sc/carry';
+function carryKey(g: SessionGroup): string {
+  return `${g.id}@${g.date}`;
+}
+
 const root = document.getElementById('app');
 if (!root) throw new Error('#app missing');
 
-const today0 = isoToday();
 const app: App = {
   state: store.load() ?? INITIAL_STATE,
-  date: today0,
-  live: today0,
-  today: today0,
-  editing: null,
+  today: isoToday(),
+  screen: { kind: 'today' },
+  carry: pref(CARRY_KEY),
+  startToday: false,
+  showEarlier: false,
   ticks: loadTicks(),
   focus: null,
   setsAsk: null,
@@ -102,48 +144,80 @@ const app: App = {
   backup: { settings: loadSettings(), status: '' },
 };
 
+function setCarry(g: SessionGroup | null): void {
+  app.carry = g ? carryKey(g) : null;
+  setPref(CARRY_KEY, app.carry);
+}
+
 // ---------------------------------------------------------------------
-// history, cached per state object
+// history and sessions, cached per state object
 // ---------------------------------------------------------------------
 
-let cache: { state: State; h: History } | null = null;
-function history(): History {
-  if (!cache || cache.state !== app.state) cache = { state: app.state, h: buildHistory(BASE, app.state, cfg) };
-  return cache.h;
-}
-
-app.live = liveDate(app.today, Date.now(), history());
-app.date = app.live;
-
-/** The day chosen for a date, kept in the browser so a reload shows the same day. Not engine state. */
-function rememberDay(date: string, day: SessionDay | undefined): void {
-  try {
-    if (day === undefined) window.localStorage.removeItem(`acro-base-sc/day/${date}`);
-    else window.localStorage.setItem(`acro-base-sc/day/${date}`, String(day));
-  } catch {
-    /* preference only */
+let cache: { state: State; h: History; sessions: SessionGroup[]; records: Map<string, RecordView> } | null = null;
+function cached(): NonNullable<typeof cache> {
+  if (!cache || cache.state !== app.state) {
+    const h = buildHistory(BASE, app.state, cfg);
+    cache = { state: app.state, h, sessions: sessionsFrom(h, cfg), records: new Map() };
   }
+  return cache;
 }
-function recallDay(date: string): SessionDay | undefined {
-  try {
-    const v = window.localStorage.getItem(`acro-base-sc/day/${date}`);
-    return v === '1' ? 1 : v === '2' ? 2 : undefined;
-  } catch {
-    return undefined;
+const history = (): History => cached().h;
+const sessions = (): SessionGroup[] => cached().sessions;
+function recordOfGroup(g: SessionGroup): RecordView {
+  const c = cached();
+  let v = c.records.get(g.id);
+  if (!v) {
+    v = recordOf(c.h, BASE, app.state, cfg, g);
+    c.records.set(g.id, v);
   }
+  return v;
+}
+const findSession = (id: string): SessionGroup | undefined => sessions().find((g) => g.id === id);
+
+// ---------------------------------------------------------------------
+// what Today shows (ui_spec §3, §4.4, §9)
+// ---------------------------------------------------------------------
+
+/** The session being logged: today's open session, or an earlier one carried on. */
+function liveGroup(): SessionGroup | undefined {
+  const g = openSession(sessions(), app.today);
+  if (!g) return undefined;
+  if (g.date === app.today || app.carry === carryKey(g)) return g;
+  return undefined;
 }
 
-function currentMode(): Mode {
-  if (app.editing && app.editing.date === app.date) return 'edit';
-  if (app.date === app.live) return 'live';
-  return app.date < app.live ? 'record' : 'preview';
+/** §9: an earlier session still open and not carried on. */
+function unfinishedGroup(): SessionGroup | undefined {
+  const g = openSession(sessions(), app.today);
+  return g && g.date < app.today && app.carry !== carryKey(g) ? g : undefined;
 }
 
-/** The day for a live or preview date: what was logged, else the athlete's choice, else A.22. */
-function liveDay(): SessionDay | undefined {
-  const logged = dayFor(history().byDate.get(app.date) ?? [], app.date, cfg);
-  if (logged) return logged;
-  return app.day ?? recallDay(app.date);
+function doneTodayGroup(): SessionGroup | undefined {
+  return sessions().filter((g) => g.date === app.today && g.end !== undefined).at(-1);
+}
+
+/** Ticks, forms and focus key: the date and the session's place among that date's sessions. */
+function sessionKey(date: IsoDate, g?: SessionGroup): string {
+  const ofDate = sessions().filter((x) => x.date === date);
+  const i = g ? ofDate.indexOf(g) : ofDate.length;
+  return `${date}#${i}`;
+}
+
+function nextDay(): SessionDay {
+  return app.day ?? recallDay(app.today) ?? defaultDay(app.state);
+}
+
+function computeLive(): { todayState: TodayState; live: LiveView } {
+  const g = liveGroup();
+  if (g) {
+    const day = g.day ?? 1;
+    return { todayState: 'live', live: { date: g.date, day, session: prescribe(app.state, cfg, g.date, day), group: g, steps: g.steps, carried: g.date !== app.today, key: sessionKey(g.date, g) } };
+  }
+  const blocked = unfinishedGroup() !== undefined;
+  const done = !blocked && doneTodayGroup() !== undefined && !app.startToday;
+  const day = done ? defaultDay(app.state) : nextDay();
+  const live: LiveView = { date: app.today, day, session: prescribe(app.state, cfg, app.today, day), steps: [], carried: false, key: sessionKey(app.today) };
+  return { todayState: blocked ? 'blocked' : done ? 'done' : 'next', live };
 }
 
 // ---------------------------------------------------------------------
@@ -154,8 +228,21 @@ function setState(next: State): void {
   app.state = next;
   store.save(next);
   app.banner = null;
-  app.live = liveDate(app.today, Date.now(), history());
   requestBackup();
+}
+
+/**
+ * §5.5 and §13A: one drop-jump box. If the stored height is not 51 cm,
+ * log it once as a depth-jump height entry (engine A.23); the export
+ * shows it like any other entry.
+ */
+function ensureBox(): void {
+  if (app.state.depth_jump.height_cm === BOX_CM) return;
+  try {
+    setState(update(app.state, { kind: 'depth_jump_height', date: app.today, height_cm: BOX_CM }, cfg).state);
+  } catch {
+    /* a state the engine refuses is shown as it is; the box text falls back to none */
+  }
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -183,17 +270,23 @@ function showToast(text: string, undo?: () => void): void {
   toastTimer = setTimeout(() => el.remove(), 10_000);
 }
 
-/** Live logging (ui_spec §4.1): the first item of a session also saves the plan as shown (A.27). */
+/**
+ * Live logging (ui_spec §4.1): logging the first item of the next session
+ * starts it, saving the plan as shown (A.27). Entries carry the session's
+ * date, so a session carried on from yesterday keeps its own (§9).
+ */
 function logLive(logs: AnyLog[], label: string): void {
   const prev = app.state;
+  const prevStart = app.startToday;
+  const prevDay = app.day;
+  const { todayState, live } = computeLive();
+  if (todayState !== 'live' && todayState !== 'next') return;
   let s = app.state;
   try {
-    const steps = history().byDate.get(app.live) ?? [];
-    if (!steps.some((x) => x.item.log.kind === 'session_start')) {
-      const sess = prescribe(s, cfg, app.live, liveDay());
+    if (!live.group) {
+      const sess = live.session;
       if (sess.kind === 'session') {
-        s = update(s, { kind: 'session_start', date: app.live, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess, cfg) }, cfg).state;
-        rememberDay(app.live, sess.day);
+        s = update(s, { kind: 'session_start', date: live.date, day: sess.day, at: new Date().toISOString(), plan: planSnapshot(sess, cfg) }, cfg).state;
       }
     }
     for (const l of logs) s = update(s, l, cfg).state;
@@ -206,10 +299,19 @@ function logLive(logs: AnyLog[], label: string): void {
   app.zeroAsk = null;
   app.setsAsk = null;
   app.focus = null;
+  app.startToday = false;
+  // The session's day is fixed by its start; a later session today offers the rotation's day again.
+  if (!live.group) {
+    app.day = undefined;
+    rememberDay(app.today, undefined);
+  }
   setState(s);
   render();
   showToast(`Logged: ${label}`, () => {
     setState(prev);
+    app.startToday = prevStart;
+    app.day = prevDay;
+    rememberDay(app.today, prevDay);
     render();
     showToast('Undone');
   });
@@ -242,12 +344,12 @@ function changeLines(actions: CorrectionAction[]): string[] {
   return out;
 }
 
-function previewCorrection(on: IsoDate, actions: CorrectionAction[]): void {
+function previewCorrection(on: IsoDate, actions: CorrectionAction[], changes?: string[]): void {
   const correction: CorrectionLog = { kind: 'correction', date: app.today, on, actions };
   try {
     const r = amend(BASE, app.state, correction, cfg);
     pendingCorrection = { correction };
-    app.sheet = { kind: 'preview', changes: changeLines(actions), effects: stateDiff(app.state, r.state, cfg, app.live) };
+    app.sheet = { kind: 'preview', changes: changes ?? changeLines(actions), effects: stateDiff(app.state, r.state, cfg, app.today) };
   } catch (e) {
     pendingCorrection = null;
     app.sheet = { kind: 'preview', changes: [], effects: [], error: e instanceof AmendError || e instanceof Error ? e.message : String(e) };
@@ -259,16 +361,22 @@ function saveCorrection(note: string): void {
   if (!pendingCorrection) return;
   const correction: CorrectionLog = { ...pendingCorrection.correction, ...(note ? { note } : {}) };
   const prev = app.state;
+  const prevScreen = app.screen;
   try {
     const r = amend(BASE, app.state, correction, cfg);
     pendingCorrection = null;
     app.sheet = null;
-    app.editing = null;
     for (const k of [...app.open]) if (k.startsWith('edit|') || k.startsWith('change|')) app.open.delete(k);
     setState(r.state);
+    // Back to the record after an edit, unless the session was removed; to Today after adding a session.
+    const sc = app.screen;
+    if (sc.kind === 'edit') app.screen = findSession(sc.id) ? { kind: 'record', id: sc.id } : { kind: 'today' };
+    else if (sc.kind === 'add') app.screen = { kind: 'today' };
     render();
+    window.scrollTo({ top: 0 });
     showToast('Correction saved', () => {
       setState(prev);
+      app.screen = prevScreen.kind === 'edit' ? { kind: 'record', id: prevScreen.id } : app.screen;
       render();
       showToast('Undone');
     });
@@ -279,48 +387,280 @@ function saveCorrection(note: string): void {
 }
 
 // ---------------------------------------------------------------------
+// Add a missed session (ui_spec §11A)
+// ---------------------------------------------------------------------
+
+function rotationDayOn(date: IsoDate): SessionDay {
+  try {
+    return defaultDay(stateAtInsert(BASE, app.state.log, cfg, date));
+  } catch {
+    return defaultDay(app.state);
+  }
+}
+
+function addView(sc: Extract<Screen, { kind: 'add' }>): AddView {
+  const rotationDay = rotationDayOn(sc.date);
+  const dayLines = { 1: '', 2: '' } as Record<SessionDay, string>;
+  for (const d of [1, 2] as SessionDay[]) {
+    if (d === rotationDay) dayLines[d] = `Next in your rotation on ${prettyDate(sc.date)}`;
+    else {
+      const last = lastSessionOfDay(sessions(), d, sc.date);
+      dayLines[d] = last ? `Your last Day ${d} was ${prettyDate(last.date)}` : `No Day ${d} logged before this date`;
+    }
+  }
+  const v: AddView = { rotationDay, dayLines, existing: sessions().filter((g) => g.date === sc.date), firstDate: FIRST_DATE };
+  if (sc.step === 2) {
+    try {
+      const s = prescribe(stateAtInsert(BASE, app.state.log, cfg, sc.date), cfg, sc.date, sc.day);
+      if (s.kind === 'session') v.plan = planSnapshot(s, cfg);
+    } catch (e) {
+      app.banner = `Can't rebuild the plan for that date: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+  return v;
+}
+
+function setDrafts(drafts: Draft[]): void {
+  const sc = app.screen;
+  if (sc.kind === 'edit' || sc.kind === 'add') app.screen = { ...sc, drafts };
+}
+function currentDrafts(): Draft[] {
+  const sc = app.screen;
+  return sc.kind === 'edit' || sc.kind === 'add' ? sc.drafts : [];
+}
+
+// ---------------------------------------------------------------------
 // render
 // ---------------------------------------------------------------------
 
 function render(): void {
-  const mode = currentMode();
   const h = history();
-  let session: SessionResult | undefined;
-  let record: ReturnType<typeof recordFor> | undefined;
-  if (mode === 'live' || mode === 'preview') {
-    session = prescribe(app.state, cfg, app.date, liveDay());
-  } else {
-    const hint = app.editing?.date === app.date ? app.editing.day : undefined;
-    record = recordFor(h, BASE, app.state, cfg, app.date, hint);
+  const groups = sessions();
+  const { todayState, live } = computeLive();
+  const unf = unfinishedGroup();
+  const done = todayState === 'done' ? doneTodayGroup() : undefined;
+  let record: Ctx['record'];
+  const sc = app.screen;
+  if (sc.kind === 'record' || sc.kind === 'edit') {
+    const g = findSession(sc.id);
+    if (g) record = { group: g, view: recordOfGroup(g), open: isOpen(g, app.today) };
+    else app.screen = { kind: 'today' };
   }
-  const tissueDue = mode === 'live' && app.live === app.today ? checkInDue(h, app.today) : undefined;
+  const add = app.screen.kind === 'add' ? addView(app.screen) : undefined;
+  const tissueDue = !unf ? checkInDue(h, app.today) : undefined;
+  const finishFor = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
   const ctx: Ctx = {
     config: cfg,
     base: BASE,
     history: h,
-    mode,
-    ...(app.sheet?.kind === 'finish' ? { finishView: finishView(h, session) } : {}),
+    sessions: groups,
+    todayState,
+    live,
+    ...(unf ? { unfinished: { group: unf, view: recordOfGroup(unf) } } : {}),
+    ...(done ? { doneToday: { group: done, view: recordOfGroup(done) } } : {}),
+    ...(record ? { record } : {}),
+    ...(add ? { add } : {}),
+    ...(app.state.depth_jump.height_cm != null ? { boxCm: app.state.depth_jump.height_cm } : {}),
+    ...(finishFor ? { finishView: finishView(finishFor) } : {}),
     ...(tissueDue && !tissueDismissed(tissueDue) ? { tissueDue } : {}),
-    tissueProtocol: mode === 'live' && app.live === app.today && (h.byDate.get(app.today) ?? []).some((st) => st.item.log.kind === 'tissue_check' && Object.values(st.item.log.scores).some((v) => (v ?? 0) > 3)),
-    finishNow,
+    tissueProtocol: !unf && (h.byDate.get(app.today) ?? []).some((st) => st.item.log.kind === 'tissue_check' && Object.values(st.item.log.scores).some((v) => (v ?? 0) > 3)),
+    recordOf: recordOfGroup,
+    isOpen: (g) => isOpen(g, app.today),
+    rerender: render,
+    setDay: (day) => {
+      app.day = day;
+      rememberDay(app.today, day);
+      render();
+    },
+    logLive,
+    previewCorrection,
+    saveCorrection,
+    closeSheet: () => {
+      app.sheet = null;
+      pendingCorrection = null;
+      render();
+    },
+    openRecord: (id) => {
+      app.screen = { kind: 'record', id };
+      app.banner = null;
+      render();
+      window.scrollTo({ top: 0 });
+    },
+    goToday: () => {
+      app.screen = { kind: 'today' };
+      app.banner = null;
+      render();
+      window.scrollTo({ top: 0 });
+    },
+    startEdit: () => {
+      const s = app.screen;
+      if (s.kind !== 'record') return;
+      app.screen = { kind: 'edit', id: s.id, drafts: [] };
+      render();
+    },
+    cancelEdit: () => {
+      const s = app.screen;
+      if (s.kind !== 'edit') return;
+      if (s.drafts.length && !window.confirm('Discard the changes you have not saved?')) return;
+      for (const k of [...app.open]) if (k.startsWith('edit|')) app.open.delete(k);
+      app.screen = { kind: 'record', id: s.id };
+      render();
+    },
+    setDraft: (d) => {
+      setDrafts([...currentDrafts().filter((x) => x.slot !== d.slot && x.slot !== WHOLE_SESSION), d]);
+      render();
+    },
+    dropDraft: (slot) => {
+      setDrafts(currentDrafts().filter((x) => x.slot !== slot));
+      render();
+    },
+    removeSession: () => {
+      const s = app.screen;
+      const g = s.kind === 'edit' ? findSession(s.id) : undefined;
+      if (!g) return;
+      setDrafts([{ slot: WHOLE_SESSION, actions: sessionRemoval(g), after: null }]);
+      render();
+    },
+    reviewEdit: () => {
+      const s = app.screen;
+      const g = s.kind === 'edit' ? findSession(s.id) : undefined;
+      if (s.kind !== 'edit' || !g) return;
+      if (!s.drafts.length) {
+        app.banner = 'No changes yet. Use Change, Remove, Add or Skip on an item first.';
+        render();
+        return;
+      }
+      const actions = s.drafts.flatMap((d) => d.actions);
+      const whole = s.drafts.some((d) => d.slot === WHOLE_SESSION);
+      previewCorrection(g.date, actions, whole ? [`${prettyDate(g.date)} · ${g.day !== undefined ? `Day ${g.day}` : 'Session'} removed`] : undefined);
+    },
+    openAdd: () => {
+      const date = addDays(app.today, -1) < FIRST_DATE ? app.today : addDays(app.today, -1);
+      app.screen = { kind: 'add', step: 1, date, day: rotationDayOn(date), separate: false, drafts: [] };
+      app.banner = null;
+      render();
+      window.scrollTo({ top: 0 });
+    },
+    addDate: (date) => {
+      const s = app.screen;
+      if (s.kind !== 'add') return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < FIRST_DATE || date > app.today) {
+        app.screen = { ...s, error: `Choose a day from ${prettyDate(FIRST_DATE)} up to today.` };
+      } else {
+        const { error: _drop, ...rest } = s;
+        void _drop;
+        app.screen = { ...rest, date, day: rotationDayOn(date), separate: false };
+      }
+      render();
+    },
+    addDay: (day) => {
+      const s = app.screen;
+      if (s.kind === 'add') app.screen = { ...s, day };
+      render();
+    },
+    addNext: () => {
+      const s = app.screen;
+      if (s.kind !== 'add') return;
+      app.screen = { ...s, step: 2, drafts: [] };
+      render();
+      window.scrollTo({ top: 0 });
+    },
+    addToExisting: (id) => {
+      app.screen = { kind: 'edit', id, drafts: [] };
+      render();
+      window.scrollTo({ top: 0 });
+    },
+    addSeparate: () => {
+      const s = app.screen;
+      if (s.kind === 'add') app.screen = { ...s, separate: true };
+      render();
+    },
+    addBack: () => {
+      const s = app.screen;
+      if (s.kind !== 'add') return;
+      if (s.drafts.length && !window.confirm('Discard what you have entered?')) return;
+      app.screen = { ...s, step: 1, drafts: [] };
+      render();
+    },
+    cancelAdd: () => {
+      const s = app.screen;
+      if (s.kind === 'add' && s.drafts.length && !window.confirm('Discard what you have entered?')) return;
+      for (const k of [...app.open]) if (k.startsWith('edit|')) app.open.delete(k);
+      app.screen = { kind: 'today' };
+      app.banner = null;
+      render();
+    },
+    reviewAdd: () => {
+      const s = app.screen;
+      if (s.kind !== 'add') return;
+      const v = addView(s);
+      if (!v.plan) return;
+      if (!s.drafts.length) {
+        app.banner = 'Nothing entered yet. Use Add or Skip on an item first.';
+        render();
+        return;
+      }
+      // §11A: one correction: the start with the plan as shown, the entries in plan order, then the end.
+      const order = ['cmj', ...v.plan.items.map((i) => i.slot)];
+      const drafts = [...s.drafts].sort((a, b) => order.indexOf(a.slot) - order.indexOf(b.slot));
+      const actions: CorrectionAction[] = [
+        { op: 'insert', entry: { kind: 'session_start', date: s.date, day: s.day, plan: v.plan } },
+        ...drafts.flatMap((d) => d.actions),
+        { op: 'insert', entry: { kind: 'session_end', date: s.date, day: s.day } },
+      ];
+      const skipped = drafts.filter((d) => d.after?.kind === 'skip').length;
+      const doneN = drafts.length - skipped;
+      const counts = [doneN ? `${doneN} done` : '', skipped ? `${skipped} skipped` : ''].filter(Boolean).join(', ');
+      previewCorrection(s.date, actions, [`${prettyDate(s.date)} · Day ${s.day} added · ${counts}`]);
+    },
+    carryOn: () => {
+      const g = unfinishedGroup();
+      if (g) setCarry(g);
+      render();
+    },
+    closeIt: () => {
+      const g = unfinishedGroup();
+      if (g) askToFinish(g);
+    },
+    startToday: () => {
+      app.startToday = true;
+      app.day = undefined;
+      render();
+    },
+    showEarlier: () => {
+      app.showEarlier = true;
+      render();
+    },
+    finishNow: () => {
+      const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
+      if (g) finishSession(g);
+    },
     skipRest: (slots) => {
+      const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
+      if (!g) return;
       let s = app.state;
       try {
-        for (const slot of slots) s = update(s, { kind: 'skip', slot, date: app.live }, cfg).state;
+        for (const slot of slots) s = update(s, { kind: 'skip', slot, date: g.date }, cfg).state;
       } catch (e) {
         app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
         render();
         return;
       }
       setState(s);
-      finishNow();
+      const again = sessions().find((x) => x.id === g.id);
+      if (again) finishSession(again);
     },
     backToSession: (slot) => {
+      const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
       app.sheet = null;
-      const sess = prescribe(app.state, cfg, app.live, liveDay());
+      // Close it, then Log them: the session becomes live (Carry on).
+      if (g && g.date < app.today) setCarry(g);
+      app.screen = { kind: 'today' };
+      const { live } = computeLive();
+      const sess = live.session;
       if (sess.kind === 'session') {
         const i = sess.blocks.findIndex((b) => b.items.some((it) => it.kind === 'slot' && it.slot === slot));
-        app.focus = slot === 'cmj' ? { date: app.live, block: 0 } : i >= 0 ? { date: app.live, block: i + 1 } : null;
+        app.focus = slot === 'cmj' ? { key: live.key, block: 0 } : i >= 0 ? { key: live.key, block: i + 1 } : null;
       }
       render();
       document.querySelector('.card.focus')?.scrollIntoView({ block: 'start' });
@@ -334,7 +674,7 @@ function render(): void {
       if (on) startRest(label, slot);
     },
     focusBlock: (block) => {
-      app.focus = { date: app.date, block };
+      app.focus = { key: computeLive().live.key, block };
       render();
       document.querySelector('.card.focus')?.scrollIntoView({ block: 'start' });
     },
@@ -357,77 +697,8 @@ function render(): void {
       });
     },
     dismissTissue: (forDate) => {
-      try {
-        window.localStorage.setItem(`acro-base-sc/tissue-dismissed/${forDate}`, '1');
-      } catch {
-        /* preference only */
-      }
+      setPref(`acro-base-sc/tissue-dismissed/${forDate}`, '1');
       render();
-    },
-    ...(session ? { session } : {}),
-    ...(record ? { record } : {}),
-    rerender: render,
-    setDate: (date) => {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-      if (app.editing && app.editing.drafts.length && date !== app.editing.date && !window.confirm('Discard the changes you have not saved?')) return;
-      if (app.editing && date !== app.editing.date) app.editing = null;
-      app.date = date;
-      app.day = undefined;
-      app.skipOpen = null;
-      app.zeroAsk = null;
-      render();
-      window.scrollTo({ top: 0 });
-    },
-    setDay: (day) => {
-      app.day = day;
-      if (app.editing) app.editing.day = day;
-      if (currentMode() === 'live') rememberDay(app.date, day);
-      render();
-    },
-    logLive,
-    previewCorrection,
-    saveCorrection,
-    closeSheet: () => {
-      app.sheet = null;
-      pendingCorrection = null;
-      render();
-    },
-    startEdit: () => {
-      const v = recordFor(history(), BASE, app.state, cfg, app.date);
-      const day = v.day ?? defaultDay(stateBefore(BASE, app.state.log, cfg, app.date));
-      app.editing = { date: app.date, day, drafts: [] };
-      render();
-    },
-    cancelEdit: () => {
-      if (app.editing?.drafts.length && !window.confirm('Discard the changes you have not saved?')) return;
-      app.editing = null;
-      for (const k of [...app.open]) if (k.startsWith('edit|')) app.open.delete(k);
-      render();
-    },
-    setDraft: (d) => {
-      if (!app.editing) return;
-      app.editing.drafts = [...app.editing.drafts.filter((x) => x.slot !== d.slot), d];
-      render();
-    },
-    dropDraft: (slot) => {
-      if (!app.editing) return;
-      app.editing.drafts = app.editing.drafts.filter((x) => x.slot !== slot);
-      render();
-    },
-    reviewEdit: () => {
-      const ed = app.editing;
-      if (!ed || ed.drafts.length === 0) {
-        app.banner = 'No changes yet. Use Change, Add or Remove on an item first.';
-        render();
-        return;
-      }
-      let actions: CorrectionAction[] = ed.drafts.flatMap((d) => d.actions);
-      // A session added to an empty date gets its start (with the plan) and its end (A.27).
-      if (!(history().byDate.get(ed.date)?.length) && ed.day !== undefined) {
-        const v = recordFor(history(), BASE, app.state, cfg, ed.date, ed.day);
-        if (v.plan) actions = [{ op: 'insert', entry: { kind: 'session_start', date: ed.date, day: ed.day, plan: v.plan } }, ...actions, { op: 'insert', entry: { kind: 'session_end', date: ed.date, day: ed.day } }];
-      }
-      previewCorrection(ed.date, actions);
     },
     openTm: (lift) => {
       app.sheet = { kind: 'tm', lift };
@@ -436,7 +707,7 @@ function render(): void {
     saveTm: (lift: LiftId, tm: number, note: string) => {
       const prev = app.state;
       try {
-        const s = update(app.state, { kind: 'tm_override', date: app.live, lift, tm, ...(note ? { note } : {}) }, cfg).state;
+        const s = update(app.state, { kind: 'tm_override', date: app.today, lift, tm, ...(note ? { note } : {}) }, cfg).state;
         app.sheet = null;
         setState(s);
         render();
@@ -451,9 +722,8 @@ function render(): void {
       }
     },
     finish: () => {
-      document.querySelector('.toast')?.remove();
-      app.sheet = { kind: 'finish' };
-      render();
+      const g = liveGroup();
+      if (g) askToFinish(g);
     },
     openExport: () => {
       app.showExport = true;
@@ -582,7 +852,7 @@ function render(): void {
 }
 
 // ---------------------------------------------------------------------
-// live preview, finish summary (ui_spec §14.3, §14.6)
+// live preview, finish (ui_spec §10, §14.3, §14.6)
 // ---------------------------------------------------------------------
 
 /** What logging this barbell set would do, computed by the engine without saving. */
@@ -602,71 +872,75 @@ function previewLift(log: AnyLog): string {
   }
 }
 
-function sessionSteps(): ReturnType<History['byDate']['get']> {
-  return history().byDate.get(app.live) ?? [];
-}
-
+/** A live session is open on Today (for the rest bar and the screen staying awake). */
 function sessionOpen(): boolean {
-  const steps = sessionSteps() ?? [];
-  return steps.some((s) => s.item.log.kind === 'session_start') && !steps.some((s) => s.item.log.kind === 'session_end');
+  return app.screen.kind === 'today' && liveGroup() !== undefined;
 }
 
 /** The date a lift is likely next done, for which block its next load comes from. */
 function nextDateFor(lift: 'front_squat' | 'deadlift', day: SessionDay | undefined): string {
   const own = lift === 'front_squat' ? 1 : 2;
-  if (day === undefined) return addDays(app.live, 1);
-  if (day === own) return addDays(app.live, 7);
-  return addDays(app.live, own === 2 ? 3 : 4);
+  if (day === undefined) return addDays(app.today, 1);
+  if (day === own) return addDays(app.today, 7);
+  return addDays(app.today, own === 2 ? 3 : 4);
 }
 
-function finishView(h: History, session: SessionResult | undefined): FinishView {
-  const steps = h.byDate.get(app.live) ?? [];
-  const day = liveDay() ?? (session?.kind === 'session' ? session.day : undefined);
-  const end = [...steps].reverse().find((s) => s.item.log.kind === 'session_end');
-  const finished = end !== undefined;
-  const rec = recordFor(h, BASE, app.state, cfg, app.live, day);
-  const unlogged = rec.rows.filter((r) => r.status === 'not_logged').map((r) => ({ slot: r.item.slot, name: displayName(r.item.slot, cfg) }));
-  const start = steps.find((s) => s.item.log.kind === 'session_start');
+const backupOk = (): boolean => app.backup.settings !== null && backupError === null;
+
+function finishView(g: SessionGroup): FinishView {
+  const rec = recordOfGroup(g);
+  const unrecorded = rec.rows.filter((r) => r.status === 'not_logged').map((r) => ({ slot: r.item.slot, name: displayName(r.item.slot, cfg), plan: r.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(r.item) }));
+  const start = g.start?.item.log;
+  const end = g.end?.item.log;
   let minutes: number | undefined;
-  if (end && end.item.log.kind === 'session_end') minutes = end.item.log.minutes;
-  else if (start && start.item.log.kind === 'session_start') minutes = minutesSince(start.item.log.at, Date.now());
+  if (end && end.kind === 'session_end') minutes = end.minutes;
+  else if (start && start.kind === 'session_start') minutes = minutesSince(start.at, Date.now());
   let moved: string[] = [];
   try {
-    moved = stateDiff(stateBefore(BASE, app.state.log, cfg, app.live), app.state, cfg, app.live).filter((l) => !l.includes('next session'));
+    moved = stateDiff(stateBeforeSession(BASE, app.state.log, cfg, g), app.state, cfg, app.today).filter((l) => !l.includes('next session'));
   } catch {
     moved = [];
   }
-  const next = (['front_squat', 'deadlift'] as const).map((lift) => `${displayName(lift, cfg)}: ${nextFor(app.state, lift, cfg, nextDateFor(lift, day))}`);
-  const v: FinishView = { unlogged, finished, moved, next, backupOk: app.backup.settings !== null && backupError === null };
+  const next = (['front_squat', 'deadlift'] as const).map((lift) => `${displayName(lift, cfg)}: ${nextFor(app.state, lift, cfg, nextDateFor(lift, g.day))}`);
+  const v: FinishView = { unrecorded, finished: g.end !== undefined, moved, next, backupOk: backupOk() };
   if (minutes !== undefined) v.minutes = minutes;
   return v;
 }
 
-function finishNow(): void {
-  const steps = sessionSteps() ?? [];
-  const day = liveDay() ?? 1;
-  if (!steps.some((s) => s.item.log.kind === 'session_end')) {
-    const start = steps.find((s) => s.item.log.kind === 'session_start');
+/** §10: Finish (or Close it) asks about items not recorded first; with none, it finishes. */
+function askToFinish(g: SessionGroup): void {
+  document.querySelector('.toast')?.remove();
+  if (recordOfGroup(g).rows.some((r) => r.status === 'not_logged') && !g.end) {
+    app.sheet = { kind: 'finish', id: g.id };
+    render();
+    return;
+  }
+  finishSession(g);
+}
+
+/** §10: one session_end per session, with the length when the start time is known; then the summary and a copy. */
+function finishSession(g: SessionGroup): void {
+  if (!g.end) {
+    const start = g.start?.item.log;
     const at = new Date();
-    const minutes = start && start.item.log.kind === 'session_start' ? minutesSince(start.item.log.at, at.getTime()) : undefined;
+    const minutes = start && start.kind === 'session_start' ? minutesSince(start.at, at.getTime()) : undefined;
     try {
-      setState(update(app.state, { kind: 'session_end', date: app.live, day, at: at.toISOString(), ...(minutes !== undefined ? { minutes } : {}) }, cfg).state);
+      setState(update(app.state, { kind: 'session_end', date: g.date, day: g.day ?? 1, at: at.toISOString(), ...(minutes !== undefined ? { minutes } : {}) }, cfg).state);
     } catch (e) {
       app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
     }
   }
+  if (app.carry === carryKey(g)) setCarry(null);
   rest = null;
   document.querySelector('.toast')?.remove();
-  app.sheet = { kind: 'finish' };
+  app.sheet = { kind: 'finish', id: g.id };
+  // §14.6: the save-a-copy panel opens by itself when the automatic backup is off or failing.
+  if (!backupOk()) app.showExport = true;
   render();
 }
 
 function tissueDismissed(forDate: string): boolean {
-  try {
-    return window.localStorage.getItem(`acro-base-sc/tissue-dismissed/${forDate}`) === '1';
-  } catch {
-    return false;
-  }
+  return pref(`acro-base-sc/tissue-dismissed/${forDate}`) === '1';
 }
 
 // ---------------------------------------------------------------------
@@ -677,19 +951,10 @@ let rest: { since: number; label: string; slot: string; buzzed: boolean } | null
 const REST_TARGETS = [0, 90, 120, 180];
 
 function restTarget(slot: string): number {
-  try {
-    return Number(window.localStorage.getItem(`acro-base-sc/rest/${slot}`) ?? 0) || 0;
-  } catch {
-    return 0;
-  }
+  return Number(pref(`acro-base-sc/rest/${slot}`) ?? 0) || 0;
 }
 function setRestTarget(slot: string, secs: number): void {
-  try {
-    if (secs) window.localStorage.setItem(`acro-base-sc/rest/${slot}`, String(secs));
-    else window.localStorage.removeItem(`acro-base-sc/rest/${slot}`);
-  } catch {
-    /* preference only */
-  }
+  setPref(`acro-base-sc/rest/${slot}`, secs ? String(secs) : null);
 }
 
 function startRest(label: string, slot: string): void {
@@ -704,9 +969,9 @@ document.body.append(restBar);
 
 /** Builds the bar when what it shows changes; tickRestBar() updates the times each second. */
 function drawRestBar(): void {
-  const live = currentMode() === 'live' && !app.showExport;
-  const open = live && sessionOpen();
-  const showRest = live && rest !== null && Date.now() - rest.since < 20 * 60_000;
+  const onToday = app.screen.kind === 'today' && !app.showExport;
+  const open = onToday && sessionOpen();
+  const showRest = onToday && rest !== null && Date.now() - rest.since < 20 * 60_000;
   restBar.hidden = !open && !showRest;
   restBar.replaceChildren();
   if (restBar.hidden) return;
@@ -721,8 +986,6 @@ function drawRestBar(): void {
     const r = document.createElement('span');
     r.className = 'rest-clock';
     line.append(r);
-  }
-  if (showRest && rest) {
     // One button cycles the athlete's target for this exercise: none, 1:30, 2:00, 3:00.
     const cur = restTarget(rest.slot);
     const b = document.createElement('button');
@@ -748,8 +1011,8 @@ function tickRestBar(): void {
   const now = Date.now();
   const clock = restBar.querySelector('.session-clock');
   if (clock) {
-    const start = (sessionSteps() ?? []).find((s) => s.item.log.kind === 'session_start');
-    const at = start && start.item.log.kind === 'session_start' && start.item.log.at ? Date.parse(start.item.log.at) : NaN;
+    const start = liveGroup()?.start?.item.log;
+    const at = start && start.kind === 'session_start' && start.at ? Date.parse(start.at) : NaN;
     clock.textContent = Number.isFinite(at) ? `Session ${clockText(now - at)}` : '';
   }
   const rc = restBar.querySelector('.rest-clock');
@@ -774,7 +1037,7 @@ setInterval(tickRestBar, 1000);
 type WakeLockSentinelLike = { release: () => Promise<void>; addEventListener: (t: 'release', f: () => void) => void };
 let wakeLock: WakeLockSentinelLike | null = null;
 async function syncWakeLock(): Promise<void> {
-  const want = currentMode() === 'live' && sessionOpen() && document.visibilityState === 'visible';
+  const want = sessionOpen() && document.visibilityState === 'visible';
   const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> } }).wakeLock;
   if (!wl) return;
   try {
@@ -798,14 +1061,14 @@ function replaceState(s: State, backup = true): void {
   app.state = s;
   store.save(s);
   app.banner = null;
-  app.editing = null;
+  app.screen = { kind: 'today' };
   app.sheet = null;
   app.forms.clear();
   app.errors.clear();
   app.open.clear();
-  app.live = liveDate(app.today, Date.now(), history());
-  app.date = app.live;
   app.day = undefined;
+  app.startToday = false;
+  setCarry(null);
   if (backup) requestBackup();
 }
 
@@ -813,17 +1076,19 @@ function replaceState(s: State, backup = true): void {
 // the date moves on (ui_spec §9)
 // ---------------------------------------------------------------------
 
+/**
+ * Today is the phone's date when the app opens and whenever it comes back
+ * to the screen. A live session on screen when the date turns stays live
+ * and keeps its own date; opening the app later shows the card instead.
+ */
 function refreshClock(): void {
   const t = isoToday();
-  const live = liveDate(t, Date.now(), history());
-  if (t === app.today && live === app.live) return;
-  const wasOnLive = app.date === app.live;
+  if (t === app.today) return;
+  const live = liveGroup();
   app.today = t;
-  app.live = live;
-  if (wasOnLive && !app.editing) {
-    app.date = live;
-    app.day = undefined;
-  }
+  app.day = undefined;
+  app.startToday = false;
+  if (live && isOpen(live, t) && live.date < t) setCarry(live);
   render();
 }
 
@@ -903,6 +1168,8 @@ async function runBackup(): Promise<void> {
   }
 }
 
+// After the backup state above exists: logging the box asks for a backup.
+ensureBox();
 render();
 
 // Anything left unsent from last time goes now, and again whenever signal returns.

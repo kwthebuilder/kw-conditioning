@@ -1,0 +1,747 @@
+{
+ "schema": 1,
+ "as_of": "2026-09-19",
+ "lifts": {
+  "front_squat": {
+   "tm": 97.65,
+   "beta": {
+    "2": 1,
+    "3": 0.9863636363636364
+   },
+   "next_position": 2,
+   "sessions_logged": 4,
+   "neg_streak": 0,
+   "single_scheduled": false,
+   "last_logged": "2026-10-06",
+   "last_mesocycle": "M1"
+  },
+  "deadlift": {
+   "tm": 145.2,
+   "beta": {
+    "2": 1.0130821559392986,
+    "3": 1.006237006237006
+   },
+   "next_position": 2,
+   "sessions_logged": 4,
+   "neg_streak": 0,
+   "single_scheduled": false,
+   "last_logged": "2026-10-08",
+   "last_mesocycle": "M1"
+  }
+ },
+ "rdl": {
+  "load_kg": 60,
+  "sessions_logged": 3
+ },
+ "accessories": {
+  "db_pp_strength": {
+   "load": 22,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "pull_up": {
+   "load": 2.5,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "landmine_press": {
+   "load": 15,
+   "streak_up": 1,
+   "streak_down": 0
+  },
+  "cs_row": {
+   "load": 30,
+   "streak_up": 1,
+   "streak_down": 0
+  },
+  "bss": {
+   "load": 16,
+   "streak_up": 1,
+   "streak_down": 0
+  },
+  "hack_squat": {
+   "load": 40,
+   "streak_up": 0,
+   "streak_down": 0
+  },
+  "abductor_hsr": {
+   "load": 15,
+   "streak_up": 1,
+   "streak_down": 0
+  }
+ },
+ "depth_jump": {
+  "height_cm": 51
+ },
+ "trap_bar_jump": {
+  "load_kg": 24
+ },
+ "cmj": {
+  "series": [
+   46,
+   47,
+   46.5
+  ]
+ },
+ "log": [
+  {
+   "kind": "cmj",
+   "date": "2026-09-21",
+   "summary": "CMJ 46 cm recorded. Running mean of 1: 46.0 cm.",
+   "log": {
+    "kind": "cmj",
+    "date": "2026-09-21",
+    "value": 46
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-21",
+   "summary": "RSI ladder 20/30/40 cm x3 + 3 at winner: done (51).",
+   "log": {
+    "kind": "fixed",
+    "slot": "rsi_ladder",
+    "date": "2026-09-21",
+    "done": true,
+    "value": 51
+   }
+  },
+  {
+   "kind": "depth_jump_height",
+   "date": "2026-09-21",
+   "summary": "Depth-jump height set to 51 cm (was unset).",
+   "log": {
+    "kind": "depth_jump_height",
+    "date": "2026-09-21",
+    "height_cm": 51
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-21",
+   "summary": "Trap-bar jump: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "trap_bar_jump",
+    "date": "2026-09-21",
+    "done": true
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-09-21",
+   "summary": "Front squat: TM 92.0 → 93.0 kg (calibration).",
+   "log": {
+    "kind": "barbell",
+    "lift": "front_squat",
+    "date": "2026-09-21",
+    "mode": "wave",
+    "position": 2,
+    "prescribed": {
+     "load": 77.5,
+     "reps": 3,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 77.5,
+     "reps": 8,
+     "rir": 2
+    },
+    "missed": false
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-21",
+   "summary": "DB push press, strength thread (hammer grip): unset → 20.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "db_pp_strength",
+    "date": "2026-09-21",
+    "load": 20,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 8,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-21",
+   "summary": "Weighted pull-up: unset → 0.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "pull_up",
+    "date": "2026-09-21",
+    "load": 0,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 6,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "rdl",
+   "date": "2026-09-21",
+   "summary": "Romanian deadlift, 3 s lowering: 60.0 → 62.5 kg (+2.5).",
+   "log": {
+    "kind": "rdl",
+    "slot": "rdl",
+    "date": "2026-09-21",
+    "load": 60,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 9,
+     "rir": 2
+    },
+    "override": {
+     "from": 100
+    }
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-21",
+   "summary": "Nordic curl: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "nordic",
+    "date": "2026-09-21",
+    "done": true
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-21",
+   "summary": "Hip abduction isometric: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "abd_iso",
+    "date": "2026-09-21",
+    "done": true
+   }
+  },
+  {
+   "kind": "session_end",
+   "date": "2026-09-21",
+   "summary": "Day 1 session ended. Export now.",
+   "log": {
+    "kind": "session_end",
+    "date": "2026-09-21",
+    "day": 1
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-24",
+   "summary": "KB swing, heavy: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "kb_swing",
+    "date": "2026-09-24",
+    "done": true
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-09-24",
+   "summary": "Conventional deadlift: TM 145.2 → 145.2 kg (calibration).",
+   "log": {
+    "kind": "barbell",
+    "lift": "deadlift",
+    "date": "2026-09-24",
+    "mode": "wave",
+    "position": 2,
+    "prescribed": {
+     "load": 122.5,
+     "reps": 3,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 122.5,
+     "reps": 7,
+     "rir": 2
+    },
+    "missed": false
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-24",
+   "summary": "1-arm landmine press: unset → 15.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "landmine_press",
+    "date": "2026-09-24",
+    "load": 15,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 7,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-24",
+   "summary": "Chest-supported row: unset → 30.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "cs_row",
+    "date": "2026-09-24",
+    "load": 30,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 11,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-24",
+   "summary": "Standing cable hip abduction, 3 s, stance leg loaded: unset → 15.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "abductor_hsr",
+    "date": "2026-09-24",
+    "load": 15,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 9,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-24",
+   "summary": "Bulgarian split squat: unset → 16.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "bss",
+    "date": "2026-09-24",
+    "load": 16,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 9,
+     "rir": 3
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-24",
+   "summary": "Hack squat, 3 s lowering: unset → 40.0 kg (set).",
+   "log": {
+    "kind": "slot",
+    "slot": "hack_squat",
+    "date": "2026-09-24",
+    "load": 40,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 9,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "session_end",
+   "date": "2026-09-24",
+   "summary": "Day 2 session ended. Export now.",
+   "log": {
+    "kind": "session_end",
+    "date": "2026-09-24",
+    "day": 2
+   }
+  },
+  {
+   "kind": "cmj",
+   "date": "2026-09-29",
+   "summary": "CMJ 47 cm recorded. Running mean of 2: 46.5 cm.",
+   "log": {
+    "kind": "cmj",
+    "date": "2026-09-29",
+    "value": 47
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-29",
+   "summary": "Depth jump: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "depth_jump",
+    "date": "2026-09-29",
+    "done": true
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-29",
+   "summary": "Trap-bar jump: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "trap_bar_jump",
+    "date": "2026-09-29",
+    "done": true
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-09-29",
+   "summary": "Front squat: TM 93.0 → 97.7 kg (calibration).",
+   "log": {
+    "kind": "barbell",
+    "lift": "front_squat",
+    "date": "2026-09-29",
+    "mode": "wave",
+    "position": 3,
+    "prescribed": {
+     "load": 82.5,
+     "reps": 2,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 82.5,
+     "reps": 8,
+     "rir": 2
+    },
+    "missed": false
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-29",
+   "summary": "DB push press, strength thread (hammer grip): 20.0 kg → 20.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "db_pp_strength",
+    "date": "2026-09-29",
+    "load": 20,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 8,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-09-29",
+   "summary": "Weighted pull-up: 0.0 kg → 0.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "pull_up",
+    "date": "2026-09-29",
+    "load": 0,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 8,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "rdl",
+   "date": "2026-09-29",
+   "summary": "Romanian deadlift, 3 s lowering: 62.5 → 57.5 kg (-5).",
+   "log": {
+    "kind": "rdl",
+    "slot": "rdl",
+    "date": "2026-09-29",
+    "load": 62.5,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 0,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-09-29",
+   "summary": "Nordic curl: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "nordic",
+    "date": "2026-09-29",
+    "done": true
+   }
+  },
+  {
+   "kind": "session_end",
+   "date": "2026-09-29",
+   "summary": "Day 1 session ended. Export now.",
+   "log": {
+    "kind": "session_end",
+    "date": "2026-09-29",
+    "day": 1
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-10-02",
+   "summary": "KB swing, heavy: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "kb_swing",
+    "date": "2026-10-02",
+    "done": true
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-10-02",
+   "summary": "Conventional deadlift: TM 145.2 → 145.2 kg (calibration).",
+   "log": {
+    "kind": "barbell",
+    "lift": "deadlift",
+    "date": "2026-10-02",
+    "mode": "wave",
+    "position": 3,
+    "prescribed": {
+     "load": 130,
+     "reps": 2,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 130,
+     "reps": 5,
+     "rir": 2
+    },
+    "missed": false
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-02",
+   "summary": "1-arm landmine press: 15.0 kg → 15.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "landmine_press",
+    "date": "2026-10-02",
+    "load": 15,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 8,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-02",
+   "summary": "Chest-supported row: 30.0 kg → 30.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "cs_row",
+    "date": "2026-10-02",
+    "load": 30,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 12,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-03",
+   "summary": "Standing cable hip abduction, 3 s, stance leg loaded: 15.0 kg → 15.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "abductor_hsr",
+    "date": "2026-10-03",
+    "load": 15,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 10,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-03",
+   "summary": "Bulgarian split squat: 16.0 kg → 16.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "bss",
+    "date": "2026-10-03",
+    "load": 16,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 10,
+     "rir": 3
+    }
+   }
+  },
+  {
+   "kind": "cmj",
+   "date": "2026-10-06",
+   "summary": "CMJ 46.5 cm recorded. Running mean of 3: 46.5 cm.",
+   "log": {
+    "kind": "cmj",
+    "date": "2026-10-06",
+    "value": 46.5
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-10-06",
+   "summary": "Front squat: TM 97.7 → 97.7 kg (position1).",
+   "log": {
+    "kind": "barbell",
+    "lift": "front_squat",
+    "date": "2026-10-06",
+    "mode": "wave",
+    "position": 1,
+    "prescribed": {
+     "load": 80,
+     "reps": 4,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 80,
+     "reps": 8,
+     "rir": 1
+    },
+    "missed": false,
+    "override": {
+     "from": 77.5
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-06",
+   "summary": "DB push press, strength thread (hammer grip): 20.0 kg → 22.0 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "db_pp_strength",
+    "date": "2026-10-06",
+    "load": 22,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 6,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "slot",
+   "date": "2026-10-06",
+   "summary": "Weighted pull-up: 0.0 kg → 2.5 kg (hold).",
+   "log": {
+    "kind": "slot",
+    "slot": "pull_up",
+    "date": "2026-10-06",
+    "load": 2.5,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 6,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "rdl",
+   "date": "2026-10-06",
+   "summary": "Romanian deadlift, 3 s lowering: 57.5 → 60.0 kg (+2.5).",
+   "log": {
+    "kind": "rdl",
+    "slot": "rdl",
+    "date": "2026-10-06",
+    "load": 57.5,
+    "sets_done": 3,
+    "last_set": {
+     "reps": 8,
+     "rir": 2
+    }
+   }
+  },
+  {
+   "kind": "session_end",
+   "date": "2026-10-06",
+   "summary": "Day 1 session ended. Export now.",
+   "log": {
+    "kind": "session_end",
+    "date": "2026-10-06",
+    "day": 1
+   }
+  },
+  {
+   "kind": "fixed",
+   "date": "2026-10-08",
+   "summary": "KB swing, heavy: done.",
+   "log": {
+    "kind": "fixed",
+    "slot": "kb_swing",
+    "date": "2026-10-08",
+    "done": true
+   }
+  },
+  {
+   "kind": "barbell",
+   "date": "2026-10-08",
+   "summary": "Conventional deadlift: TM 145.2 → 145.2 kg (position1).",
+   "log": {
+    "kind": "barbell",
+    "lift": "deadlift",
+    "date": "2026-10-08",
+    "mode": "wave",
+    "position": 1,
+    "prescribed": {
+     "load": 117.5,
+     "reps": 4,
+     "sets": 3
+    },
+    "last_set": {
+     "load": 117.5,
+     "reps": 8,
+     "rir": 2
+    },
+    "missed": false,
+    "override": {
+     "from": 115
+    }
+   }
+  },
+  {
+   "kind": "session_end",
+   "date": "2026-10-08",
+   "summary": "Day 2 session ended. Export now.",
+   "log": {
+    "kind": "session_end",
+    "date": "2026-10-08",
+    "day": 2
+   }
+  }
+ ],
+ "overrides": [
+  {
+   "kind": "load",
+   "date": "2026-09-21",
+   "slot": "rdl",
+   "from": 100,
+   "to": 60
+  },
+  {
+   "kind": "load",
+   "date": "2026-10-06",
+   "slot": "front_squat",
+   "from": 77.5,
+   "to": 80
+  },
+  {
+   "kind": "load",
+   "date": "2026-10-08",
+   "slot": "deadlift",
+   "from": 115,
+   "to": 117.5
+  }
+ ]
+}

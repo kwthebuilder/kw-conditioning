@@ -1,8 +1,8 @@
 /**
- * Tiny DOM helpers and the shared input controls (ui_spec_v1_1.md §5):
+ * Tiny DOM helpers and the shared input controls (ui_spec_v1_3.md §5):
  * plus/minus steppers, a row of choice buttons, and the frame-count calculator.
  */
-import { jumpFromFrames, mean, roundHeight, roundRsi } from '../engine';
+import { jumpFromFrames, roundHeight, roundRsi } from '../engine';
 
 export type Child = Node | string | null | undefined | false;
 
@@ -26,7 +26,9 @@ const fmt = (n: number): string => String(Math.round(n * 100) / 100);
 
 /**
  * Plus and minus around a typable number. `value` null shows a dash; the
- * first plus from a dash goes to `start`. Calls `onChange` on every change.
+ * first plus from a dash goes to `start`. Minus stops at `min` and plus at
+ * `max` (§5.1); a typed value outside them is the caller's to refuse.
+ * Calls `onChange` on every change.
  */
 export function stepper(opts: {
   label: string;
@@ -34,17 +36,21 @@ export function stepper(opts: {
   step: number;
   start?: number;
   min?: number;
+  max?: number;
   unit?: string;
   integer?: boolean;
   onChange: (v: number | null) => void;
   invalid?: boolean;
 }): { el: HTMLElement; input: HTMLInputElement } {
   const min = opts.min ?? 0;
+  const max = opts.max ?? Infinity;
+  const clamp = (v: number): number => Math.min(max, Math.max(min, v));
   const input = h('input', {
     type: 'number',
     inputmode: opts.integer ? 'numeric' : 'decimal',
     step: opts.integer ? 1 : 'any',
     min,
+    ...(Number.isFinite(max) ? { max } : {}),
     placeholder: '–',
     'aria-label': opts.label,
     class: opts.invalid ? 'missing' : '',
@@ -66,13 +72,13 @@ export function stepper(opts: {
   });
   const minus = h('button', { type: 'button', class: 'step', 'aria-label': `${opts.label}: less`, onclick: () => {
     const v = read();
-    if (v === null) return set(opts.start !== undefined ? Math.max(min, opts.start - opts.step) : min);
-    set(Math.max(min, Math.round((v - opts.step) * 100) / 100));
+    if (v === null) return set(opts.start !== undefined ? clamp(opts.start - opts.step) : min);
+    set(clamp(Math.round((v - opts.step) * 100) / 100));
   } }, '−');
   const plus = h('button', { type: 'button', class: 'step', 'aria-label': `${opts.label}: more`, onclick: () => {
     const v = read();
-    if (v === null) return set(opts.start ?? min);
-    set(Math.round((v + opts.step) * 100) / 100);
+    if (v === null) return set(clamp(opts.start ?? min));
+    set(clamp(Math.round((v + opts.step) * 100) / 100));
   } }, '+');
   const el = h('div', { class: 'stepper' }, h('span', { class: 'lab' }, opts.unit ? `${opts.label}, ${opts.unit}` : opts.label), h('div', { class: 'ctl' }, minus, input, plus));
   return { el, input };
@@ -115,7 +121,6 @@ export function checkbox(label: string, checked: boolean, onChange: (v: boolean)
 // ---------------------------------------------------------------------
 
 const FPS_KEY = 'acro-base-sc/fps';
-const LADDER_HEIGHTS_CM = [20, 30, 40];
 
 function recallFps(): number {
   try {
@@ -146,10 +151,9 @@ function readNum(input: HTMLInputElement): number | null {
 
 /**
  * "Calculate" beside a field. `height` returns jump height; `rsi`
- * reactive strength; `ladder` takes three jumps at each of 20, 30 and
- * 40 cm and returns the winning height.
+ * reactive strength. (The ladder mode left with the ladder, ui_spec_v1_3.md §5.5.)
  */
-export function calculator(mode: 'height' | 'rsi' | 'ladder', onResult: (v: number) => void): HTMLElement {
+export function calculator(mode: 'height' | 'rsi', onResult: (v: number) => void): HTMLElement {
   const panel = h('div', { class: 'calc' });
   panel.hidden = true;
   const toggle = h('button', { type: 'button', class: 'subtle', onclick: () => (panel.hidden = !panel.hidden) }, 'Calculate from video');
@@ -166,69 +170,27 @@ export function calculator(mode: 'height' | 'rsi' | 'ladder', onResult: (v: numb
     if (v) rememberFps(v);
   });
   let result: number | null = null;
-  if (mode !== 'ladder') {
-    const air = num('frames in the air', null);
-    const ground = mode === 'rsi' ? num('frames on the ground', null) : null;
-    const recompute = () => {
-      const f = fpsValue();
-      const a = readNum(air.input);
-      const g = ground ? readNum(ground.input) : undefined;
-      result = null;
-      if (!f || a === null || a <= 0 || (mode === 'rsi' && (g === null || g === undefined || g <= 0))) {
-        out.textContent = 'Count the frames in a slow-motion clip.';
-        use.disabled = true;
-        return;
-      }
-      const m = jumpFromFrames(mode === 'rsi' && g ? { fps: f, air: a, ground: g } : { fps: f, air: a });
-      const parts = [`Flight ${m.flight_s.toFixed(3)} s`, `height ${roundHeight(m.height_cm).toFixed(1)} cm`];
-      if (m.rsi !== undefined && m.contact_s !== undefined) parts.push(`on the floor ${m.contact_s.toFixed(3)} s`, `reactive strength ${roundRsi(m.rsi).toFixed(2)}`);
-      out.textContent = parts.join(' · ');
-      result = mode === 'height' ? roundHeight(m.height_cm) : roundRsi(m.rsi!);
-      use.disabled = false;
-    };
-    for (const i of [fps.input, air.input, ground?.input]) i?.addEventListener('input', recompute);
-    panel.append(h('div', { class: 'row' }, fps.wrap, air.wrap, ground ? ground.wrap : null), out);
-  } else {
-    const rows = LADDER_HEIGHTS_CM.map((cm) => ({
-      cm,
-      attempts: [0, 1, 2].map(() => ({ air: num('air', null), ground: num('ground', null) })),
-      meanEl: h('span', { class: 'calc-mean' }, '–'),
-    }));
-    const recompute = () => {
-      const f = fpsValue();
-      let best: { cm: number; rsi: number } | null = null;
-      const summary: string[] = [];
-      for (const r of rows) {
-        const values = r.attempts.map((a) => {
-          const air = readNum(a.air.input);
-          const ground = readNum(a.ground.input);
-          if (!f || air === null || ground === null || air <= 0 || ground <= 0) return null;
-          return jumpFromFrames({ fps: f, air, ground }).rsi ?? null;
-        });
-        const m = mean(values);
-        r.meanEl.textContent = m === null ? '–' : `mean reactive strength ${roundRsi(m).toFixed(2)}`;
-        if (m !== null) {
-          summary.push(`${r.cm} cm ${roundRsi(m).toFixed(2)}`);
-          if (!best || m > best.rsi) best = { cm: r.cm, rsi: m };
-        }
-      }
-      result = best ? (best as { cm: number }).cm : null;
-      out.textContent = best ? `${summary.join(' · ')}. Best: ${(best as { cm: number }).cm} cm.` : 'Enter air and ground frames for each jump.';
-      use.disabled = result === null;
-    };
-    fps.input.addEventListener('input', recompute);
-    const grid = h('div', { class: 'calc-ladder' });
-    for (const r of rows) {
-      const line = h('div', { class: 'calc-height' }, h('div', { class: 'calc-label' }, h('b', {}, `${r.cm} cm`), r.meanEl));
-      for (const a of r.attempts) {
-        a.air.input.addEventListener('input', recompute);
-        a.ground.input.addEventListener('input', recompute);
-        line.append(h('div', { class: 'calc-pair' }, a.air.wrap, a.ground.wrap));
-      }
-      grid.append(line);
+  const air = num('frames in the air', null);
+  const ground = mode === 'rsi' ? num('frames on the ground', null) : null;
+  const recompute = () => {
+    const f = fpsValue();
+    const a = readNum(air.input);
+    const g = ground ? readNum(ground.input) : undefined;
+    result = null;
+    if (!f || a === null || a <= 0 || (mode === 'rsi' && (g === null || g === undefined || g <= 0))) {
+      out.textContent = 'Count the frames in a slow-motion clip.';
+      use.disabled = true;
+      return;
     }
-    panel.append(h('div', { class: 'row' }, fps.wrap), grid, out);
-  }
+    const m = jumpFromFrames(mode === 'rsi' && g ? { fps: f, air: a, ground: g } : { fps: f, air: a });
+    const parts = [`Flight ${m.flight_s.toFixed(3)} s`, `height ${roundHeight(m.height_cm).toFixed(1)} cm`];
+    if (m.rsi !== undefined && m.contact_s !== undefined) parts.push(`on the floor ${m.contact_s.toFixed(3)} s`, `reactive strength ${roundRsi(m.rsi).toFixed(2)}`);
+    out.textContent = parts.join(' · ');
+    result = mode === 'height' ? roundHeight(m.height_cm) : roundRsi(m.rsi!);
+    use.disabled = false;
+  };
+  for (const i of [fps.input, air.input, ground?.input]) i?.addEventListener('input', recompute);
+  panel.append(h('div', { class: 'row' }, fps.wrap, air.wrap, ground ? ground.wrap : null), out);
   use.addEventListener('click', () => {
     if (result === null) return;
     onResult(result);

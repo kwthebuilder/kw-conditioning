@@ -179,3 +179,91 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** An unticked earlier set asks ("Was every earlier set done as prescribed?") and records "fell short" only on the athlete's answer.
 - **Spec revision:** ui_spec_v1_1.md §14.2
+
+## Q22 — release 1.1 was specified to ship before release 2, which had already shipped
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md v1.2 change note, §10, §13A ("ships before release 2") / app_build_plan_v1_3.md phase 8
+- **Question:** Release 2 was merged and deployed on 9 Oct (pull request 4), before release 1.1 was specified. The patch cannot ship before it. How should the two be ordered?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: release 1.1 is placed between releases 1 and 2 in the build plan, noting that release 2's code shipped first, and is built on top of it. Release 2 shows as "merged 9 Oct, acceptance open"; the athlete judges its gate (a full Day 1 logged in under a minute of entry) on the next Day 1.
+- **Spec revision:** app_build_plan_v1_4.md
+
+## Q23 — Finish: release 2's not-logged step against §10's two buttons
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §10, §14.6
+- **Question:** Release 2's finish summary already opened with a not-logged step with three buttons (Log them, Skip them and finish, Finish without them). §10 and §14.6 give two: Log them and Skip the rest.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: release 2's summary stays; its first step takes §10's words and each item's plan, with two buttons, Log them and Skip the rest. "Finish without them" is dropped. Close it (§9) opens the same step. Built with it: Finish with nothing left to record logs the end at once (release 2 showed the summary without logging the end), and the save-a-copy panel opens by itself when the automatic backup is off or failing (§14.6).
+- **Spec revision:** none
+
+## Q24 — Carry on writes entries dated D after entries dated D + 1
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §13A "Before building" / engine_spec_v1_8.md A.28
+- **Question:** If the replay assumes entries arrive in date order, Carry on would need to write A.28 inserts, or other logging would be held while an earlier session is open.
+- **Blocked:** Nothing.
+- **Ruling:** Neither fix is needed. A.28 replays original entries in the order they were logged; only inserted entries are placed by date. No rule compares an entry's date with the one before it. Carry on logs through update() as usual. Proved in tests/release11.model.test.ts (a max set by hand on D + 1, then more of D's session: replay matches, a correction saves, removing the session keeps the max).
+- **Spec revision:** none
+
+## Q25 — release 1's "7 of 10 logged, 2 skipped"
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §13A test 2
+- **Question:** Were the skips inside the 7?
+- **Blocked:** Nothing.
+- **Ruling:** No. Release 1 counted as "logged" only items done; "7 of 10 logged, 2 skipped" meant 7 done, 2 skipped, 1 not recorded. Release 1.1 writes "7 done · 2 skipped · 1 not recorded".
+- **Spec revision:** none
+
+## Q26 — the 21 Sep golden session under config v1.5
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** engine_test_vectors_v1_4.json `golden_sessions` / training_log_2026_w01_w02_r4.md item 3 / ui_spec_v1_3.md §13A test 19
+- **Question:** The golden case says 21 Sep's Day 1 shows the ladder, as the golden log does. With the ladder schedule emptied it no longer would.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: the golden case stays pinned to the config in force on 21 Sep (v1.3); tests/golden.test.ts loads that config. Only the day-by-day ladder cases change, as test 19 says.
+- **Spec revision:** engine_test_vectors_v1_5.json
+
+## Q27 — the 21 Sep record after the ladder leaves
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §4.2, §5.5 / engine_spec_v1_8.md A.27
+- **Question:** Sessions before 9 Oct have no saved plan, so their plan is rebuilt from the current config. Under config v1.5, 21 Sep's rebuilt plan shows a drop jump as not recorded, and the ladder entry actually logged (6 jumps from the 51 cm box) falls under "Also logged".
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: on a record whose plan is rebuilt, when the plan has a drop jump and no ladder, a logged ladder entry counts as that day's drop jump, tagged "Logged on the ladder item". Screen only; the log and the engine are untouched; records with a saved plan are unaffected.
+- **Spec revision:** none
+
+## Q28 — which sessions are "from before release 1.1"
+- **Raised:** 2026-10-10, release 1.1 build
+- **Where:** ui_spec_v1_3.md §9, §13A test 13
+- **Question:** Nothing in the log records which app version logged a session.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: sessions dated before 11 Oct 2026 are never treated as open on the day after, so they never produce the unfinished-session card. A session dated today is the live one whatever its date.
+- **Spec revision:** none
+
+## Q29 — "Depth jump" in ui_spec_v1_3.md
+- **Raised:** 2026-10-10, release 1.1 build
+- **Where:** ui_spec_v1_3.md §5.5, §13A test 19
+- **Question:** The spec writes "Depth jump · 6 jumps · 51 cm box"; the app has called the item "Drop jump" since release 1.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: keep "Drop jump" everywhere. Where ui_spec_v1_3.md says "Depth jump", read "Drop jump": the item reads "Drop jump · 6 jumps · 51 cm box".
+- **Spec revision:** none
+
+## Q30 — which loads the dumbbell range holds
+- **Raised:** 2026-10-10, release 1.1 build
+- **Where:** ui_spec_v1_3.md §5.1 / programme_config_v1_5.json `db_min_kg`, `db_max_kg`
+- **Question:** Which slots are "dumbbell slots"? The chest-supported row increments by "one plate or 2 kg/hand".
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Oct 2026: 2 to 40 kg on both dumbbell push presses and the Bulgarian split squat; not the chest-supported row, which keeps 2 kg steps with no range. Supersedes Q18's "impose no limit" for those three slots.
+- **Spec revision:** none
+
+## Q31 — the plan for an added session on a date that already has one
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §11A step 5 / engine_spec_v1_8.md A.27, A.28
+- **Question:** §11A builds the plan by replaying "up to that date". A.28 places an added separate session after that date's existing entries, so the replay would compute its numbers from a later state than the one shown.
+- **Blocked:** Nothing.
+- **Ruling:** The plan (and the pre-selected day) come from the log up to where the new entries will land: replay stopping before the first entry dated later. On a date with no session the two readings are the same.
+- **Spec revision:** none
+
+## Q32 — the stored drop-jump height
+- **Raised:** 2026-10-10, release 1.1 pre-build check
+- **Where:** ui_spec_v1_3.md §13A "Config v1.5 and test vectors" / engine_spec_v1_8.md A.21, A.23
+- **Question:** Is the stored height already 51 cm? The repo holds no training data, so it cannot be checked from here. The app on the phone on 21 Sep stored whatever was typed on the ladder item as the height.
+- **Blocked:** Nothing.
+- **Ruling:** The app checks on start: if the stored height is not 51 cm it logs one depth-jump height entry of 51 cm (A.23), which the export shows; otherwise it logs nothing.
+- **Spec revision:** none

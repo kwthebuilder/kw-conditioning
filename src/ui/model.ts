@@ -1,12 +1,13 @@
 /**
- * View model for the interface (ui_spec_v1_1.md). Pure: no DOM, no
- * clock (the caller passes "now"). Everything the screens say about the
- * past comes from replaying the log (engine A.28), so a corrected entry
- * reads the same everywhere.
+ * View model for the interface (ui_spec_v1_3.md). Pure: no DOM, no
+ * clock (the caller passes "now" and "today"). Everything the screens say
+ * about the past comes from replaying the log (engine A.28), so a
+ * corrected entry reads the same everywhere.
  */
 import type { IsoDate, LiftId, MesocycleId, Position, ProgrammeConfig, State } from '../config/types';
 import {
   daysBetween,
+  defaultDay,
   derivedEqual,
   mesocycleOn,
   planSnapshot,
@@ -20,6 +21,8 @@ import {
 import type {
   AnyLog,
   BarbellOutcome,
+  CorrectionAction,
+  CorrectionTarget,
   EffectiveItem,
   ExplosiveOutcome,
   LogEntry,
@@ -33,7 +36,7 @@ import type {
 } from '../engine';
 
 // ---------------------------------------------------------------------
-// words (ui_spec_v1_1.md §2)
+// words (ui_spec_v1_3.md §2)
 // ---------------------------------------------------------------------
 
 export const POSITION_LABEL: Record<Position, string> = { 1: 'Light week', 2: 'Medium week', 3: 'Heavy week' };
@@ -90,7 +93,7 @@ export function displayName(slot: string, config: ProgrammeConfig): string {
   return DISPLAY_NAMES[slot] ?? config.slots[slot]?.name ?? slot;
 }
 
-/** Load step for the plus and minus buttons (ui_spec §5.1). Typing any value is still allowed. */
+/** Load step for the plus and minus buttons (ui_spec §5.1). Typing a value is allowed within the equipment's range. */
 export const LOAD_STEP: Record<string, number> = {
   front_squat: 2.5,
   deadlift: 2.5,
@@ -108,6 +111,18 @@ export const LOAD_STEP: Record<string, number> = {
 };
 export const loadStep = (slot: string): number => LOAD_STEP[slot] ?? 2.5;
 
+/** §5.1: dumbbell slots, held to the rack's range (config db_min_kg, db_max_kg). The chest-supported row is not one. */
+export const DB_SLOTS = new Set(['db_pp_strength', 'db_pp_explosive', 'bss']);
+
+/** The load range a slot's buttons and typed values must stay inside, if it has one. */
+export function loadRange(slot: string, config: ProgrammeConfig): [number, number] | undefined {
+  return DB_SLOTS.has(slot) ? [config.equipment.db_min_kg, config.equipment.db_max_kg] : undefined;
+}
+
+export function rangeText(range: [number, number]): string {
+  return `Your dumbbells run ${kg(range[0])} to ${kg(range[1])} kg.`;
+}
+
 /** "77.5", "26", "0". */
 export function kg(n: number): string {
   return String(Math.round(n * 100) / 100);
@@ -116,6 +131,7 @@ const f1 = (n: number): string => n.toFixed(1);
 export const leftText = (rir: number): string => (rir >= 4 ? '4+ left' : `${rir} left`);
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Tue 6 Oct", or "Tue 6 Oct 2026". */
@@ -123,6 +139,27 @@ export function prettyDate(iso: IsoDate, withYear = false): string {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(Date.UTC(y!, m! - 1, d!));
   return `${WEEKDAYS[dt.getUTCDay()]} ${d} ${MONTHS[m! - 1]}${withYear ? ` ${y}` : ''}`;
+}
+
+/** "Thursday". */
+export function weekdayName(iso: IsoDate): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return WEEKDAYS_LONG[new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay()]!;
+}
+
+/** "5 to 11 Oct", "28 Sep to 4 Oct". */
+export function rangeOfDates(from: IsoDate, to: IsoDate): string {
+  const [, m1, d1] = from.split('-').map(Number);
+  const [, m2, d2] = to.split('-').map(Number);
+  return m1 === m2 ? `${d1} to ${d2} ${MONTHS[m2! - 1]}` : `${d1} ${MONTHS[m1! - 1]} to ${d2} ${MONTHS[m2! - 1]}`;
+}
+
+/** "19:05" in the phone's time, from an ISO timestamp. */
+export function clockTime(at: string | undefined): string | undefined {
+  if (!at) return undefined;
+  const t = new Date(at);
+  if (!Number.isFinite(t.getTime())) return undefined;
+  return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
 }
 
 export function addDays(iso: IsoDate, n: number): IsoDate {
@@ -207,25 +244,6 @@ export function dayFor(steps: readonly ReplayStep[], date: IsoDate, config: Prog
     if (d2.has(slot) && !d1.has(slot)) return 2;
   }
   return undefined;
-}
-
-/**
- * ui_spec §9: the live date is today, unless a session started before
- * today is still open (started, not finished, within the last 6 hours).
- */
-export function liveDate(today: IsoDate, nowMs: number, history: History): IsoDate {
-  const OPEN_MS = 6 * 3600_000;
-  for (const date of history.dates) {
-    if (date >= today) continue;
-    const steps = history.byDate.get(date)!;
-    const start = [...steps].reverse().find((s) => s.item.log.kind === 'session_start');
-    if (!start || start.item.log.kind !== 'session_start' || !start.item.log.at) return today;
-    const ended = steps.some((s) => s.item.log.kind === 'session_end');
-    const at = Date.parse(start.item.log.at);
-    if (!ended && Number.isFinite(at) && nowMs - at >= 0 && nowMs - at < OPEN_MS) return date;
-    return today;
-  }
-  return today;
 }
 
 /** The last time a slot was logged before a date; for barbell lifts, optionally at the same week type. */
@@ -525,6 +543,10 @@ function streakText(up: number, down: number, n: number): string {
 /** Every derived difference between two states, in plain words. */
 export function stateDiff(a: State, b: State, config: ProgrammeConfig, date: IsoDate): string[] {
   const lines: string[] = [];
+  // §7 (release 1.1): which day Today offers next, by engine A.22.
+  const da = defaultDay(a);
+  const db = defaultDay(b);
+  if (da !== db) lines.push(`Your next session: Day ${da} → Day ${db}`);
   for (const lift of LIFTS) {
     const name = displayName(lift, config);
     const la = a.lifts[lift];
@@ -559,8 +581,192 @@ export function stateDiff(a: State, b: State, config: ProgrammeConfig, date: Iso
   return lines;
 }
 
+
 // ---------------------------------------------------------------------
-// the record of a date (ui_spec §4.2)
+// sessions (ui_spec_v1_3.md §9, §11): the replayed log grouped into sessions
+// ---------------------------------------------------------------------
+
+/** §9: sessions dated before this are never treated as open (SPEC_QUESTIONS Q28). */
+export const OPEN_FROM: IsoDate = '2026-10-11';
+/** §4.2: sessions before release 1 (9 Oct) were logged before the app could record a skip. */
+export const RELEASE_1: IsoDate = '2026-10-09';
+
+/** Entries that belong to a session. Others (a max set by hand, a check-in, a drop height) attach to one if it shares the date. */
+const SESSION_ENTRY = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'single', 'single_skipped', 'session_start', 'session_end']);
+
+export interface SessionGroup {
+  /** Stable key: the origin of the session's first entry in the log. */
+  id: string;
+  date: IsoDate;
+  day?: SessionDay;
+  /** The session_start entry, when the session was logged with one (engine A.27). */
+  start?: ReplayStep;
+  /** The first session_end entry. */
+  end?: ReplayStep;
+  /** Every entry of the session in log order, including entries attached by date. */
+  steps: ReplayStep[];
+}
+
+export function originKey(o: CorrectionTarget): string {
+  return typeof o === 'number' ? String(o) : `${o[0]}.${o[1]}`;
+}
+
+/**
+ * The corrected log as sessions, oldest first. A session_start opens a
+ * session; every other session entry joins the latest session of its
+ * date that has not ended (else the latest of its date), so entries
+ * logged on the next day into a carried-on session stay in it (§9), and
+ * an added separate session keeps to itself (§11A). Sessions logged
+ * before release 1 have no session_start and are grouped by date.
+ */
+export function sessionsFrom(history: History, config: ProgrammeConfig): SessionGroup[] {
+  const groups: SessionGroup[] = [];
+  const byDate = new Map<IsoDate, SessionGroup[]>();
+  const index = new Map<ReplayStep, number>();
+  const latest = (date: IsoDate): SessionGroup | undefined => {
+    const list = byDate.get(date) ?? [];
+    return [...list].reverse().find((g) => !g.end) ?? list[list.length - 1];
+  };
+  const extras: ReplayStep[] = [];
+  history.steps.forEach((s, i) => {
+    index.set(s, i);
+    const l = s.item.log;
+    if (!SESSION_ENTRY.has(l.kind)) {
+      extras.push(s);
+      return;
+    }
+    let g = l.kind === 'session_start' ? undefined : latest(l.date);
+    if (!g) {
+      g = { id: originKey(s.item.origin), date: l.date, steps: [] };
+      groups.push(g);
+      byDate.set(l.date, [...(byDate.get(l.date) ?? []), g]);
+    }
+    g.steps.push(s);
+    if (l.kind === 'session_start' && !g.start) g.start = s;
+    if (l.kind === 'session_end' && !g.end) g.end = s;
+  });
+  // Extras join the latest session of their date that started before them, else the first of that date.
+  for (const x of extras) {
+    const list = byDate.get(x.item.log.date);
+    if (!list) continue;
+    const at = index.get(x)!;
+    const g = [...list].reverse().find((c) => index.get(c.steps[0]!)! < at) ?? list[0]!;
+    g.steps.push(x);
+    g.steps.sort((a, b) => index.get(a)! - index.get(b)!);
+  }
+  for (const g of groups) {
+    const d = dayFor(g.steps, g.date, config);
+    if (d !== undefined) g.day = d;
+  }
+  return groups;
+}
+
+/**
+ * §9: open from its first log until Finish, Close it, or the end of the
+ * day after its date. A session dated today is the live one; one from
+ * before release 1.1 (OPEN_FROM) is never open on the day after, so it
+ * never produces the unfinished-session card.
+ */
+export function isOpen(g: SessionGroup, today: IsoDate): boolean {
+  if (!g.start || g.end) return false;
+  const d = daysBetween(g.date, today);
+  if (d === 0) return true;
+  return d === 1 && g.date >= OPEN_FROM;
+}
+
+/** The open session, if any (there is at most one: the next cannot start while one is open). */
+export function openSession(groups: readonly SessionGroup[], today: IsoDate): SessionGroup | undefined {
+  return [...groups].reverse().find((g) => isOpen(g, today));
+}
+
+/** §11A: the latest session of a day before a date. */
+export function lastSessionOfDay(groups: readonly SessionGroup[], day: SessionDay, before: IsoDate): SessionGroup | undefined {
+  return [...groups].reverse().find((g) => g.day === day && g.date < before);
+}
+
+/** §4.3: Remove this session: one removal per entry of the session (entries attached by date stay). */
+export function sessionRemoval(g: SessionGroup): CorrectionAction[] {
+  return g.steps.filter((s) => SESSION_ENTRY.has(s.item.log.kind)).map((s) => ({ op: 'remove' as const, target: s.item.origin }));
+}
+
+/**
+ * §11A: the derived state where entries for `date` will be inserted
+ * (engine A.28 places them before the first entry dated later), so the
+ * plan shown for an added session is the one its numbers replay from.
+ */
+export function stateAtInsert(base: State, raw: readonly unknown[], config: ProgrammeConfig, date: IsoDate): State {
+  return replay(base, raw, config, (item) => item.log.date > date).state;
+}
+
+/** The derived state just before a session's first entry (what the session moved, §14.6). */
+export function stateBeforeSession(base: State, raw: readonly unknown[], config: ProgrammeConfig, g: SessionGroup): State {
+  const first = g.steps[0]?.item.origin;
+  if (first === undefined) return replay(base, raw, config).state;
+  return replay(base, raw, config, (item) => originKey(item.origin) === originKey(first)).state;
+}
+
+// ---------------------------------------------------------------------
+// history by programme week (ui_spec §11)
+// ---------------------------------------------------------------------
+
+export type HistoryLine =
+  | { kind: 'week'; week: number; from: IsoDate; to: IsoDate; sessions: SessionGroup[] }
+  | { kind: 'empty'; first: number; last: number; current: boolean };
+
+export function weekStart(config: ProgrammeConfig, week: number): IsoDate {
+  return addDays(config.mesocycles[0]!.start, (week - 1) * 7);
+}
+
+/**
+ * Newest week first, from the current week back to the first week with a
+ * session. Consecutive weeks without sessions fold into one line; the
+ * current week with nothing yet has a line of its own. `weeks` limits the
+ * list to that many programme weeks; `more` says earlier weeks exist.
+ */
+export function historyLines(groups: readonly SessionGroup[], config: ProgrammeConfig, today: IsoDate, weeks?: number): { lines: HistoryLine[]; more: boolean } {
+  if (!groups.length) return { lines: [], more: false };
+  const current = programmeWeek(config, today);
+  const byWeek = new Map<number, SessionGroup[]>();
+  groups.forEach((g) => {
+    const w = programmeWeek(config, g.date);
+    byWeek.set(w, [...(byWeek.get(w) ?? []), g]);
+  });
+  const first = Math.min(...byWeek.keys());
+  const top = Math.max(current, ...byWeek.keys());
+  const bottom = weeks !== undefined ? Math.max(first, top - weeks + 1) : first;
+  const lines: HistoryLine[] = [];
+  let w = top;
+  while (w >= bottom) {
+    const list = byWeek.get(w);
+    if (list) {
+      lines.push({ kind: 'week', week: w, from: weekStart(config, w), to: addDays(weekStart(config, w), 6), sessions: [...list].reverse() });
+      w -= 1;
+      continue;
+    }
+    if (w === current) {
+      lines.push({ kind: 'empty', first: w, last: w, current: true });
+      w -= 1;
+      continue;
+    }
+    let lo = w;
+    while (lo - 1 >= bottom && !byWeek.has(lo - 1) && lo - 1 !== current) lo -= 1;
+    lines.push({ kind: 'empty', first: lo, last: w, current: false });
+    w = lo - 1;
+  }
+  return { lines, more: bottom > first };
+}
+
+export function historyLineText(line: HistoryLine): { left: string; right: string } {
+  if (line.kind === 'week') {
+    const n = line.sessions.length;
+    return { left: `Week ${line.week} · ${rangeOfDates(line.from, line.to)}`, right: `${n} session${n === 1 ? '' : 's'}` };
+  }
+  if (line.current) return { left: `Week ${line.last} · no sessions yet`, right: '' };
+  return { left: line.first === line.last ? `Week ${line.first} · no sessions` : `Weeks ${line.first} to ${line.last} · no sessions`, right: '' };
+}
+
+// ---------------------------------------------------------------------
+// the record of a session (ui_spec §4.2)
 // ---------------------------------------------------------------------
 
 export type RowStatus = 'done' | 'skipped' | 'not_logged';
@@ -568,12 +774,21 @@ export type RowStatus = 'done' | 'skipped' | 'not_logged';
 export interface RecordRow {
   item: PlanItem;
   status: RowStatus;
-  /** The entry that decides the status (the last one for the slot that day). */
+  /** The entry that decides the status (the last one for the slot in the session). */
   step?: ReplayStep;
   /** A test single logged before the work sets. */
   single?: ReplayStep;
-  /** More than one entry for the slot that day. */
+  /** More than one entry for the slot in the session. */
   twice: boolean;
+  /** SPEC_QUESTIONS Q27: a ladder entry counted as the drop jump on a rebuilt plan. */
+  viaLadder?: boolean;
+}
+
+export interface RecordCounts {
+  planned: number;
+  done: number;
+  skipped: number;
+  notRecorded: number;
 }
 
 export interface RecordView {
@@ -582,18 +797,26 @@ export interface RecordView {
   source: 'snapshot' | 'rebuilt' | 'none';
   plan?: PlanSnapshot;
   rows: RecordRow[];
-  /** Logged that day but not in the plan. */
+  /** Logged in the session but not in the plan. */
   extras: ReplayStep[];
-  counts: { planned: number; done: number; skipped: number };
+  counts: RecordCounts;
   minutes?: number;
 }
 
 const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj']);
 
-/** The plan for a date: the snapshot saved on the day, else rebuilt by replay (A.27). */
-export function planFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, day: SessionDay): { plan?: PlanSnapshot; source: RecordView['source'] } {
-  const steps = history.byDate.get(date) ?? [];
-  const start = steps.find((s) => s.item.log.kind === 'session_start');
+/** "2 done · 6 not recorded", "7 done · 2 skipped · 1 not recorded": separate counts, zeros left out. */
+export function countsText(c: RecordCounts): string {
+  const parts: string[] = [];
+  if (c.done) parts.push(`${c.done} done`);
+  if (c.skipped) parts.push(`${c.skipped} skipped`);
+  if (c.notRecorded) parts.push(`${c.notRecorded} not recorded`);
+  return parts.join(' · ') || 'Nothing planned';
+}
+
+/** The plan for a session: the snapshot saved on the day, else rebuilt by replay (A.27). */
+export function planFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, day: SessionDay, steps?: readonly ReplayStep[]): { plan?: PlanSnapshot; source: RecordView['source'] } {
+  const start = (steps ?? history.byDate.get(date) ?? []).find((s) => s.item.log.kind === 'session_start');
   if (start && start.item.log.kind === 'session_start') return { plan: start.item.log.plan, source: 'snapshot' };
   if (!history.ok) return { source: 'none' };
   const before = stateBefore(base, state.log, config, date);
@@ -602,13 +825,12 @@ export function planFor(history: History, base: State, state: State, config: Pro
   return { plan: planSnapshot(s, config), source: 'rebuilt' };
 }
 
-export function recordFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, dayHint?: SessionDay): RecordView {
-  const steps = history.byDate.get(date) ?? [];
+function buildRecord(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, steps: readonly ReplayStep[], dayHint?: SessionDay): RecordView {
   const day = dayFor(steps, date, config) ?? dayHint;
-  const view: RecordView = { date, source: 'none', rows: [], extras: [], counts: { planned: 0, done: 0, skipped: 0 } };
-  if (day !== undefined) view.day = day;
+  const view: RecordView = { date, source: 'none', rows: [], extras: [], counts: { planned: 0, done: 0, skipped: 0, notRecorded: 0 } };
   if (day !== undefined) {
-    const { plan, source } = planFor(history, base, state, config, date, day);
+    view.day = day;
+    const { plan, source } = planFor(history, base, state, config, date, day, steps);
     view.source = source;
     if (plan) view.plan = plan;
   }
@@ -616,8 +838,11 @@ export function recordFor(history: History, base: State, state: State, config: P
   const items: PlanItem[] = [];
   if (view.plan?.pre.includes('cmj')) items.push({ slot: 'cmj', name: 'Jump test', block: 0 });
   if (view.plan) items.push(...view.plan.items);
+  // SPEC_QUESTIONS Q27: on a rebuilt plan with a drop jump and no ladder, a logged ladder entry is that day's drop jump.
+  const ladderAsDrop = view.source === 'rebuilt' && items.some((i) => i.slot === 'depth_jump') && !items.some((i) => i.slot === 'rsi_ladder');
   for (const item of items) {
-    const mine = steps.filter((s) => ROW_KINDS.has(s.item.log.kind) && slotOfLog(s.item.log) === item.slot);
+    const slots = item.slot === 'depth_jump' && ladderAsDrop ? ['depth_jump', 'rsi_ladder'] : [item.slot];
+    const mine = steps.filter((s) => ROW_KINDS.has(s.item.log.kind) && slots.includes(slotOfLog(s.item.log) ?? ''));
     const singles = steps.filter((s) => s.item.log.kind === 'single' && slotOfLog(s.item.log) === item.slot);
     mine.forEach((s) => used.add(s));
     singles.forEach((s) => used.add(s));
@@ -625,6 +850,7 @@ export function recordFor(history: History, base: State, state: State, config: P
     const isSkip = last ? last.item.log.kind === 'skip' || (last.item.log.kind === 'fixed' && !last.item.log.done) : false;
     const row: RecordRow = { item, status: last ? (isSkip ? 'skipped' : 'done') : 'not_logged', twice: mine.length > 1 };
     if (last) row.step = last;
+    if (last && slotOfLog(last.item.log) === 'rsi_ladder' && item.slot === 'depth_jump') row.viaLadder = true;
     if (singles.length) row.single = singles[singles.length - 1]!;
     view.rows.push(row);
   }
@@ -637,10 +863,27 @@ export function recordFor(history: History, base: State, state: State, config: P
     planned: view.rows.length,
     done: view.rows.filter((r) => r.status === 'done').length,
     skipped: view.rows.filter((r) => r.status === 'skipped').length,
+    notRecorded: view.rows.filter((r) => r.status === 'not_logged').length,
   };
   const end = [...steps].reverse().find((s) => s.item.log.kind === 'session_end');
   if (end && end.item.log.kind === 'session_end' && end.item.log.minutes !== undefined) view.minutes = end.item.log.minutes;
   return view;
+}
+
+/** The record of one session. */
+export function recordOf(history: History, base: State, state: State, config: ProgrammeConfig, g: SessionGroup, dayHint?: SessionDay): RecordView {
+  return buildRecord(history, base, state, config, g.date, g.steps, g.day ?? dayHint);
+}
+
+/** The record of everything logged on a date (one session on most dates). */
+export function recordFor(history: History, base: State, state: State, config: ProgrammeConfig, date: IsoDate, dayHint?: SessionDay): RecordView {
+  return buildRecord(history, base, state, config, date, history.byDate.get(date) ?? [], dayHint);
+}
+
+/** "Light week" from a plan's barbell item, if any. */
+export function weekTypeOf(plan: PlanSnapshot | undefined): string | undefined {
+  const p = plan?.items.find((i) => i.position !== undefined)?.position;
+  return p !== undefined ? POSITION_LABEL[p] : undefined;
 }
 
 /** Context line pieces for a date. */
@@ -650,4 +893,19 @@ export function contextFor(config: ProgrammeConfig, date: IsoDate): { week: numb
   const out: { week: number; total: number; block?: string } = { week: programmeWeek(config, date), total: last ? last.weeks[1] : 25 };
   if (meso) out.block = BLOCK_LABEL[meso.id];
   return out;
+}
+
+/** "Week 4 of 25 · Block 1: build tissue and reserve". */
+export function weekLine(config: ProgrammeConfig, date: IsoDate): string {
+  const c = contextFor(config, date);
+  return [c.week >= 1 ? `Week ${c.week} of ${c.total}` : '', c.block ?? ''].filter(Boolean).join(' · ');
+}
+
+/** §3: "Block 1 · week 4 of 8". */
+export function blockWeekText(config: ProgrammeConfig, date: IsoDate): string {
+  const meso = mesocycleOn(config, date);
+  if (!meso) return '';
+  const label = BLOCK_LABEL[meso.id].split(':')[0]!;
+  const n = meso.weeks[1] - meso.weeks[0] + 1;
+  return `${label} · week ${programmeWeek(config, date) - meso.weeks[0] + 1} of ${n}`;
 }
