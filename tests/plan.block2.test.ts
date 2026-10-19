@@ -5,11 +5,16 @@
  * reps-only case, the variant and the landing count.
  */
 import { describe, expect, it } from 'vitest';
-import { INITIAL_STATE, PROGRAMME_CONFIG as cfg } from '../src/config/load';
+import configV15 from '../spec/programme_config_v1_5.json';
+import { INITIAL_STATE } from '../src/config/load';
+import { parseProgrammeConfig } from '../src/config/validate';
 import { planSnapshot, prescribe } from '../src/engine';
 import type { Session } from '../src/engine';
 import { plannedText } from '../src/ui/model';
 
+// Pinned to config v1.5, whose Block 2 template these doses come from; a
+// plan snapshot saved under it must still read the same.
+const cfg = parseProgrammeConfig(configV15 as unknown);
 // Week 10, Day 1 of Block 2: not a ladder week, so the drop jump and drop landings both appear.
 const day = prescribe(INITIAL_STATE, cfg, '2026-11-16', 1) as Session;
 const snap = planSnapshot(day, cfg);

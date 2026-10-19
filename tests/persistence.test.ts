@@ -96,7 +96,7 @@ describe('export content', () => {
   });
 
   it('carries the versions and the training maxes', () => {
-    expect(md).toMatch(/spec engine_spec_v1_8 \| config 1\.5 \| vectors 1\.5 \| state schema 1/);
+    expect(md).toMatch(/spec engine_spec_v1_9 \| config 1\.6 \| vectors 1\.6 \| state schema 1/);
     expect(md).toContain('| Conventional deadlift | 150.3 |');
   });
 

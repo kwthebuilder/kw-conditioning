@@ -93,39 +93,35 @@ test('finish lists what is not logged; skipping the rest finishes with a summary
   expect(s.log.filter((e) => e.kind === 'session_end').length).toBe(1);
 });
 
-test('Block 2 contrast: a grid of rounds; the heavy lift logs the rounds ticked', async ({ page }) => {
+test('Block 2 doubles: plain sets, 3 to 4; the heavy lift logs the sets ticked (config v1.6: no contrast rounds)', async ({ page }) => {
   await open(page, '2026-11-12T18:00:00+08:00');
   await page.getByRole('button', { name: 'Day 2', exact: true }).click();
-  const card = page.locator('.card.focus');
-  await expect(card).toContainText('Contrast: heavy set, then jump · 3–4 rounds');
-  // The boundary test single sits above the rounds.
-  await expect(card.locator('.callout').first()).toContainText('Test single suggested');
-  await card.getByRole('button', { name: 'Skip single' }).click();
-  const grid = page.locator('.card.focus .grid-row');
-  for (let r = 0; r < 4; r++) await grid.nth(r).locator('button.tick').first().click();
+  await expect(page.locator('.grid-row')).toHaveCount(0);
+  await expect(page.getByText(/Contrast/)).toHaveCount(0);
+  await openBlock(page, 'Deadlift');
   const dl = item(page, 'Deadlift');
-  await dl.getByRole('radio', { name: '3' }).click();
-  await dl.getByRole('button', { name: 'Log', exact: true }).click();
+  // The boundary test single sits on the lift.
+  await expect(dl.locator('.callout').first()).toContainText('Test single suggested');
+  await dl.getByRole('button', { name: 'Skip single' }).click();
+  // Skipping the single starts the session; the explosive block opens first, so open the lift again.
+  await openBlock(page, 'Deadlift');
+  for (const n of [1, 2, 3]) await item(page, 'Deadlift').getByRole('button', { name: new RegExp(`^Set ${n}`) }).click();
+  await item(page, 'Deadlift').getByRole('radio', { name: '3' }).click();
+  await item(page, 'Deadlift').getByRole('button', { name: 'Log', exact: true }).click();
   const s = await stored(page);
   const last = s.log.filter((e) => e.kind === 'barbell').pop()!;
   expect((last.log.prescribed as { sets: number }).sets).toBe(4);
 });
 
-test('morning-after check-in: one tap when clear, the flare protocol above 3', async ({ page }) => {
-  await open(page, '2026-09-21T18:00:00+08:00');
-  const cmj = item(page, 'Jump test');
-  await cmj.getByLabel('Jump height, average of 3', { exact: true }).fill('48');
-  await cmj.getByRole('button', { name: 'Log', exact: true }).click();
-  await page.clock.setSystemTime(new Date('2026-09-22T08:00:00+08:00'));
-  await page.reload();
-  const card = page.locator('.checkin');
-  await expect(card).toContainText("After Mon 21 Sep's session");
-  await card.getByRole('button', { name: "Something's sore" }).click();
+test('the flare protocol shows when a session-start score is above 3 (ui_spec_v1_4.md §20)', async ({ page }) => {
+  await open(page, '2026-10-19T18:00:00+08:00');
+  const card = page.locator('.session-check');
+  await card.getByRole('button', { name: 'Yes', exact: true }).click();
   for (let i = 0; i < 4; i++) await card.getByRole('button', { name: 'Gluteal tendon: more' }).click();
   await card.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.locator('.protocol')).toContainText('Pain above 3/10 persisting beyond 24 h: drop plyometrics');
-  await expect(page.locator('.checkin')).toHaveCount(0);
+  await expect(page.locator('.session-check')).toHaveCount(0);
   const s = await stored(page);
   const tc = s.log.find((e) => e.kind === 'tissue_check')!;
-  expect(tc.log).toMatchObject({ for_date: '2026-09-21', scores: { patellar: 0, gluteal: 4, shoulder: 0 } });
+  expect(tc.log).toMatchObject({ for_date: '2026-10-19', above_3: true, scores: { patellar: 0, gluteal: 4, shoulder: 0 } });
 });
