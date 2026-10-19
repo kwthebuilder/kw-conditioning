@@ -1,6 +1,6 @@
 # Acro Base S&C training app
 
-Phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The rules live in `spec/` (read-only); the code lives in `src/`. See `CLAUDE.md` for the standing rules and `spec/app_build_plan_v1_4.md` for the phases. Superseded spec versions stay in `spec/` for reference; `CLAUDE.md` names the current ones.
+Phone-first, offline web app that prescribes and logs a two-day-a-week strength programme. The rules live in `spec/` (read-only); the code lives in `src/`. See `CLAUDE.md` for the standing rules and `spec/app_build_plan_v1_5.md` for the phases. Superseded spec versions stay in `spec/` for reference; `CLAUDE.md` names the current ones.
 
 ## Run
 
@@ -15,7 +15,7 @@ npm run preview   # serve dist/ on the LAN
 
 ## On the phone
 
-The built app is a static site (`dist/`) with a service worker, so it needs HTTPS. `.github/workflows/pages.yml` builds, tests and deploys `dist/` to GitHub Pages on every push to `main`; Pages must be set to "GitHub Actions" as its source once. Open the site on the phone while online, add it to the home screen (Safari share sheet, or Chrome menu), and from then on it runs from the icon in airplane mode. State lives in the browser's storage. Turn on automatic backup (Backup, then paste a token) to copy every change to the private repo `kwthebuilder/kw-conditioning-logs`; see `spec/engine_spec_v1_8.md` §12. Training data never goes into this repo, which is public.
+The built app is a static site (`dist/`) with a service worker, so it needs HTTPS. `.github/workflows/pages.yml` builds, tests and deploys `dist/` to GitHub Pages on every push to `main`; Pages must be set to "GitHub Actions" as its source once. Open the site on the phone while online, add it to the home screen (Safari share sheet, or Chrome menu), and from then on it runs from the icon in airplane mode. State lives in the browser's storage. Turn on automatic backup (Backup, then paste a token) to copy every change to the private repo `kwthebuilder/kw-conditioning-logs`; see `spec/engine_spec_v1_9.md` §12. Training data never goes into this repo, which is public.
 
 ## Layout
 
@@ -27,7 +27,7 @@ src/
     update.ts    update(state, log, config): the one door for every state change (A.23)
     barbell.ts   class A: prescribeLift / updateLift (phase 1)
     rdl.ts       class B RDL table
-    tempo.ts     class B hack squat and abductor HSR streaks
+    tempo.ts     class B streak slots (hack squat, abductors, dumbbell Romanian deadlift)
     accessory.ts class C double progression and the shared streak engine
     fixed.ts     classes D, E, F as fixed text and numbers from the config
     cmj.ts       CMJ values and running mean

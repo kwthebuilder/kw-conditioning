@@ -267,3 +267,123 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** The app checks on start: if the stored height is not 51 cm it logs one depth-jump height entry of 51 cm (A.23), which the export shows; otherwise it logs nothing.
 - **Spec revision:** none
+
+## Q33 — programme 1.6: the content of every session from 19 Oct 2026
+- **Raised:** 2026-10-19, programme 1.6 release (programme owner's brief)
+- **Where:** programme_config_v1_5.json `templates`, `slots`, `budget_min` / programme_design_rationale_v3_3.md (kept in the project, not in this repo)
+- **Question:** What does each block's Day 1 and Day 2 now hold, in what order, with which new slots, and what leaves the programme?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026. New templates for Block 1 (to 8 Nov), Block 2 (9 Nov to 20 Dec), Blocks 3 and 4 (21 Dec to 28 Feb) and the taper (1 to 7 Mar), exactly as the brief lists them: explosive work first, then the main lift, then the rest. Block dates unchanged. Target minutes: Block 1 Day 1 70, Day 2 63; Block 2 72 and 68; Blocks 3 and 4 64 and 66; taper 40; the session ceiling (`budget_min`) is 80 minutes, normal and test-single days alike. No block alternates a heavy set with a jump ("contrast" rounds are gone); Block 2's main lifts are plain doubles, 3 to 4 sets, with no pull-ups inside the rests. Two new slots: `db_rdl`, a dumbbell Romanian deadlift with a 3-second lowering (class B, 2 kg per hand steps, load set by the first logged session, rep target 8 in Block 1 and 6 from Block 2), and `seated_abduction`, a seated hip abduction machine with a 3-second lowering (the cable abductor's rule; its load does not carry over because the machine is a different implement). Nine slots leave every template but stay defined so older logs replay and export: Nordic curl, hip abduction hold, Y-raise, Pallof press, hack squat (now only a swap target), drop landing, barbell Romanian deadlift, cable hip abduction, drop-jump ladder. The split squat's on-screen name gains "3 s lowering"; its rule is unchanged. New on-screen words (warm-up, jump test, light week, running-long note, four item cues) as the brief gives them.
+- **Spec revision:** programme_config_v1_6.json; engine_spec_v1_9.md §3, A.38, A.39; ui_spec_v1_4.md §18
+
+## Q34 — who may write spec files for this release
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** CLAUDE.md v1.7 rule 1 ("/spec is read-only")
+- **Question:** The release needs new versions of the engine spec, interface spec, config, test vectors and build plan. CLAUDE.md forbids the builder to edit /spec.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026 (programme owner): for this release only, the builder writes new versioned files beside the old ones and never edits or deletes an existing spec file. Every implementation choice the builder makes is recorded here (Q35 to Q47) for the coordinating chat and the athlete to review before merge.
+- **Spec revision:** CLAUDE.md v1.8; app_build_plan_v1_5.md v1.5 note
+
+## Q35 — swaps: what moves, and how a swapped main lift turns the rotation
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.22 (day selection reads each lift's `last_logged`), A.26 (skip)
+- **Question:** A swap must move nothing, as a skip does, yet a swapped front squat or deadlift must count as that day's main lift so the Day 1 / Day 2 rotation still advances. A.22 reads `last_logged`, which a swap must not change. And should a swap count as the lift's first session in a new block?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: a swap is logged as `{ kind: "swap", slot, date, to, load?, sets_done?, last_set?, note? }` and moves nothing, with the one day-selection exception. Builder, 19 Oct 2026, under the programme owner's brief: a swap on a main lift writes its date into a new state field, `swapped_main` (one date per lift, absent when none), and A.22 reads the later of that date and `last_logged`. Nothing else reads it, so the lift keeps its training max, week type, load, block and session count. A swap does not count as entering a new block, so on a block's first day a swapped main lift leaves the test single, the set caps (Q38) and the phase-start test (Q39) due again next time that lift comes up. The engine accepts any non-empty `to` text (the interface offers only the config's list), so a correction can never be refused over it. Corrections replace, remove or insert swaps like any other entry; the replay rebuilds `swapped_main`. A state from before this version has no `swapped_main`, which means no lift swapped, so it imports unchanged.
+- **Spec revision:** engine_spec_v1_9.md A.32; engine_test_vectors_v1_6.json `swap`
+
+## Q36 — the template's rep target on a streak slot
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md §3, §4 / programme_config_v1_6.json `db_rdl`
+- **Question:** The dumbbell Romanian deadlift is 8 reps in Block 1 and 6 from Block 2, but a slot has one `reps`. How does the streak rule follow the template, and does a replay of an old log depend on which template is in force?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: when a template item gives `reps` for a class B or C slot, the rule uses it: up at item reps + (slot up_at − slot reps), down below item reps; slots without item reps behave as before. Builder, 19 Oct 2026, under the programme owner's brief: the prescription carries the number as `target_reps` and the log echoes it, and `update` takes the rule from the log, so a replay never consults a template. A log without `target_reps` (every log made before this version) uses the slot's own rule, unchanged. In config v1.6 only `db_rdl` items give reps; the other class B and C items (split squat, abduction, presses, pull-up, row) deliberately give none, so their logs and rules are exactly as before. `db_rdl`'s own values (reps 8, up at 10, down below 8) apply only to a log made without a target.
+- **Spec revision:** engine_spec_v1_9.md A.33; engine_test_vectors_v1_6.json `rep_override`
+
+## Q37 — first-session loads on the new slots
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.11
+- **Question:** Do `db_rdl` and `seated_abduction` start from a load, or from the barbell Romanian deadlift and cable abductor they replace?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: the first logged session sets each load (A.11, unchanged). Neither carries a load over: the dumbbell lift is loaded per hand and the machine is a different implement. On screen, `db_rdl` is a dumbbell item (2 to 40 kg in 2 kg steps, "kg per hand"); `seated_abduction` steps 2.5 kg and shows "go up one stack plate" when a step is owed.
+- **Spec revision:** engine_spec_v1_9.md §3; engine_test_vectors_v1_6.json `first_load`
+
+## Q38 — set caps on the test-single day: which session
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.8, A.15 / programme_config_v1_6.json `audit_trims`
+- **Question:** "On any session that opens with a boundary single" the Day 1 dumbbell Romanian deadlift, the Day 2 split squat and every item in the day's last upper block drop to 2 sets. The single is a suggestion that can be skipped, and the plan is fixed when the session's first item is logged, before the single. Which session is it, and how does the rest of that day read once the lift is logged?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: the caps, the slots and 2 sets. Builder, 19 Oct 2026, under the programme owner's brief: it is the session on which that day's main lift enters Block 2, 3 or 4 (the session that is offered the boundary single), whether the single is taken or skipped. To keep that day reading the same after the lift is logged, each lift now records `entered_on`, the date of its first log in its current block; only logs dated after Block 1 write it, so no existing state or log changes. The taper has no boundary single and is not capped; a big-gap single (Block 1 only) does not cap. "The last upper block" is marked in the config (`upper: true`). Each capped item keeps the sets it was cut from, and the screen says "test-single day: 3 sets cut to 2". No load, rep, rule or order changes. In Blocks 3 and 4 Day 1 the last block with upper-body work is the Romanian deadlift and pull-up superset, so the pull-up drops to 2 and the Romanian deadlift is already 2.
+- **Spec revision:** engine_spec_v1_9.md A.34; engine_test_vectors_v1_6.json `audit_trims`
+
+## Q39 — the phase-start test: where, when, and what it logs
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** programme_config_v1_6.json `phase_tests`, slot `phase_test`
+- **Question:** Where exactly does the test sit, what counts as "the first Day 1 session" of a block, and how is it logged?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: on the first Day 1 of Blocks 2, 3, 4 and the taper, a record-only item at the start of the explosive block asks for the best reactive strength index (two decimals) and the best trap-bar jump height in centimetres; skippable like every item; in the export. Builder, 19 Oct 2026, under the programme owner's brief: "the first Day 1" is the Day 1 on which the front squat enters the block (the same test as Q38), so it stays on offer until the front squat is logged in the block, and once the front squat is logged it stays on that day's plan only. It sits immediately before the drop jump. A new config slot, `phase_test` (class F, never in a template), carries the text; the log is `{ kind: "phase_test", date, rsi?, trap_bar_cm?, note? }`; a skip uses slot `phase_test`. The screen needs at least one number to log it; otherwise Skip.
+- **Spec revision:** engine_spec_v1_9.md A.35; ui_spec_v1_4.md §19; engine_test_vectors_v1_6.json `phase_tests`, `record_only`
+
+## Q40 — the tendon question at the start of every session
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.29 / ui_spec_v1_3.md §14.9 (the morning-after card)
+- **Question:** The brief changes "only the prompt": the question is asked at the start of every session, with No as one tap. Does the morning-after card stay as well?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: record only; asked at the start of every session, Day 1 and Day 2: "Any tendon pain above 3/10 in the last 48 hours?"; No is one tap; site and score only after Yes; never blocks logging. Builder, 19 Oct 2026, under the programme owner's brief: the new question replaces the morning-after card (asking both would be the same question twice in 48 hours). No logs a check-in with `above_3: false` and no scores; Yes logs the three scores with `above_3: true`; both are dated and tagged with the session's date, and the question is not asked again for that date. The flare protocol still shows on a day any score is above 3. Check-ins logged before keep their wording. The phone-screen check for numeric dates now sets aside pain scores written "N/10".
+- **Spec revision:** engine_spec_v1_9.md A.29, A.36; ui_spec_v1_4.md §20
+
+## Q41 — which template a past date is planned from
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.27 (a plan rebuilt by replay for sessions with no saved plan) / ui_spec_v1_3.md §11A (Add a missed session)
+- **Question:** "The new Block 1 templates apply from merge." Sessions logged before 9 Oct have no saved plan; their record is rebuilt from the current templates. Under the new templates the 6 Oct record would show a dumbbell Romanian deadlift that was never planned, and an added missed session for an October date would show the new sessions.
+- **Blocked:** Nothing.
+- **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief (the conservative choice: every existing record reads exactly as before). Config v1.6 carries `templates_before`: the v1.5 Block 1 templates, unchanged, used for any date before 19 Oct 2026. A session with a saved plan always shows its saved plan. The cut-over date is the approval date, 19 Oct, because the merge date is not known when the config is written. If the merge is later, sessions logged in between keep their saved plans; only a missed session added for those few days would be planned from the new templates. Changing the date is a one-value config change.
+- **Spec revision:** engine_spec_v1_9.md A.37; programme_config_v1_6.json `templates_before`; engine_test_vectors_v1_6.json `templates` (last case)
+
+## Q42 — retired slots, contrast blocks and the drop-landing note
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_spec_v1_8.md A.21, A.25 / ui_spec_v1_3.md §14.8, §17 (note on Block 2's drop landings)
+- **Question:** What happens to the retired slots' rules, the contrast grid and the round ranges, and to the open note that Block 2's drop landings needed adapting for the single 51 cm box?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: remove contrast everywhere; the nine slots leave every template. Builder, 19 Oct 2026, under the programme owner's brief: the slots and their rules stay in config v1.6 unchanged so older logs replay, export and can be corrected. A.21 and A.25 are unchanged; v1.6 has no ladder weeks and no contrast block, and uses a round range only to give Block 2's main lifts 3 to 4 plain sets, the fourth shown as optional. The contrast grid code stays for a config that asks for it. The §17 drop-landing note is closed: drop landings leave the programme.
+- **Spec revision:** engine_spec_v1_9.md A.38; ui_spec_v1_4.md §21
+
+## Q43 — the light-week line on a two-set light day
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** ui_spec_v1_3.md §14.7 / engine_spec_v1_8.md 2.7 (after two negative steps the light week is 2 sets)
+- **Question:** The approved line reads "Light week: 3 sets of 4 at this load. Stop at 4, even if you have more." On the forced light day after two consecutive downward steps the prescription is 2 sets, so the line would contradict the card.
+- **Blocked:** Nothing.
+- **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief: the config holds the line with the numbers as placeholders and the screen fills in the day's sets and reps, so every normal light week reads exactly as approved and a forced light day reads "2 sets of 4". It never blocks logging, and the extra line after more than 2 extra reps stays.
+- **Spec revision:** programme_config_v1_6.json `text.light_week`; engine_spec_v1_9.md A.39; ui_spec_v1_4.md §18.6
+
+## Q44 — on-screen words, target minutes and the 80-minute ceiling
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** programme_config_v1_5.json `budget_min` (never read by the app) / ui_spec_v1_3.md §4.4 ("about 72 min")
+- **Question:** Where do the new words live, and how is "about N min, 80 max" built?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 19 Oct 2026: the words as the brief gives them. Builder, 19 Oct 2026, under the programme owner's brief: config v1.6 carries them as display text the engine never reads (`text`, each slot's `cue` and `swaps`, a template item's `note`). The next-session heading reads "Day 1 · about 70 min, 80 max", the 80 from `budget_min`; while a session is live the same words sit at its top; a record keeps "about N min" from its saved plan. The running-long note is display only and shows on every session.
+- **Spec revision:** programme_config_v1_6.json; engine_spec_v1_9.md A.39; ui_spec_v1_4.md §18
+
+## Q45 — which tests and vectors stay pinned to older configs
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** engine_test_vectors_v1_5.json `session.ladder`, `rounds` / tests/session.test.ts, tests/plan.block2.test.ts, e2e/release2.e2e.ts, e2e/release11.e2e.ts
+- **Question:** Several existing tests and vector cases describe the v1.5 templates (Block 2 drop landings, the contrast block, round ranges on the trap-bar jump and jump shrug, the Block 3 barbell Romanian deadlift). Under config v1.6 they no longer hold.
+- **Blocked:** Nothing.
+- **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief: as with the golden sessions (Q26), these stay pinned to the config they describe. Vectors v1.6 keep every v1.5 block unchanged and name the config each template-dependent block is read against (`pinned`: golden sessions v1.3; `session.ladder` and `rounds` v1.5; everything else v1.6). The unit tests for those blocks load config v1.5 and pass unchanged. Three phone-screen tests described screens that no longer exist and were replaced: the Block 2 contrast grid (now Block 2 plain doubles, 3 ticked plus the last logs 4 sets), the morning-after check-in (now the flare protocol from a session-start answer), and test 15's drop-landing dose (now checks drop landings are gone and the skater bound reads 2 × 4 each side).
+- **Spec revision:** engine_test_vectors_v1_6.json `pinned`
+
+## Q46 — the Block 2 drop-jump note: 8 or 9 jumps
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** programme_config_v1_5.json `slots.depth_jump.note` ("the design intent for late M2 is 8") / the brief ("keep the existing note that the athlete may take up to 9 by judgement") / engine_spec_v1_8.md §6 ("6 to 9" in Block 2)
+- **Question:** The existing config note names 8 as the design intent for late Block 2; the brief asks to keep a note saying up to 9. Which is the programme's?
+- **Blocked:** Nothing. Built as the brief says.
+- **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief: the Block 2 Day 1 drop jump shows "You may take up to 9 jumps by judgement." (the brief's words, and §6's top of range); the slot's own descriptive note, which the screen never shows, is left unchanged. The prescription stays 6 jumps. For the coordinating chat to confirm with the rationale v3.3: if the late-Block 2 intent is 8, the shown line needs one word changed.
+- **Spec revision:** programme_config_v1_6.json `templates.M2.day1`
+
+## Q47 — "Swapped to…" on items with no alternatives
+- **Raised:** 2026-10-19, programme 1.6 release
+- **Where:** brief "every item gets a 'Swapped to…' action next to Skip, listing that slot's swaps" / programme_config_v1_6.json `swaps` (11 slots)
+- **Question:** Seven items in the new templates have no approved alternative (the jump test, the kettlebell swing, the skater bound, the explosive dumbbell push press, the dumbbell push press, the seated abduction, the chest-supported row), plus the deadlift and the phase-start test. Should they show an empty "Swapped to…"?
+- **Blocked:** Nothing.
+- **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief: the button shows only on items whose slot has a `swaps` list, because an empty list has nothing to pick. Adding an alternative later is a config change only (one more `swaps` entry); no code changes. Skip stays on every item.
+- **Spec revision:** ui_spec_v1_4.md §18.1
