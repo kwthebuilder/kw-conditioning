@@ -11,17 +11,26 @@ import type { ContactSpec, MesocycleId, ProgrammeConfig, SlotId, State } from '.
 import { mesocycleOn, programmeWeek } from './calendar';
 import type { FixedPrescription } from './types';
 
-function resolveContactSpec(spec: ContactSpec, week: number, path: string): number {
-  if (typeof spec === 'number') return spec;
-  if (Array.isArray(spec)) return spec[0];
-  for (const [key, value] of Object.entries(spec)) {
+/**
+ * The value of a map from programme-week spans ("20-22") for a week.
+ * `optional`: undefined when no span covers the week, instead of an error.
+ */
+export function weekSpanValue(spans: Record<string, number>, week: number, path: string, optional = false): number | undefined {
+  for (const [key, value] of Object.entries(spans)) {
     const m = /^(\d+)-(\d+)$/.exec(key);
     if (!m) throw new Error(`${path}: cannot read week span "${key}"`);
     const lo = Number(m[1]);
     const hi = Number(m[2]);
     if (week >= lo && week <= hi) return value;
   }
+  if (optional) return undefined;
   throw new Error(`${path}: no week span covers week ${week}`);
+}
+
+function resolveContactSpec(spec: ContactSpec, week: number, path: string): number {
+  if (typeof spec === 'number') return spec;
+  if (Array.isArray(spec)) return spec[0];
+  return weekSpanValue(spec, week, path)!;
 }
 
 /** Contacts for a class E slot on a date, or undefined if the slot has none configured. */

@@ -9,12 +9,12 @@
  * are the surface; bindConfig(config) gives the two-argument forms.
  * The per-slot functions below are what they compose.
  */
-export { prescribe, defaultDay, isLadderDay } from './session';
+export { prescribe, defaultDay, isLadderDay, mainLiftDate, templateFor } from './session';
 export { update, bindConfig } from './update';
 export { roundLoad } from './rounding';
 export { daysBetween, mesocycleOn, programmeWeek } from './calendar';
 // Class A
-export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, SEED_FACTOR } from './barbell';
+export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, opensBlock, SEED_FACTOR } from './barbell';
 // Class B
 export { prescribeRdl, updateRdl, rdlRow, rowBand, WIDE_WINDOW_SESSIONS } from './rdl';
 export { prescribeTempo, updateTempo, ruleForClassB } from './tempo';
@@ -27,10 +27,11 @@ export {
   parseIncrement,
   incrementText,
   ruleForClassC,
+  withRepTarget,
   type ProgressionRule,
 } from './accessory';
 // Classes D, E, F: fixed prescriptions
-export { prescribeFixed, contactsFor } from './fixed';
+export { prescribeFixed, contactsFor, weekSpanValue } from './fixed';
 // A.24: explosive slots that carry a load
 export { prescribeExplosive, updateExplosive, isCarrySlot } from './explosive';
 // CMJ, stored only

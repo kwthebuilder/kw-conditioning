@@ -46,6 +46,12 @@ export interface LiftState {
   forced_failures?: number;
   /** A.23: a single was logged on this date; the day's work sets are straight sets (A.16). */
   single_taken?: { date: IsoDate; reason: 'boundary' | 'big_gap' };
+  /**
+   * A.34 (v1.9): the date of this lift's first logged session (work sets or
+   * a single) in last_mesocycle. Set only by logs dated in a block after
+   * Block 1, so no log made before v1.9 sets it. Absent until then.
+   */
+  entered_on?: IsoDate;
 }
 
 export interface RdlState {
@@ -121,6 +127,12 @@ export interface State {
   overrides?: OverrideRecord[];
   /** A.24: explosive slot loads. Absent = none logged yet. */
   explosive?: Record<SlotId, ExplosiveState>;
+  /**
+   * A.32 (v1.9): the date of the latest swap logged on each primary lift.
+   * Read only by day selection (A.22); last_logged is not touched by a
+   * swap. Absent = no primary lift has been swapped.
+   */
+  swapped_main?: Partial<Record<LiftId, IsoDate>>;
 }
 
 // ---------------------------------------------------------------------
@@ -212,6 +224,11 @@ export interface Slot {
   // class E (plyometric)
   contacts?: Contacts;
   landings?: [number, number];
+
+  // v1.6, display only for the engine (A.39): what the athlete reads on the
+  // item, and the exercises the item may be swapped to (A.32).
+  cue?: string;
+  swaps?: string[];
 }
 
 export interface SlotItem {
@@ -227,6 +244,10 @@ export interface SlotItem {
   contacts?: number;
   /** TAPER only: which day of the shared template this item belongs to. */
   day?: 1 | 2;
+  /** v1.6: a line shown on the item, display only. */
+  note?: string;
+  /** v1.6: reps by programme-week span ("20-22"), overriding `reps` in those weeks. */
+  reps_by_week?: Record<string, number>;
 }
 
 /** A string item is a named warm-up block; an object item is a slot. */
@@ -239,6 +260,8 @@ export interface TemplateBlock {
   superset?: boolean;
   contrast?: boolean;
   rounds?: number | [number, number];
+  /** v1.6: an upper-body block; the last one is trimmed on audit days (A.34). */
+  upper?: boolean;
 }
 
 export interface SessionTemplate {
@@ -280,6 +303,16 @@ export interface ProgrammeConfig {
   wave: WaveConfig;
   slots: Record<SlotId, Slot>;
   templates: Record<TemplateId, Template>;
+  /** v1.6, display only (A.39): words shown on screen. */
+  text?: Record<string, string>;
+  /** v1.6 (A.36): the session-start tissue question. Record only. */
+  tissue_check?: { when: 'session_start'; prompt: string; note?: string };
+  /** v1.6 (A.35): the record-only phase-start test on the first Day 1 of these blocks. */
+  phase_tests?: { slot: SlotId; mesocycles: MesocycleId[]; day: 1 | 2; before_slot: SlotId; note?: string };
+  /** v1.6 (A.34): set caps on a session that opens with a boundary test single. */
+  audit_trims?: { max_sets: number; slots_by_day: Partial<Record<'1' | '2', SlotId[]>>; final_upper_block: boolean; note?: string };
+  /** v1.6 (A.37): templates for sessions dated before `date`. */
+  templates_before?: { date: IsoDate; from_config: string; templates: Partial<Record<TemplateId, Template>>; note?: string };
 }
 
 // ---------------------------------------------------------------------
@@ -406,6 +439,19 @@ export interface VectorExpect {
   tm?: Record<string, number>;
   next_position?: Record<string, number>;
   sessions_logged?: Record<string, number>;
+  /** v1.6 */
+  last_logged?: Record<string, string>;
+  /** v1.6: the day A.22 gives after the steps. */
+  day?: 1 | 2;
+  /** v1.6: the explanation summary of the step at identical_at, or of the last step. */
+  explanation?: string;
+  /** v1.6: an empty object means no lift has been swapped. */
+  swapped_main?: Record<string, string>;
+  /** v1.6: accessory slots with no load on record (absent or null). */
+  accessory_unset?: string[];
+  /** v1.6: the step (index into logs) whose state must equal the state before it, apart from the log and identical_apart_from. */
+  identical_at?: number;
+  identical_apart_from?: string[];
   beta?: Record<string, Record<string, number>>;
   rdl_load?: number;
   rdl_sessions?: number;
@@ -455,4 +501,80 @@ export interface TestVectors {
   skip: SkipVector[];
   /** v1.4 */
   amend: AmendVector[];
+  /** v1.6: which config each template-dependent block is read against. */
+  pinned?: Record<string, string>;
+  /** v1.6 (A.32): swaps. Steps through update(), corrections through amend(). */
+  swap?: AmendVector[];
+  /** v1.6 (A.33) */
+  rep_override?: RepOverrideVector[];
+  /** v1.6: the first logged session sets the load on the new slots. */
+  first_load?: FirstLoadVector[];
+  /** v1.6 (A.34) */
+  audit_trims?: SessionCaseVector[];
+  /** v1.6 (A.35) */
+  phase_tests?: SessionCaseVector[];
+  /** v1.6 (A.29, A.35, A.36): entries that change nothing but the log. */
+  record_only?: { name: string; log: VectorLog }[];
+  /** v1.6: what each block's sessions hold, in order. */
+  templates?: TemplateVector[];
+  /** v1.6: slots that leave every template but stay defined. */
+  removed_slots?: { slots: string[]; note?: string };
+}
+
+/** A state patch deep-merged into initial_state_v1_1.json. */
+export type StatePatch = Record<string, unknown>;
+
+export interface RepOverrideVector {
+  name: string;
+  slot: SlotId;
+  date: IsoDate;
+  day: 1 | 2;
+  seed_load: number;
+  expect_prescribed: { reps: number; target_reps: number | null };
+  rule: { reps: number; up_at: number; down_below: number };
+  history_last_set_reps: number[];
+  /** "+2 kg/hand", "-2 kg/hand", "hold", or "prompt 'go down one stack plate'". */
+  expect: string;
+  /** Log without target_reps even where the prescription has one. */
+  omit_target?: boolean;
+}
+
+export interface FirstLoadVector {
+  name: string;
+  slot: SlotId;
+  date: IsoDate;
+  day: 1 | 2;
+  state_patch?: StatePatch;
+  load: number;
+  reps: number;
+  expect_load: number;
+}
+
+export interface SessionCaseVector {
+  name: string;
+  date: IsoDate;
+  day: 1 | 2;
+  state_patch?: StatePatch;
+  /** audit_trims: whether the caps apply on this session. */
+  audit?: boolean;
+  /** Expected template sets per slot (audit_trims). */
+  expect_sets?: Record<SlotId, number>;
+  expect_sets_max?: Record<SlotId, number | null>;
+  /** phase_tests: "present" or "absent". */
+  expect?: 'present' | 'absent';
+  /** phase_tests: the slot the test sits just before. */
+  expect_before?: SlotId;
+}
+
+export interface TemplateVector {
+  name: string;
+  date: IsoDate;
+  day: 1 | 2;
+  state_patch?: StatePatch;
+  target_min: number;
+  pre: string[];
+  /** Items in order; warm-ups by their template name. */
+  order: string[];
+  /** Displayed dose per slot: sets, sets_max, reps, secs, per_side, contacts, variant, mode, note. */
+  items: Record<SlotId, Record<string, number | string | boolean | null>>;
 }

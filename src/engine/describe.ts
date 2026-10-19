@@ -36,9 +36,12 @@ export function slotOfLog(log: RecordLog): string | undefined {
     case 'fixed':
     case 'explosive':
     case 'skip':
+    case 'swap':
       return log.slot;
     case 'cmj':
       return 'cmj';
+    case 'phase_test':
+      return 'phase_test';
     default:
       return undefined;
   }
@@ -81,7 +84,23 @@ export function describeLog(log: RecordLog, config: ProgrammeConfig): string {
     case 'tissue_check': {
       const s = log.scores;
       const parts = (['patellar', 'gluteal', 'shoulder'] as const).filter((k) => s[k] !== undefined).map((k) => `${k} ${s[k]}/10`);
+      // A.36: the session-start question, answered No in one tap.
+      if (log.above_3 === false && parts.length === 0) return `Tissue check${log.for_date ? ` for ${log.for_date}` : ''}: no tendon pain above 3/10 in the last 48 hours${log.note ? `, ${log.note}` : ''}`;
       return `Tissue check${log.for_date ? ` for ${log.for_date}` : ''}: ${parts.join(', ') || 'no scores'}${log.note ? `, ${log.note}` : ''}`;
+    }
+    case 'swap': {
+      // A.32: "<Slot>: swapped to <to>" plus any numbers.
+      const nums: string[] = [];
+      if (log.sets_done !== undefined) nums.push(`${log.sets_done} sets`);
+      if (log.last_set) nums.push(`last set ${log.load !== undefined ? `${f1(log.load)} × ` : ''}${log.last_set.reps} @ RIR ${log.last_set.rir}`);
+      else if (log.load !== undefined) nums.push(`at ${f1(log.load)} kg`);
+      return `${name(log.slot)}: swapped to ${log.to}${nums.length ? `, ${nums.join(', ')}` : ''}${log.note ? `, ${log.note}` : ''}`;
+    }
+    case 'phase_test': {
+      const nums: string[] = [];
+      if (log.rsi !== undefined) nums.push(`best reactive strength index ${log.rsi.toFixed(2)}`);
+      if (log.trap_bar_cm !== undefined) nums.push(`best trap-bar jump ${log.trap_bar_cm} cm`);
+      return `Phase-start test: ${nums.join(', ') || 'done'}${log.note ? `, ${log.note}` : ''}`;
     }
     case 'correction':
       return `Correction to ${log.on}: ${log.actions.length} change${log.actions.length === 1 ? '' : 's'}${log.note ? ` (${log.note})` : ''}`;

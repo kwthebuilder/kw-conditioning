@@ -28,8 +28,8 @@ export function ruleForClassB(slot: Slot): ProgressionRule {
   };
 }
 
-export function prescribeTempo(state: State, config: ProgrammeConfig, id: SlotId): SlotPrescription {
-  const p = prescribeProgression(state, config, id, ruleForClassB(slotOf(config, id)));
+export function prescribeTempo(state: State, config: ProgrammeConfig, id: SlotId, target?: number): SlotPrescription {
+  const p = prescribeProgression(state, config, id, ruleForClassB(slotOf(config, id)), target);
   p.notes.unshift('3 s lowering on every rep; when it breaks the set ends and that rep count is logged.');
   return p;
 }
