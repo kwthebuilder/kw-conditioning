@@ -268,6 +268,8 @@ export interface SessionTemplate {
   target_min: number;
   /** Pre-session measurements, e.g. ["cmj"]. */
   pre?: string[];
+  /** v1.7 (A.41): on a both_days template, the days `pre` applies to; absent means every day. */
+  pre_days?: (1 | 2)[];
   blocks: TemplateBlock[];
 }
 
@@ -313,6 +315,8 @@ export interface ProgrammeConfig {
   audit_trims?: { max_sets: number; slots_by_day: Partial<Record<'1' | '2', SlotId[]>>; final_upper_block: boolean; note?: string };
   /** v1.6 (A.37): templates for sessions dated before `date`. */
   templates_before?: { date: IsoDate; from_config: string; templates: Partial<Record<TemplateId, Template>>; note?: string };
+  /** v1.7 (A.40): reaching the rep target with at least min_rir in reserve also counts towards a step up, for logs dated on or after `from`. */
+  rir_step?: { min_rir: number; from: IsoDate; note?: string };
 }
 
 // ---------------------------------------------------------------------
@@ -519,6 +523,18 @@ export interface TestVectors {
   templates?: TemplateVector[];
   /** v1.6: slots that leave every template but stay defined. */
   removed_slots?: { slots: string[]; note?: string };
+  /** v1.7 (A.40): the target reached with enough reps in reserve counts towards a step up. */
+  rir_step?: RirStepVector[];
+  /** v1.7 (A.41): pre-session items by day on a both_days template. */
+  taper_pre?: { name: string; date: IsoDate; day: 1 | 2; pre: string[] }[];
+}
+
+export interface RirStepVector {
+  name: string;
+  slot: SlotId;
+  seed_load: number;
+  logs: { date: IsoDate; reps: number; rir: number; target_reps?: number }[];
+  expect: { load: number; streak_up?: number; pending?: 'up' | 'down' };
 }
 
 /** A state patch deep-merged into initial_state_v1_1.json. */

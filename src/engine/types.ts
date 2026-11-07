@@ -530,7 +530,9 @@ export type AnyLog =
   | ({ kind: 'session_start' } & SessionStartLog)
   | ({ kind: 'tissue_check' } & TissueCheckLog)
   | ({ kind: 'swap' } & SwapLog)
-  | ({ kind: 'phase_test' } & PhaseTestLog);
+  | ({ kind: 'phase_test' } & PhaseTestLog)
+  /** A.42 (v1.10): the session's length as the athlete gives it, door to door. Record only. */
+  | { kind: 'session_length'; date: IsoDate; day: SessionDay; minutes: number };
 
 /** Anything that can sit in state.log: an update() log, or a correction (A.28). */
 export type RecordLog = AnyLog | CorrectionLog;

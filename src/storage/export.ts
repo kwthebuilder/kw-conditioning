@@ -71,26 +71,39 @@ export function exportMarkdown(state: State, config: ProgrammeConfig, date: stri
   lines.push('## Log');
   lines.push('');
   if (state.log.length === 0) lines.push('Empty.');
-  // v1.8: every entry as logged; entries a correction replaced or removed are marked (A.28).
-  let marks = new Map<number, string>();
-  try {
-    marks = correctionMarks(state.log);
-  } catch {
-    /* an unreadable correction leaves the entries unmarked; the JSON below is still exact */
-  }
+  // ui §25 (v1.5): the log as corrected, in date order, so the numbers read here are the ones the app uses.
+  // A corrected entry says what it was; an added entry says when it was added; a removed entry is left out
+  // (the Corrections list below keeps the full history). If a correction can't be read, fall back to the
+  // entries as logged, marked as before (v1.8, A.28).
   const corrections: string[] = [];
-  state.log.forEach((e, i) => {
-    if (!isLogEntry(e)) {
-      lines.push(`- ${JSON.stringify(e)}`);
-      return;
+  for (const e of state.log) if (isLogEntry(e) && e.log.kind === 'correction') corrections.push(`- ${e.date} ${e.summary}`);
+  try {
+    for (const item of effectiveLog(state.log)) {
+      if (item.removed || item.log.kind === 'session_start') continue;
+      const last = item.corrections[item.corrections.length - 1];
+      const mark = last
+        ? ` (corrected ${last.date}; was: ${describeLog(item.corrections[0]!.was, config)})`
+        : item.inserted
+          ? ` (added ${item.inserted.date})`
+          : '';
+      lines.push(`- ${item.log.date} ${describeLog(item.log, config)}${mark}`);
     }
-    if (e.log.kind === 'correction') {
-      corrections.push(`- ${e.date} ${e.summary}`);
-      return;
+  } catch {
+    let marks = new Map<number, string>();
+    try {
+      marks = correctionMarks(state.log);
+    } catch {
+      /* unreadable corrections leave the entries unmarked; the JSON below is still exact */
     }
-    if (e.log.kind === 'session_start') return;
-    lines.push(`- ${e.date} ${describeLog(e.log, config)}${marks.get(i) ?? ''}`);
-  });
+    state.log.forEach((e, i) => {
+      if (!isLogEntry(e)) {
+        lines.push(`- ${JSON.stringify(e)}`);
+        return;
+      }
+      if (e.log.kind === 'correction' || e.log.kind === 'session_start') return;
+      lines.push(`- ${e.date} ${describeLog(e.log, config)}${marks.get(i) ?? ''}`);
+    });
+  }
   if (corrections.length) {
     lines.push('');
     lines.push('## Corrections');
