@@ -6,7 +6,7 @@
  * closes both functions over the bundled config for callers that do
  * not want to pass it.
  */
-import type { ProgrammeConfig, State } from '../config/types';
+import type { LiftId, ProgrammeConfig, State } from '../config/types';
 import { updateAccessory } from './accessory';
 import { updateLift, updateSingle } from './barbell';
 import { cmjSummary, recordCmj } from './cmj';
@@ -103,6 +103,28 @@ export function update(state: State, log: AnyLog, config: ProgrammeConfig): Engi
     case 'tissue_check': {
       // A.29: record only.
       r = plain(structuredClone(state), `${describeLog(log, config)}.`);
+      break;
+    }
+    case 'swap': {
+      // A.32: a swap moves nothing, as a skip does (A.26). The one exception:
+      // a swapped main lift counts as that day's main lift for day selection (A.22).
+      if (typeof log.to !== 'string' || log.to.trim() === '') throw new Error('a swap needs the exercise it was swapped to');
+      const next = structuredClone(state);
+      const name = config.slots[log.slot]?.name ?? log.slot;
+      const summary = `${name}: swapped to ${log.to}. Nothing moves.`;
+      const steps = [explainStep('swap', summary, {})];
+      if (log.slot === 'front_squat' || log.slot === 'deadlift') {
+        const lift: LiftId = log.slot;
+        const was = next.swapped_main?.[lift];
+        if (was === undefined || log.date > was) (next.swapped_main ??= {})[lift] = log.date;
+        steps.push(explainStep('swap_day', `It counts as today's ${lift === 'front_squat' ? 'Day 1' : 'Day 2'} main lift, so the rotation moves on to the other day. The training max, week and loads stay as they were.`, {}));
+      }
+      r = { state: next, explanation: { summary, steps }, outcome: null };
+      break;
+    }
+    case 'phase_test': {
+      // A.35: record only.
+      r = plain(structuredClone(state), `${describeLog(log, config)}. Nothing moves.`);
       break;
     }
     default: {

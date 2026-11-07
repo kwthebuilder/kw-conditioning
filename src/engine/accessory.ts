@@ -45,6 +45,16 @@ function need<T>(slot: Slot, key: keyof Slot, v: T | undefined): T {
   return v;
 }
 
+/**
+ * A.33 (v1.9): a template item that gives `reps` on a class B or C slot
+ * sets the rep target: reps = target, up_at = target + (slot up_at − slot
+ * reps), down_below = target. Without a target the rule is the slot's own.
+ */
+export function withRepTarget(rule: ProgressionRule, target: number | undefined): ProgressionRule {
+  if (target === undefined) return rule;
+  return { ...rule, reps: target, up_at: target + (rule.up_at - rule.reps), down_below: target };
+}
+
 /** §4: below prescribed reps twice → down; surplus at or above up_at twice → up. */
 export function ruleForClassC(slot: Slot): ProgressionRule {
   if (slot.cls !== 'C') throw new Error(`${slot.id} is class ${slot.cls}, not C`);
@@ -78,8 +88,9 @@ function ensureAccessory(state: State, id: SlotId): AccessoryState {
 // prescribe
 // ---------------------------------------------------------------------
 
-export function prescribeProgression(state: State, config: ProgrammeConfig, id: SlotId, rule: ProgressionRule): SlotPrescription {
+export function prescribeProgression(state: State, config: ProgrammeConfig, id: SlotId, base: ProgressionRule, target?: number): SlotPrescription {
   const slot = slotOf(config, id);
+  const rule = withRepTarget(base, target);
   const acc = state.accessories[id] ?? { load: null, streak_up: 0, streak_down: 0 };
   const increment = parseIncrement(slot);
   const notes: string[] = [];
@@ -95,6 +106,7 @@ export function prescribeProgression(state: State, config: ProgrammeConfig, id: 
     notes,
   };
   if (slot.start_hint_kg !== undefined) p.start_hint_kg = slot.start_hint_kg;
+  if (target !== undefined) p.target_reps = target;
   if (acc.load === null) {
     notes.push(`First session: set the load${slot.start_hint_kg !== undefined ? ` (hint ${slot.start_hint_kg} kg)` : ''}. Earlier sets at ${rule.reps} reps, last set to RIR ${rule.rir_cap}.`);
   } else {
@@ -111,8 +123,10 @@ export function prescribeProgression(state: State, config: ProgrammeConfig, id: 
 // update
 // ---------------------------------------------------------------------
 
-export function updateProgression(state: State, config: ProgrammeConfig, log: SlotLog, rule: ProgressionRule): SlotUpdateResult {
+export function updateProgression(state: State, config: ProgrammeConfig, log: SlotLog, base: ProgressionRule): SlotUpdateResult {
   const slot = slotOf(config, log.slot);
+  // A.33: the rep target the log was prescribed with, if any.
+  const rule = withRepTarget(base, log.target_reps);
   const increment = parseIncrement(slot);
   const next = structuredClone(state);
   const acc = ensureAccessory(next, log.slot);
@@ -226,8 +240,8 @@ export function updateProgression(state: State, config: ProgrammeConfig, log: Sl
 // class C entry points
 // ---------------------------------------------------------------------
 
-export function prescribeAccessory(state: State, config: ProgrammeConfig, id: SlotId): SlotPrescription {
-  return prescribeProgression(state, config, id, ruleForClassC(slotOf(config, id)));
+export function prescribeAccessory(state: State, config: ProgrammeConfig, id: SlotId, target?: number): SlotPrescription {
+  return prescribeProgression(state, config, id, ruleForClassC(slotOf(config, id)), target);
 }
 
 export function updateAccessory(state: State, config: ProgrammeConfig, log: SlotLog): SlotUpdateResult {

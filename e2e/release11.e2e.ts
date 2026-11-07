@@ -298,9 +298,9 @@ test('15: weeks without sessions fold; the current week reads "no sessions yet";
   await page.getByRole('button', { name: 'Show earlier weeks' }).click();
   await expect(page.locator('.hist-empty')).toHaveText(['Week 9 · no sessions yet', 'Weeks 5 to 8 · no sessions']);
   await expect(page.locator('.week-head')).toHaveCount(3);
-  // A Block 2 Day 1: skater bound and drop landings keep their doses.
-  await expect(page.locator('.next-card', { hasText: 'Skater bound' })).toContainText('6 reps each side · stuck landing');
-  await expect(page.locator('.next-card', { hasText: 'Drop landing' })).toContainText('4–6 landings');
+  // A Block 2 Day 1 (config v1.6): the skater bound keeps its dose; drop landings have left the programme.
+  await expect(page.locator('.next-card', { hasText: 'Skater bound' })).toContainText('2 × 4 each side · stuck landing');
+  await expect(page.locator('.next-card', { hasText: 'Drop landing' })).toHaveCount(0);
 });
 
 test('16: export, then import, restores exactly, with added and removed sessions listed in plain words', async ({ page }) => {

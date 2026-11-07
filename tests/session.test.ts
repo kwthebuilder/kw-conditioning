@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_STATE, PROGRAMME_CONFIG, TEST_VECTORS } from '../src/config/load';
+import configV15 from '../spec/programme_config_v1_5.json';
+import { INITIAL_STATE, TEST_VECTORS } from '../src/config/load';
 import type { State } from '../src/config/types';
+import { parseProgrammeConfig } from '../src/config/validate';
 import { defaultDay, prescribe } from '../src/engine';
 import type { Session } from '../src/engine';
 import { stateWith } from './helpers';
 
-const cfg = PROGRAMME_CONFIG;
+// Pinned to config v1.5, the templates these cases describe (vectors v1.6 `pinned`:
+// session.ladder and the v1.5 template walk). Config v1.6's templates are in
+// tests/vectors.release3.test.ts.
+const cfg = parseProgrammeConfig(configV15 as unknown);
 const v = TEST_VECTORS.session;
 const meso = (id: string) => cfg.mesocycles.find((m) => m.id === id)!;
 

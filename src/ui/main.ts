@@ -16,7 +16,6 @@ import { readTextFile, shareOrDownload } from './io';
 import {
   addDays,
   buildHistory,
-  checkInDue,
   clockText,
   didText,
   displayName,
@@ -30,6 +29,7 @@ import {
   plannedText,
   prettyDate,
   recordOf,
+  sessionCheckDue,
   sessionRemoval,
   sessionsFrom,
   stateAtInsert,
@@ -130,10 +130,10 @@ const app: App = {
   ticks: loadTicks(),
   focus: null,
   setsAsk: null,
-  tissueOpen: false,
   open: new Set(),
   forms: new Map(),
   skipOpen: null,
+  swapOpen: null,
   zeroAsk: null,
   errors: new Map(),
   sheet: null,
@@ -296,6 +296,7 @@ function logLive(logs: AnyLog[], label: string): void {
     return;
   }
   app.skipOpen = null;
+  app.swapOpen = null;
   app.zeroAsk = null;
   app.setsAsk = null;
   app.focus = null;
@@ -323,7 +324,7 @@ let pendingCorrection: { correction: CorrectionLog } | null = null;
 function changeLines(actions: CorrectionAction[]): string[] {
   const h = history();
   const name = (log: AnyLog): string => {
-    const slot = 'slot' in log ? log.slot : 'lift' in log ? log.lift : log.kind === 'cmj' ? 'cmj' : '';
+    const slot = 'slot' in log ? log.slot : 'lift' in log ? log.lift : log.kind === 'cmj' ? 'cmj' : log.kind === 'phase_test' ? 'phase_test' : '';
     return slot ? displayName(String(slot), cfg) : didText(log, cfg);
   };
   const out: string[] = [];
@@ -447,7 +448,8 @@ function render(): void {
     else app.screen = { kind: 'today' };
   }
   const add = app.screen.kind === 'add' ? addView(app.screen) : undefined;
-  const tissueDue = !unf ? checkInDue(h, app.today) : undefined;
+  // §20 (ui_spec_v1_4): the tendon question is asked at the start of every session, not the morning after.
+  const sessionCheck = (todayState === 'live' || todayState === 'next') && live.session.kind === 'session' && sessionCheckDue(h, live.date) ? live.date : undefined;
   const finishFor = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
   const ctx: Ctx = {
     config: cfg,
@@ -462,7 +464,7 @@ function render(): void {
     ...(add ? { add } : {}),
     ...(app.state.depth_jump.height_cm != null ? { boxCm: app.state.depth_jump.height_cm } : {}),
     ...(finishFor ? { finishView: finishView(finishFor) } : {}),
-    ...(tissueDue && !tissueDismissed(tissueDue) ? { tissueDue } : {}),
+    ...(sessionCheck !== undefined ? { sessionCheck } : {}),
     tissueProtocol: !unf && (h.byDate.get(app.today) ?? []).some((st) => st.item.log.kind === 'tissue_check' && Object.values(st.item.log.scores).some((v) => (v ?? 0) > 3)),
     recordOf: recordOfGroup,
     isOpen: (g) => isOpen(g, app.today),
@@ -679,26 +681,21 @@ function render(): void {
       document.querySelector('.card.focus')?.scrollIntoView({ block: 'start' });
     },
     previewLift,
-    saveTissue: (forDate, scores) => {
+    saveSessionCheck: (forDate, above, scores) => {
       const prev = app.state;
       try {
-        setState(update(app.state, { kind: 'tissue_check', date: app.today, for_date: forDate, scores }, cfg).state);
+        setState(update(app.state, { kind: 'tissue_check', date: forDate, for_date: forDate, above_3: above, scores: scores ?? {} }, cfg).state);
       } catch (e) {
         app.banner = `Not saved: ${e instanceof Error ? e.message : String(e)}`;
         render();
         return;
       }
-      app.tissueOpen = false;
       render();
-      showToast('Check-in saved', () => {
+      showToast(above ? 'Tendon check saved' : 'No tendon pain above 3/10: saved', () => {
         setState(prev);
         render();
         showToast('Undone');
       });
-    },
-    dismissTissue: (forDate) => {
-      setPref(`acro-base-sc/tissue-dismissed/${forDate}`, '1');
-      render();
     },
     openTm: (lift) => {
       app.sheet = { kind: 'tm', lift };
@@ -937,10 +934,6 @@ function finishSession(g: SessionGroup): void {
   // §14.6: the save-a-copy panel opens by itself when the automatic backup is off or failing.
   if (!backupOk()) app.showExport = true;
   render();
-}
-
-function tissueDismissed(forDate: string): boolean {
-  return pref(`acro-base-sc/tissue-dismissed/${forDate}`) === '1';
 }
 
 // ---------------------------------------------------------------------

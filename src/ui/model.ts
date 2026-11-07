@@ -17,6 +17,7 @@ import {
   replay,
   slotOfLog,
   stateBefore,
+  templateFor,
 } from '../engine';
 import type {
   AnyLog,
@@ -69,6 +70,9 @@ export const DISPLAY_NAMES: Record<string, string> = {
   db_pp_explosive: 'Dumbbell push press, fast',
   abductor_hsr: 'Cable hip abduction, slow',
   rdl: 'Romanian deadlift',
+  db_rdl: 'Romanian deadlift, dumbbells',
+  seated_abduction: 'Seated hip abduction',
+  phase_test: 'Phase-start test',
   hack_squat: 'Hack squat',
   landmine_press: 'One-arm landmine press',
   landmine_cpp: 'Landmine clean and push press',
@@ -83,7 +87,7 @@ export const DISPLAY_NAMES: Record<string, string> = {
   skater_bound: 'Skater bound',
   trap_bar_jump: 'Trap-bar jump',
   jump_shrug: 'Jump shrug',
-  bss: 'Bulgarian split squat',
+  bss: 'Bulgarian split squat, 3 s lowering',
   pull_up: 'Weighted pull-up',
   front_squat: 'Front squat',
   deadlift: 'Deadlift',
@@ -107,12 +111,14 @@ export const LOAD_STEP: Record<string, number> = {
   db_pp_strength: 2,
   db_pp_explosive: 2,
   bss: 2,
+  db_rdl: 2,
+  seated_abduction: 2.5,
   cs_row: 2,
 };
 export const loadStep = (slot: string): number => LOAD_STEP[slot] ?? 2.5;
 
 /** §5.1: dumbbell slots, held to the rack's range (config db_min_kg, db_max_kg). The chest-supported row is not one. */
-export const DB_SLOTS = new Set(['db_pp_strength', 'db_pp_explosive', 'bss']);
+export const DB_SLOTS = new Set(['db_pp_strength', 'db_pp_explosive', 'bss', 'db_rdl']);
 
 /** The load range a slot's buttons and typed values must stay inside, if it has one. */
 export function loadRange(slot: string, config: ProgrammeConfig): [number, number] | undefined {
@@ -215,7 +221,7 @@ export function buildHistory(base: State, state: State, config: ProgrammeConfig)
   return { ok, steps, byDate, dates };
 }
 
-const ITEM_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj']);
+const ITEM_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'swap', 'phase_test']);
 
 /** The session's day for a date, from what was logged on it. */
 export function dayFor(steps: readonly ReplayStep[], date: IsoDate, config: ProgrammeConfig): SessionDay | undefined {
@@ -226,13 +232,14 @@ export function dayFor(steps: readonly ReplayStep[], date: IsoDate, config: Prog
   for (const s of steps) {
     const l = s.item.log;
     if (l.kind === 'barbell' || l.kind === 'single') return l.lift === 'front_squat' ? 1 : 2;
+    if (l.kind === 'swap' && (l.slot === 'front_squat' || l.slot === 'deadlift')) return l.slot === 'front_squat' ? 1 : 2;
   }
   for (const s of steps) {
     const l = s.item.log;
     if (l.kind === 'session_end') return l.day;
   }
   const meso = mesocycleOn(config, date);
-  const tpl = meso?.template ? config.templates[meso.template] : undefined;
+  const tpl = meso ? templateFor(config, meso, date) : undefined;
   if (!tpl || tpl.both_days) return undefined;
   const slotsOf = (day: 'day1' | 'day2') => new Set(tpl[day]!.blocks.flatMap((b) => b.items).flatMap((it) => (typeof it === 'string' ? [] : [it.slot])));
   const d1 = slotsOf('day1');
@@ -295,7 +302,22 @@ export function didText(log: AnyLog, config: ProgrammeConfig): string {
     case 'tissue_check': {
       const sc = log.scores;
       const parts = TISSUE_SITES.filter((t) => sc[t.key] !== undefined).map((t) => `${t.label} ${sc[t.key]}`);
+      if (log.above_3 === false && parts.length === 0) return 'No tendon pain above 3/10';
+      if (log.above_3 !== undefined) return parts.join(' · ') || 'Tendon pain above 3/10';
       return `${parts.join(' · ') || 'No scores'}${log.for_date ? ` (after ${prettyDate(log.for_date)})` : ''}`;
+    }
+    case 'swap': {
+      const parts = [`Swapped to ${log.to}`];
+      if (log.load !== undefined) parts.push(loadText(log.slot, log.load));
+      if (log.sets_done !== undefined) parts.push(`${log.sets_done} sets`);
+      if (log.last_set) parts.push(`last set ${log.last_set.reps}, ${leftText(log.last_set.rir)}`);
+      return parts.join(' · ');
+    }
+    case 'phase_test': {
+      const parts: string[] = [];
+      if (log.rsi !== undefined) parts.push(`Reactive strength index ${log.rsi.toFixed(2)}`);
+      if (log.trap_bar_cm !== undefined) parts.push(`trap-bar jump ${kg(log.trap_bar_cm)} cm`);
+      return parts.join(' · ') || 'Done';
     }
   }
   return displayName((log as { kind: string }).kind, config);
@@ -308,6 +330,7 @@ export function loadText(slot: string, load: number): string {
 
 /** The plan for one item, in one line. */
 export function plannedText(item: PlanItem): string {
+  if (item.slot === 'phase_test') return 'Film 3 depth jumps and 1 trap-bar jump set';
   const parts: string[] = [];
   if (item.position !== undefined) parts.push(POSITION_LABEL[item.position]);
   if (item.load !== undefined && item.load !== null) parts.push(loadText(item.slot, item.load));
@@ -316,7 +339,7 @@ export function plannedText(item: PlanItem): string {
   if (sets && item.reps !== undefined) parts.push(`${sets} × ${item.reps}${side}`);
   else if (sets && item.rep_range) parts.push(`${sets} × ${item.rep_range[0]}–${item.rep_range[1]}`);
   else if (sets && item.secs !== undefined) parts.push(`${sets} × ${item.secs} s${side}`);
-  else if (sets) parts.push(`${sets} sets`);
+  else if (sets) parts.push(`${sets} sets${side}`);
   else if (item.reps !== undefined) parts.push(`${item.reps} reps${side}`);
   else if (item.secs !== undefined) parts.push(`${item.secs} s${side}`);
   if (item.contacts !== undefined) parts.push(`${item.contacts} jumps`);
@@ -338,7 +361,7 @@ function numberFrom(step: ReplayStep, key: string): number | undefined {
 export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
   const log = step.item.log;
   const o = step.outcome;
-  if (o === null && !['skip', 'cmj', 'single', 'tm_override', 'depth_jump_height', 'fixed', 'session_start', 'session_end', 'single_skipped', 'tissue_check'].includes(log.kind)) {
+  if (o === null && !['skip', 'cmj', 'single', 'tm_override', 'depth_jump_height', 'fixed', 'session_start', 'session_end', 'single_skipped', 'tissue_check', 'swap', 'phase_test'].includes(log.kind)) {
     return step.explanation.summary;
   }
   switch (log.kind) {
@@ -415,6 +438,11 @@ export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
     }
     case 'skip':
       return 'Nothing moves.';
+    case 'swap':
+      // A.32: a swapped main lift counts for the rotation only.
+      return step.explanation.steps.some((x) => x.rule === 'swap_day') ? "Nothing moves. It counts as today's main lift, so the other day comes next." : 'Nothing moves.';
+    case 'phase_test':
+      return 'Recorded. Nothing moves.';
     case 'cmj': {
       const m = /Running mean of (\d+): ([\d.]+) cm/.exec(step.explanation.summary);
       return m ? `Average ${m[2]} cm over ${m[1]}.` : '';
@@ -454,7 +482,7 @@ export type TissueKey = (typeof TISSUE_SITES)[number]['key'];
 export const FLARE_PROTOCOL =
   'Pain above 3/10 persisting beyond 24 h: drop plyometrics, cut load 30-50%, reintroduce isotonic at 50-60% of pre-flare and progress ~10% every 3-4 sessions. Above 5/10 or worsening night pain: physio. Never cease; reduce. Return to plyometrics only when isotonic work at pre-flare levels is pain-free, restarting at 50% of pre-flare volume. Monitoring is the 24-48 h response.';
 
-const SESSION_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'cmj', 'single']);
+const SESSION_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'cmj', 'single', 'swap', 'phase_test']);
 
 /** The most recent date before `date` with a session item logged. */
 export function lastSessionBefore(history: History, date: IsoDate): IsoDate | undefined {
@@ -473,6 +501,27 @@ export function checkInDue(history: History, today: IsoDate): IsoDate | undefine
   if (gap < 1 || gap > 2) return undefined;
   const done = history.steps.some((s) => s.item.log.kind === 'tissue_check' && (s.item.log.for_date ?? s.item.log.date) === last);
   return done ? undefined : last;
+}
+
+/**
+ * A.36 (v1.9): the session-start question is due for a session date until
+ * a check-in for that date is logged. It never blocks logging.
+ */
+export function sessionCheckDue(history: History, date: IsoDate): boolean {
+  return !history.steps.some((s) => s.item.log.kind === 'tissue_check' && (s.item.log.for_date ?? s.item.log.date) === date);
+}
+
+/** v1.6 config text (A.39), with the light week's numbers filled in. */
+export function lightWeekText(config: ProgrammeConfig, sets: number, reps: number): string {
+  const t = config.text?.light_week;
+  if (!t) return `${sets} × ${reps} and stop. Light weeks don't change your max.`;
+  return t.replaceAll('{sets}', String(sets)).replaceAll('{reps}', String(reps));
+}
+
+/** "about 70 min, 80 max". */
+export function minutesText(config: ProgrammeConfig, target: number, audit = false): string {
+  const max = audit ? config.budget_min.audit : config.budget_min.normal;
+  return `about ${target} min, ${max} max`;
 }
 
 /** The latest check-in in the last two days, if any. */
@@ -592,7 +641,7 @@ export const OPEN_FROM: IsoDate = '2026-10-11';
 export const RELEASE_1: IsoDate = '2026-10-09';
 
 /** Entries that belong to a session. Others (a max set by hand, a check-in, a drop height) attach to one if it shares the date. */
-const SESSION_ENTRY = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'single', 'single_skipped', 'session_start', 'session_end']);
+const SESSION_ENTRY = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'single', 'single_skipped', 'session_start', 'session_end', 'swap', 'phase_test']);
 
 export interface SessionGroup {
   /** Stable key: the origin of the session's first entry in the log. */
@@ -782,6 +831,8 @@ export interface RecordRow {
   twice: boolean;
   /** SPEC_QUESTIONS Q27: a ladder entry counted as the drop jump on a rebuilt plan. */
   viaLadder?: boolean;
+  /** A.32: the item was done as one of its swaps. */
+  swapped?: boolean;
 }
 
 export interface RecordCounts {
@@ -803,7 +854,7 @@ export interface RecordView {
   minutes?: number;
 }
 
-const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj']);
+const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'swap', 'phase_test']);
 
 /** "2 done · 6 not recorded", "7 done · 2 skipped · 1 not recorded": separate counts, zeros left out. */
 export function countsText(c: RecordCounts): string {
@@ -851,6 +902,7 @@ function buildRecord(history: History, base: State, state: State, config: Progra
     const row: RecordRow = { item, status: last ? (isSkip ? 'skipped' : 'done') : 'not_logged', twice: mine.length > 1 };
     if (last) row.step = last;
     if (last && slotOfLog(last.item.log) === 'rsi_ladder' && item.slot === 'depth_jump') row.viaLadder = true;
+    if (last?.item.log.kind === 'swap') row.swapped = true;
     if (singles.length) row.single = singles[singles.length - 1]!;
     view.rows.push(row);
   }

@@ -11,6 +11,10 @@
 import type {
   AccessoryState,
   AmendVector,
+  FirstLoadVector,
+  RepOverrideVector,
+  SessionCaseVector,
+  TemplateVector,
   SkipVector,
   VectorExpect,
   VectorLog,
@@ -246,6 +250,8 @@ function liftState(v: unknown, path: string): LiftState {
     return { date: req(t, 'date', p, isoDate), reason: req(t, 'reason', p, oneOf(['boundary', 'big_gap'] as const)) };
   });
   if (taken !== undefined) ls.single_taken = taken;
+  const entered = optional(o, 'entered_on', path, isoDate);
+  if (entered !== undefined) ls.entered_on = entered;
   return ls;
 }
 
@@ -324,6 +330,14 @@ export function parseState(input: unknown, path = 'state'): State {
   if (overrides !== undefined) state.overrides = overrides;
   const explosive = optional(o, 'explosive', path, mapOf(explosiveState));
   if (explosive !== undefined) state.explosive = explosive;
+  // A.32 (v1.9): latest swap date per primary lift, read by A.22 only.
+  const swapped = optional(o, 'swapped_main', path, (v, p) => {
+    const m = obj(v, p);
+    const out: NonNullable<State['swapped_main']> = {};
+    for (const k of Object.keys(m)) out[oneOf(LIFT_IDS)(k, `${p}.${k}`)] = isoDate(m[k], `${p}.${k}`);
+    return out;
+  });
+  if (swapped !== undefined) state.swapped_main = swapped;
   return state;
 }
 
@@ -432,6 +446,8 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
   opt('load_rule', oneOf(['carry'] as const));
   opt('contacts', contacts);
   opt('landings', pair(int));
+  opt('cue', str);
+  opt('swaps', listOf(str));
 
   // Class A is the one class where the file is uniform enough to require fields.
   if (s.cls === 'A') {
@@ -444,9 +460,17 @@ function slot(v: unknown, path: string, expectedId: string): Slot {
     'when', 'note', 'tm_seed', 'cal_cap', 'reps', 'rir_cap',
     'up_at', 'down_below', 'streak', 'increment', 'start_hint_kg', 'start_kg', 'rep_range', 'table',
     'band_pct_fs_tm', 'ceiling_pct_est_1rm', 'increment_kg', 'start_pct_dl_tm', 'load_rule', 'contacts', 'landings',
+    'cue', 'swaps',
   ]);
   for (const k of Object.keys(o)) if (!known.has(k)) fail(`${path}.${k}`, 'unknown slot field');
   return s;
+}
+
+/** A map from programme-week spans ("20-22") to a whole number. */
+function weekSpans(v: unknown, path: string): Record<string, number> {
+  const m = mapOf(int)(v, path);
+  for (const k of Object.keys(m)) if (!/^\d+-\d+$/.test(k)) fail(`${path}.${k}`, 'expected a week span such as "20-22"');
+  return m;
 }
 
 function slotItem(v: unknown, path: string): SlotItem {
@@ -466,7 +490,9 @@ function slotItem(v: unknown, path: string): SlotItem {
   opt('until_week', int);
   opt('contacts', int);
   opt('day', oneOf([1, 2] as const));
-  const known = new Set(['slot', 'sets', 'reps', 'secs', 'per_side', 'mode', 'variant', 'inside_rest', 'until_week', 'contacts', 'day']);
+  opt('note', str);
+  opt('reps_by_week', weekSpans);
+  const known = new Set(['slot', 'sets', 'reps', 'secs', 'per_side', 'mode', 'variant', 'inside_rest', 'until_week', 'contacts', 'day', 'note', 'reps_by_week']);
   for (const k of Object.keys(o)) if (!known.has(k)) fail(`${path}.${k}`, 'unknown template item field');
   return item;
 }
@@ -485,6 +511,10 @@ function templateBlock(v: unknown, path: string): TemplateBlock {
   if (contrast !== undefined) b.contrast = contrast;
   const rounds = optional(o, 'rounds', path, (x, p) => (typeof x === 'number' ? int(x, p) : pair(int)(x, p)));
   if (rounds !== undefined) b.rounds = rounds;
+  const upper = optional(o, 'upper', path, bool);
+  if (upper !== undefined) b.upper = upper;
+  const known = new Set(['items', 'min', 'superset', 'contrast', 'rounds', 'upper']);
+  for (const k of Object.keys(o)) if (!known.has(k)) fail(`${path}.${k}`, 'unknown template block field');
   return b;
 }
 
@@ -563,6 +593,66 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
     return out;
   });
   if (ladder !== undefined) cfg.ladder = ladder;
+  const text = optional(o, 'text', path, mapOf(str));
+  if (text !== undefined) cfg.text = text;
+  const tissue = optional(o, 'tissue_check', path, (v, p) => {
+    const t = obj(v, p);
+    const out: NonNullable<ProgrammeConfig['tissue_check']> = { when: req(t, 'when', p, oneOf(['session_start'] as const)), prompt: req(t, 'prompt', p, str) };
+    const note = optional(t, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (tissue !== undefined) cfg.tissue_check = tissue;
+  const phase = optional(o, 'phase_tests', path, (v, p) => {
+    const t = obj(v, p);
+    const out: NonNullable<ProgrammeConfig['phase_tests']> = {
+      slot: req(t, 'slot', p, str),
+      mesocycles: req(t, 'mesocycles', p, listOf(mesocycleId)),
+      day: req(t, 'day', p, oneOf([1, 2] as const)),
+      before_slot: req(t, 'before_slot', p, str),
+    };
+    const note = optional(t, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (phase !== undefined) cfg.phase_tests = phase;
+  const trims = optional(o, 'audit_trims', path, (v, p) => {
+    const t = obj(v, p);
+    const out: NonNullable<ProgrammeConfig['audit_trims']> = {
+      max_sets: req(t, 'max_sets', p, int),
+      slots_by_day: req(t, 'slots_by_day', p, (x, q) => {
+        const m = obj(x, q);
+        const r: NonNullable<ProgrammeConfig['audit_trims']>['slots_by_day'] = {};
+        for (const k of Object.keys(m)) r[oneOf(['1', '2'] as const)(k, `${q}.${k}`)] = listOf(str)(m[k], `${q}.${k}`);
+        return r;
+      }),
+      final_upper_block: req(t, 'final_upper_block', p, bool),
+    };
+    const note = optional(t, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (trims !== undefined) cfg.audit_trims = trims;
+  const before = optional(o, 'templates_before', path, (v, p) => {
+    const t = obj(v, p);
+    const tpls = req(t, 'templates', p, (x, q) => {
+      const m = obj(x, q);
+      const r: Partial<Record<TemplateId, Template>> = {};
+      for (const k of Object.keys(m)) r[templateId(k, `${q}.${k}`)] = template(m[k], `${q}.${k}`);
+      return r;
+    });
+    const out: NonNullable<ProgrammeConfig['templates_before']> = { date: req(t, 'date', p, isoDate), from_config: req(t, 'from_config', p, str), templates: tpls };
+    const note = optional(t, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (before !== undefined) cfg.templates_before = before;
+  const knownTop = new Set([
+    'version', 'date', 'governs', 'scope_note', 'budget_min', 'equipment', 'instruments', 'athlete', 'mesocycles',
+    'boundary_singles_on_entering', 'freeze', 'wave', 'slots', 'templates', 'ladder', 'text', 'tissue_check',
+    'phase_tests', 'audit_trims', 'templates_before',
+  ]);
+  for (const k of Object.keys(o)) if (!knownTop.has(k)) fail(`${path}.${k}`, 'unknown config field');
 
   // Referential checks inside the config file.
   for (const [i, m] of cfg.mesocycles.entries()) {
@@ -579,19 +669,31 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
   for (const [i, id] of cfg.boundary_singles_on_entering.entries()) {
     if (!mesoIds.has(id)) fail(`${path}.boundary_singles_on_entering[${i}]`, `unknown mesocycle "${id}"`);
   }
-  for (const [tid, t] of Object.entries(cfg.templates)) {
-    const sessions: [string, SessionTemplate][] = t.both_days
-      ? [['both_days', t.both_days]]
-      : [['day1', t.day1], ['day2', t.day2]];
-    for (const [day, sess] of sessions) {
-      sess.blocks.forEach((b, bi) => {
-        b.items.forEach((it, ii) => {
-          if (typeof it !== 'string' && !(it.slot in cfg.slots)) {
-            fail(`${path}.templates.${tid}.${day}.blocks[${bi}].items[${ii}].slot`, `unknown slot "${it.slot}"`);
-          }
+  const templateSets: [string, Partial<Record<string, Template>>][] = [['templates', cfg.templates]];
+  if (cfg.templates_before) templateSets.push(['templates_before.templates', cfg.templates_before.templates]);
+  for (const [where, tpls] of templateSets) {
+    for (const [tid, t] of Object.entries(tpls)) {
+      if (!t) continue;
+      const sessions: [string, SessionTemplate][] = t.both_days
+        ? [['both_days', t.both_days]]
+        : [['day1', t.day1], ['day2', t.day2]];
+      for (const [day, sess] of sessions) {
+        sess.blocks.forEach((b, bi) => {
+          b.items.forEach((it, ii) => {
+            if (typeof it !== 'string' && !(it.slot in cfg.slots)) {
+              fail(`${path}.${where}.${tid}.${day}.blocks[${bi}].items[${ii}].slot`, `unknown slot "${it.slot}"`);
+            }
+          });
         });
-      });
+      }
     }
+  }
+  if (cfg.phase_tests) {
+    for (const id of [cfg.phase_tests.slot, cfg.phase_tests.before_slot]) if (!(id in cfg.slots)) fail(`${path}.phase_tests`, `unknown slot "${id}"`);
+    for (const [i, id] of cfg.phase_tests.mesocycles.entries()) if (!mesoIds.has(id)) fail(`${path}.phase_tests.mesocycles[${i}]`, `unknown mesocycle "${id}"`);
+  }
+  if (cfg.audit_trims) {
+    for (const [d, ids] of Object.entries(cfg.audit_trims.slots_by_day)) for (const id of ids ?? []) if (!(id in cfg.slots)) fail(`${path}.audit_trims.slots_by_day.${d}`, `unknown slot "${id}"`);
   }
   return cfg;
 }
@@ -804,9 +906,79 @@ function amendVector(v: unknown, path: string): AmendVector {
   return out;
 }
 
+const statePatch = (v: unknown, path: string): Record<string, unknown> => obj(v, path);
+
+function withOptional<T extends object>(o: Obj, out: T, path: string, fields: [string, (v: unknown, p: string) => unknown][]): T {
+  for (const [k, f] of fields) {
+    const val = optional(o, k, path, f);
+    if (val !== undefined) (out as Record<string, unknown>)[k] = val;
+  }
+  return out;
+}
+
+function repOverrideVector(v: unknown, path: string): RepOverrideVector {
+  const o = obj(v, path);
+  const out: RepOverrideVector = {
+    name: req(o, 'name', path, str),
+    slot: req(o, 'slot', path, str),
+    date: req(o, 'date', path, isoDate),
+    day: req(o, 'day', path, oneOf([1, 2] as const)),
+    seed_load: req(o, 'seed_load', path, num),
+    expect_prescribed: req(o, 'expect_prescribed', path, (x, p) => {
+      const e = obj(x, p);
+      return { reps: req(e, 'reps', p, int), target_reps: req(e, 'target_reps', p, (y, q) => nullable(y, q, int)) };
+    }),
+    rule: req(o, 'rule', path, exactKeys(['reps', 'up_at', 'down_below'] as const, int)),
+    history_last_set_reps: req(o, 'history_last_set_reps', path, listOf(int)),
+    expect: req(o, 'expect', path, str),
+  };
+  return withOptional(o, out, path, [['omit_target', bool]]);
+}
+
+function firstLoadVector(v: unknown, path: string): FirstLoadVector {
+  const o = obj(v, path);
+  const out: FirstLoadVector = {
+    name: req(o, 'name', path, str),
+    slot: req(o, 'slot', path, str),
+    date: req(o, 'date', path, isoDate),
+    day: req(o, 'day', path, oneOf([1, 2] as const)),
+    load: req(o, 'load', path, num),
+    reps: req(o, 'reps', path, int),
+    expect_load: req(o, 'expect_load', path, num),
+  };
+  return withOptional(o, out, path, [['state_patch', statePatch]]);
+}
+
+function sessionCaseVector(v: unknown, path: string): SessionCaseVector {
+  const o = obj(v, path);
+  const out: SessionCaseVector = { name: req(o, 'name', path, str), date: req(o, 'date', path, isoDate), day: req(o, 'day', path, oneOf([1, 2] as const)) };
+  return withOptional(o, out, path, [
+    ['state_patch', statePatch],
+    ['audit', bool],
+    ['expect_sets', mapOf(int)],
+    ['expect_sets_max', mapOf((x, p) => nullable(x, p, int))],
+    ['expect', oneOf(['present', 'absent'] as const)],
+    ['expect_before', str],
+  ]);
+}
+
+function templateVector(v: unknown, path: string): TemplateVector {
+  const o = obj(v, path);
+  const out: TemplateVector = {
+    name: req(o, 'name', path, str),
+    date: req(o, 'date', path, isoDate),
+    day: req(o, 'day', path, oneOf([1, 2] as const)),
+    target_min: req(o, 'target_min', path, num),
+    pre: req(o, 'pre', path, listOf(str)),
+    order: req(o, 'order', path, listOf(str)),
+    items: req(o, 'items', path, mapOf((x, p) => mapOf((y, q) => (y === null || typeof y === 'number' || typeof y === 'string' || typeof y === 'boolean' ? y : fail(q, 'expected a number, string, boolean or null')))(x, p))),
+  };
+  return withOptional(o, out, path, [['state_patch', statePatch]]);
+}
+
 export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors {
   const o = obj(input, path);
-  return {
+  const v: TestVectors = {
     version: req(o, 'version', path, str),
     date: req(o, 'date', path, isoDate),
     spec: req(o, 'spec', path, str),
@@ -903,6 +1075,27 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
       };
     }),
   };
+  // v1.6 blocks, optional so earlier vector files still parse.
+  return withOptional(o, v, path, [
+    ['pinned', mapOf(str)],
+    ['swap', listOf(amendVector)],
+    ['rep_override', listOf(repOverrideVector)],
+    ['first_load', listOf(firstLoadVector)],
+    ['audit_trims', listOf(sessionCaseVector)],
+    ['phase_tests', listOf(sessionCaseVector)],
+    ['record_only', listOf((x, p) => {
+      const r = obj(x, p);
+      return { name: req(r, 'name', p, str), log: req(r, 'log', p, vectorLog) };
+    })],
+    ['templates', listOf(templateVector)],
+    ['removed_slots', (x, p) => {
+      const r = obj(x, p);
+      const out: NonNullable<TestVectors['removed_slots']> = { slots: req(r, 'slots', p, listOf(str)) };
+      const note = optional(r, 'note', p, str);
+      if (note !== undefined) out.note = note;
+      return out;
+    }],
+  ]);
 }
 
 // ---------------------------------------------------------------------

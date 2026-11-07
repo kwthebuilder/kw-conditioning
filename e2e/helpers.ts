@@ -79,9 +79,13 @@ export function week(page: Page, n: number): Locator {
   return page.locator('.hist-week', { has: page.locator('.week-head', { hasText: new RegExp(`^Week ${n} ·`) }) });
 }
 
-/** No numeric date anywhere in the visible text (ui_spec_v1_3.md §2, §13A test 1). */
+/**
+ * No numeric date anywhere in the visible text (ui_spec_v1_3.md §2, §13A
+ * test 1). A pain score out of 10 ("above 3/10", ui_spec_v1_4.md §20) is not
+ * a date and is set aside first.
+ */
 export async function expectNoNumericDate(page: Page): Promise<void> {
-  const text = await page.locator('body').innerText();
+  const text = (await page.locator('body').innerText()).replace(/\b\d{1,2}\/10\b/g, 'N out of 10');
   expect(text).not.toMatch(/\b\d{4}-\d{2}-\d{2}\b/);
   expect(text).not.toMatch(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/);
   expect(text).not.toMatch(/\b\d{1,2}-\d{1,2}-\d{2,4}\b/);

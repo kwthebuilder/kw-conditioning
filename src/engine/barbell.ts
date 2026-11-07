@@ -5,7 +5,7 @@
  *
  * Pure: no clock, no randomness, no I/O. Dates come in on the log.
  */
-import type { LiftId, LiftState, Mesocycle, Position, ProgrammeConfig, State } from '../config/types';
+import type { IsoDate, LiftId, LiftState, Mesocycle, Position, ProgrammeConfig, State } from '../config/types';
 import { mesocycleOn, programmeWeek } from './calendar';
 import { roundLoad } from './rounding';
 import type {
@@ -140,6 +140,35 @@ export function applySingle(ls: LiftState, single: { load: number; rir: number }
 // ---------------------------------------------------------------------
 // prescribe
 // ---------------------------------------------------------------------
+
+/**
+ * A.34 (v1.9): the date is the lift's first session in its block: the lift
+ * has not yet been logged in this block, or its first log in the block is
+ * dated today (so the rest of that day's session reads the same once the
+ * lift is logged). Block 1 is never entered: an absent last_mesocycle
+ * means Block 1 (A.15).
+ */
+export function opensBlock(state: State, lift: LiftId, meso: Mesocycle, date: IsoDate, config: ProgrammeConfig): boolean {
+  const ls = state.lifts[lift];
+  const order = config.mesocycles.map((m) => m.id);
+  if (meso.id === order[0]) return false;
+  const last = ls.last_mesocycle ?? order[0]!;
+  if (last === meso.id) return ls.entered_on === date;
+  return order.indexOf(meso.id) > order.indexOf(last);
+}
+
+/**
+ * A.34: a log dated in a block after Block 1 that moves last_mesocycle on
+ * records the date the lift entered the block; a lift already in that block
+ * with no date on record takes the date of this log. Block 1 logs never set
+ * it, so every log made before v1.9 replays to the same state.
+ */
+function enterMesocycle(ls: LiftState, config: ProgrammeConfig, meso: Mesocycle | undefined, date: IsoDate): void {
+  if (!meso) return;
+  const first = config.mesocycles[0]?.id;
+  if (meso.id !== first && ((ls.last_mesocycle ?? first) !== meso.id || ls.entered_on === undefined)) ls.entered_on = date;
+  ls.last_mesocycle = meso.id;
+}
 
 /** A.15: big-gap flag, or entering a mesocycle listed in config.boundary_singles_on_entering. */
 function singleReason(ls: LiftState, config: ProgrammeConfig, meso: Mesocycle): SingleReason | undefined {
@@ -470,7 +499,7 @@ export function updateSingle(state: State, config: ProgrammeConfig, log: SingleL
   const reason: 'boundary' | 'big_gap' = ls.single_scheduled ? 'big_gap' : 'boundary';
   const step = applySingle(ls, { load: log.load, rir: log.rir });
   ls.single_taken = { date: log.date, reason };
-  if (meso) ls.last_mesocycle = meso.id;
+  enterMesocycle(ls, config, meso, log.date);
   const summary = `${liftName(config, log.lift)}: single ${f1(log.load)} kg → TM ${f1(ls.tm)} kg. Today's work sets are straight sets from the new TM.`;
   return { state: next, explanation: { summary, steps: [step] } };
 }
@@ -544,8 +573,7 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
 
   ls.sessions_logged += 1;
   ls.last_logged = log.date;
-  const meso = mesocycleOn(config, log.date);
-  if (meso) ls.last_mesocycle = meso.id;
+  enterMesocycle(ls, config, mesocycleOn(config, log.date), log.date);
 
   if (log.override) {
     const rec = { kind: 'load' as const, date: log.date, slot: log.lift, from: log.override.from, to: log.prescribed.load };

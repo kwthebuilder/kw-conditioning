@@ -47,6 +47,7 @@ export function planSnapshot(session: Session, config: ProgrammeConfig): PlanSna
           if (t.sets_max !== undefined) item.sets_max = t.sets_max;
           item.reps = p.reps;
           item.amrap = true;
+          if (p.target_reps !== undefined) item.target_reps = p.target_reps;
           break;
         case 'fixed':
           if (p.load_kg !== undefined) item.load = p.load_kg;

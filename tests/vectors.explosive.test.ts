@@ -4,8 +4,9 @@
  * engine_test_vectors_v1_5.json.
  */
 import { describe, expect, it } from 'vitest';
+import configV15 from '../spec/programme_config_v1_5.json';
 import { INITIAL_STATE, PROGRAMME_CONFIG, TEST_VECTORS } from '../src/config/load';
-import { parseState } from '../src/config/validate';
+import { parseProgrammeConfig, parseState } from '../src/config/validate';
 import { prescribe, prescribeExplosive, update } from '../src/engine';
 import type { SessionSlotItem } from '../src/engine';
 
@@ -65,10 +66,11 @@ describe('explosive vectors (A.24)', () => {
   });
 });
 
-describe('rounds vectors (A.25)', () => {
+describe('rounds vectors (A.25), pinned to config v1.5 (vectors v1.6 `pinned`)', () => {
+  const v15 = parseProgrammeConfig(configV15 as unknown);
   for (const v of TEST_VECTORS.rounds) {
     it(`${v.date} Day ${v.day} ${v.slot}: ${v.expect_sets}${v.expect_sets_max !== null ? `–${v.expect_sets_max}` : ''} sets`, () => {
-      const s = prescribe(INITIAL_STATE, cfg, v.date, v.day);
+      const s = prescribe(INITIAL_STATE, v15, v.date, v.day);
       if (s.kind !== 'session') throw new Error(s.reason);
       const item = s.blocks.flatMap((b) => b.items).find((i): i is SessionSlotItem => i.kind === 'slot' && i.slot === v.slot);
       if (!item) throw new Error(`${v.slot} not in session`);

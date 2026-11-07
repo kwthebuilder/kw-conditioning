@@ -132,6 +132,12 @@ export interface SlotLog {
   sets_done: number;
   last_set: { reps: number; rir: number; tempo_break?: boolean };
   override?: LoadOverride;
+  /**
+   * A.33 (v1.9): the rep target the template item gave, carried from the
+   * prescription. When present the streak rule reads it; absent, the
+   * slot's own reps (every log before v1.9).
+   */
+  target_reps?: number;
 }
 
 export interface SlotPrescription {
@@ -149,6 +155,8 @@ export interface SlotPrescription {
   pending?: 'up' | 'down';
   notes: string[];
   override?: LoadOverride;
+  /** A.33: the template item's rep target, echoed onto the log. Absent when the item gives none. */
+  target_reps?: number;
 }
 
 export type SlotDirection = 'set' | 'up' | 'down' | 'hold';
@@ -311,7 +319,7 @@ export interface SingleLog {
 }
 
 /** How a session item is logged. */
-export type LogKind = 'barbell' | 'rdl' | 'slot' | 'fixed' | 'explosive';
+export type LogKind = 'barbell' | 'rdl' | 'slot' | 'fixed' | 'explosive' | 'phase_test';
 
 /** Fields carried from the template item; the engine's own numbers live on the prescription. */
 export interface SessionTemplateFields {
@@ -324,6 +332,10 @@ export interface SessionTemplateFields {
   variant?: string;
   contacts?: number;
   inside_rest?: boolean;
+  /** v1.9: a line shown on the item (display only). */
+  note?: string;
+  /** A.34: the sets the template gave before an audit-day cap. */
+  trimmed_from?: number;
 }
 
 export interface SessionSlotItem {
@@ -348,6 +360,8 @@ export interface SessionBlock {
   superset?: boolean;
   contrast?: boolean;
   rounds?: number | [number, number];
+  /** v1.9: an upper-body block (A.34). */
+  upper?: boolean;
   items: SessionItem[];
 }
 
@@ -366,6 +380,10 @@ export interface Session {
   singles_suggested: { lift: LiftId; reason: SingleReason }[];
   /** A.21: the rsi_ladder item stands in for the reactive item today. */
   ladder_day: boolean;
+  /** A.34: today is the first session of the block for the day's main lift. */
+  opens_block?: boolean;
+  /** A.34: the audit-day set caps were applied. */
+  audit_trims?: boolean;
   notes: string[];
 }
 
@@ -420,6 +438,8 @@ export interface PlanItem {
   /** Done inside the rest of the block's main pair. */
   inside_rest?: boolean;
   single_suggested?: boolean;
+  /** A.33: the template item's rep target on a class B or C slot. */
+  target_reps?: number;
 }
 
 /** A.27: the session as displayed when its first item was logged. */
@@ -441,11 +461,38 @@ export interface SessionStartLog {
   plan: PlanSnapshot;
 }
 
-/** A.29: record only; built in interface release 3. */
+/** A.29: record only. */
 export interface TissueCheckLog {
   date: IsoDate;
   for_date?: IsoDate;
   scores: { patellar?: number; gluteal?: number; shoulder?: number };
+  /** A.36 (v1.9): the answer to the session-start question; absent on older check-ins. */
+  above_3?: boolean;
+  note?: string;
+}
+
+/**
+ * A.32 (v1.9): the item was done as one of its swaps. Moves nothing, as a
+ * skip does, except that a swapped main lift counts for day selection.
+ */
+export interface SwapLog {
+  slot: SlotId;
+  date: IsoDate;
+  /** The exercise done instead, from the slot's swaps. */
+  to: string;
+  load?: number;
+  sets_done?: number;
+  last_set?: { reps: number; rir: number };
+  note?: string;
+}
+
+/** A.35 (v1.9): the phase-start test. Record only. */
+export interface PhaseTestLog {
+  date: IsoDate;
+  /** Best reactive strength index, two decimals. */
+  rsi?: number;
+  /** Best trap-bar jump height, cm. */
+  trap_bar_cm?: number;
   note?: string;
 }
 
@@ -481,7 +528,9 @@ export type AnyLog =
   | { kind: 'session_end'; date: IsoDate; day: SessionDay; minutes?: number; at?: string; note?: string }
   | ({ kind: 'skip' } & SkipLog)
   | ({ kind: 'session_start' } & SessionStartLog)
-  | ({ kind: 'tissue_check' } & TissueCheckLog);
+  | ({ kind: 'tissue_check' } & TissueCheckLog)
+  | ({ kind: 'swap' } & SwapLog)
+  | ({ kind: 'phase_test' } & PhaseTestLog);
 
 /** Anything that can sit in state.log: an update() log, or a correction (A.28). */
 export type RecordLog = AnyLog | CorrectionLog;

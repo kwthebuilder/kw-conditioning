@@ -42,7 +42,9 @@ import {
   kg,
   lastLogged,
   leftText,
+  lightWeekText,
   loadRange,
+  minutesText,
   loadStep,
   nextFor,
   outcomeLine,
@@ -84,6 +86,9 @@ export interface FormValues {
   patellar?: number | null;
   gluteal?: number | null;
   shoulder?: number | null;
+  /** §19 (v1.4): the phase-start test. */
+  rsi?: number | null;
+  trapCm?: number | null;
 }
 
 /** One pending change in Edit or Add a missed session, per item. */
@@ -138,13 +143,13 @@ export interface App {
   focus: { key: string; block: number } | null;
   /** Item key asking whether every earlier set was done. */
   setsAsk: string | null;
-  /** §14.9: the check-in card is showing the three sites. */
-  tissueOpen: boolean;
   /** Keys of expanded explanations and open forms. */
   open: Set<string>;
   forms: Map<string, FormValues>;
   /** Key of the item whose skip reasons are showing. */
   skipOpen: string | null;
+  /** §18 (v1.4): key of the item whose "Swapped to…" choices are showing, and the one picked. */
+  swapOpen: { key: string; to?: string } | null;
   /** Key of the item asking "0 reps?" */
   zeroAsk: string | null;
   /** Inline validation message per item key. */
@@ -244,11 +249,11 @@ export interface Ctx {
   focusBlock: (block: number) => void;
   /** §14.3: what logging this would do, computed without saving. */
   previewLift: (log: AnyLog) => string;
-  /** §14.9 */
-  tissueDue?: IsoDate;
+  /** §14.9: a score above 3 today shows the flare protocol. */
   tissueProtocol?: boolean;
-  saveTissue: (forDate: IsoDate, scores: { patellar: number; gluteal: number; shoulder: number }) => void;
-  dismissTissue: (forDate: IsoDate) => void;
+  /** §20 (v1.4): the session-start question is unanswered for the live session. */
+  sessionCheck?: IsoDate;
+  saveSessionCheck: (forDate: IsoDate, above: boolean, scores?: { patellar: number; gluteal: number; shoulder: number }) => void;
   openExport: () => void;
   closeExport: () => void;
   exportNow: () => void;
@@ -263,7 +268,7 @@ export interface Ctx {
 // item specs: what an item's form needs, from a live prescription or a saved plan
 // ---------------------------------------------------------------------
 
-type SpecType = 'barbell' | 'rdl' | 'slot' | 'fixed' | 'explosive' | 'cmj';
+type SpecType = 'barbell' | 'rdl' | 'slot' | 'fixed' | 'explosive' | 'cmj' | 'phase_test';
 
 interface Spec {
   slot: string;
@@ -295,16 +300,22 @@ interface Spec {
   refer?: string;
   // progression
   rirCap?: number;
+  /** Engine A.33: the template item's rep target, echoed on the log. */
+  targetReps?: number;
   tempo?: boolean;
   hint?: number;
   pending?: 'up' | 'down';
   incText?: string;
   // explosive
   streakNote?: string;
+  /** v1.4: a line from the template item (display only). */
+  note?: string;
+  /** v1.4: sets cut on the test-single day (engine A.34). */
+  trimmedFrom?: number;
 }
 
 const LIFT_IDS = new Set(['front_squat', 'deadlift']);
-const PER_HAND = new Set(['db_pp_strength', 'bss', 'db_pp_explosive']);
+const PER_HAND = new Set(['db_pp_strength', 'bss', 'db_pp_explosive', 'db_rdl']);
 
 function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeConfig, box?: number): Spec {
   const p = item.prescription;
@@ -314,8 +325,11 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
   if (t.secs !== undefined) base.secs = t.secs;
   if (t.variant !== undefined) base.variant = t.variant;
   if (t.inside_rest) base.inside_rest = true;
+  if (t.note !== undefined) base.note = t.note;
+  if (t.trimmed_from !== undefined) base.trimmedFrom = t.trimmed_from;
   const landings = config.slots[item.slot]?.landings;
   if (landings) base.landings = [landings[0], landings[1]];
+  if (item.log_kind === 'phase_test') return { ...base, type: 'phase_test' };
   switch (p.kind) {
     case 'refer':
       return { ...base, type: 'barbell', refer: p.reason };
@@ -335,6 +349,7 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
       return { ...base, type: 'rdl', load: p.load, sets: t.sets ?? 3, rep_range: [p.rep_range[0], p.rep_range[1]], rirCap: p.rir_cap, tempo: true };
     case 'slot': {
       const s: Spec = { ...base, type: 'slot', load: p.load, sets: t.sets ?? 3, reps: p.reps, rirCap: p.rir_cap, tempo: p.cls === 'B' };
+      if (p.target_reps !== undefined) s.targetReps = p.target_reps;
       if (t.sets_max !== undefined) s.sets_max = t.sets_max;
       if (p.start_hint_kg !== undefined) s.hint = p.start_hint_kg;
       if (p.pending) {
@@ -379,6 +394,7 @@ function specFromPlan(item: PlanItem, date: IsoDate, config: ProgrammeConfig): S
   if (item.landings) s.landings = item.landings;
   if (item.inside_rest) s.inside_rest = true;
   if (item.slot === 'cmj') return { ...s, type: 'cmj' };
+  if (item.slot === 'phase_test') return { ...s, type: 'phase_test' };
   if (LIFT_IDS.has(item.slot)) {
     const mode = mesocycleOn(config, date)?.barbell_mode ?? 'wave';
     const out: Spec = { ...s, type: 'barbell', mode, amrap: item.amrap ?? false };
@@ -388,7 +404,11 @@ function specFromPlan(item: PlanItem, date: IsoDate, config: ProgrammeConfig): S
   }
   const slot = config.slots[item.slot];
   if (item.slot === 'rdl') return { ...s, type: 'rdl', rirCap: slot?.rir_cap ?? 2, tempo: true };
-  if (slot && (slot.cls === 'B' || slot.cls === 'C')) return { ...s, type: 'slot', rirCap: slot.rir_cap ?? 2, tempo: slot.cls === 'B' };
+  if (slot && (slot.cls === 'B' || slot.cls === 'C')) {
+    const out: Spec = { ...s, type: 'slot', rirCap: slot.rir_cap ?? 2, tempo: slot.cls === 'B' };
+    if (item.target_reps !== undefined) out.targetReps = item.target_reps;
+    return out;
+  }
   if (isCarrySlot(slot)) return { ...s, type: 'explosive' };
   return s;
 }
@@ -406,6 +426,7 @@ function planLine(item: PlanItem, box?: number): string {
 const REACTIVE = 'reactive strength: bounce height divided by time on the floor; quick and high wins';
 
 const SLOT_HELP: Record<string, string> = {
+  phase_test: 'Film 3 depth jumps and 1 trap-bar jump set in My Jump Lab, then enter your best numbers.',
   depth_jump: 'Step off the box, do not jump off. Land and rebound as fast and as high as you can, with the least time on the floor. Full rest between jumps.',
   depth_landing: 'Step off a box a little higher than your usual drop height. Land soft, quiet and balanced, and hold it. No rebound.',
   skater_bound: 'Push off one leg sideways, land on the other and stick the landing before the next bound.',
@@ -415,13 +436,15 @@ const SLOT_HELP: Record<string, string> = {
   db_pp_explosive: 'Light dumbbells. Dip and drive them overhead as fast as you can. Stop the set at the first slower rep.',
   landmine_cpp: 'One arm. Clean the bar to the shoulder, then dip and press it overhead in one fast movement. Stop the set at the first slower rep.',
   rdl: 'Bar in the hands, soft knees. Lower for 3 seconds with a flat back until the hamstrings pull, then stand up.',
+  db_rdl: 'A dumbbell in each hand, soft knees. Lower for 3 seconds with a flat back until the hamstrings pull, then stand up. Load is per hand.',
+  seated_abduction: 'Heavy. Push the pads out, then let them back in over 3 seconds.',
   hack_squat: 'Lower for 3 seconds on every rep, drive up without pause.',
   abductor_hsr: 'Stand on the working leg with the cable on the other ankle. Move the free leg out slowly, 3 seconds each way.',
   db_pp_strength: 'Hammer grip. Small dip, press both dumbbells overhead, lower under control.',
   pull_up: 'Add weight on a belt. Full hang to chin over the bar, no kicking.',
   landmine_press: 'One arm. Press the end of the bar up and forward, keep the ribs down.',
   cs_row: 'Chest on the bench. Pull the handles to the ribs, pause, lower slowly.',
-  bss: 'Back foot on the bench, dumbbells in the hands. Drop straight down until the back knee nearly touches, drive up.',
+  bss: 'Back foot on the bench, dumbbells in the hands. Lower for 3 seconds until the back knee nearly touches, drive up.',
   nordic: 'Knees down, ankles held. Lower the body forward as slowly as you can, catch with the hands, push back up.',
   abd_iso: 'Lie on your side, top leg straight. Lift it a little and hold still for the time.',
   y_raise: 'Face down on an incline bench, light dumbbells. Raise the arms to a Y, thumbs up, and lower slowly.',
@@ -435,6 +458,16 @@ const WARMUP_NAMES: Record<string, string> = {
   warmup: 'Warm-up',
   warmup_glute_shoulder: 'Warm-up: glutes and shoulders',
 };
+
+/** v1.4 (config v1.6 `text.warmup`): the warm-up as one line, the same in every session. */
+function warmupText(config: ProgrammeConfig): string | undefined {
+  return config.text?.warmup;
+}
+
+/** The slot's help: the config's cue (v1.6) wins over the app's own words. */
+function helpFor(slot: string, config: ProgrammeConfig): string | undefined {
+  return config.slots[slot]?.cue ?? SLOT_HELP[slot];
+}
 
 const RIR_OPTIONS = [0, 1, 2, 3, 4].map((v) => ({ value: v, text: v === 4 ? '4+' : String(v) }));
 
@@ -452,7 +485,7 @@ function rxLine(spec: Spec): HTMLElement {
   if (spec.sets !== undefined && spec.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${setsN} × ${spec.reps}${side}`));
   else if (spec.sets !== undefined && spec.rep_range) rx.append(h('span', { class: 'sets' }, `${setsN} × ${spec.rep_range[0]}–${spec.rep_range[1]}`));
   else if (spec.sets !== undefined && spec.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.sets} × ${spec.secs} s${side}`));
-  else if (spec.sets !== undefined) rx.append(h('span', { class: 'sets' }, setsText(spec.sets, spec.sets_max)));
+  else if (spec.sets !== undefined) rx.append(h('span', { class: 'sets' }, `${setsText(spec.sets, spec.sets_max)}${side}`));
   else if (spec.reps !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.reps} reps${side}`));
   else if (spec.secs !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.secs} s${side}`));
   if (spec.landings) rx.append(h('span', { class: 'sets' }, `${spec.landings[0]}–${spec.landings[1]} landings`));
@@ -460,16 +493,18 @@ function rxLine(spec: Spec): HTMLElement {
   if (spec.inside_rest) rx.append(h('span', { class: 'unit' }, 'inside the rests'));
   if (spec.contacts !== undefined) rx.append(h('span', { class: 'sets' }, `${spec.contacts} jumps${spec.box !== undefined ? ` · ${spec.box} cm box` : ''}`));
   if (spec.load === null && (spec.type === 'slot' || spec.type === 'explosive')) rx.append(h('span', { class: 'unit' }, spec.hint !== undefined ? `pick a load, try ${spec.hint} kg` : 'first time: pick a load'));
+  if (spec.trimmedFrom !== undefined) rx.append(h('span', { class: 'unit' }, `test-single day: ${spec.trimmedFrom} sets cut to ${spec.sets ?? 2}`));
+  if (spec.type === 'phase_test') rx.append(h('span', { class: 'sets' }, 'Record only'));
   if (!rx.childElementCount) rx.append(h('span', { class: 'sets' }, 'As usual'));
   return rx;
 }
 
-function instruction(spec: Spec): string {
-  const help = SLOT_HELP[spec.slot];
+function instruction(spec: Spec, config: ProgrammeConfig): string {
+  const help = helpFor(spec.slot, config);
   switch (spec.type) {
     case 'barbell':
       if (spec.amrap) return `Last set: as many clean reps as you can, stop with 2 left.${spec.par !== undefined ? ` About ${spec.par} reps keeps your max where it is; more raises it, fewer lowers it.` : ''}`;
-      if (spec.position === 1) return `${spec.sets ?? 3} × ${spec.reps ?? 4} and stop. Light weeks don't change your max.`;
+      if (spec.position === 1) return lightWeekText(config, spec.sets ?? 3, spec.reps ?? 4);
       return 'All sets at the prescribed reps, with 2 or more left in the tank.';
     case 'rdl':
     case 'slot':
@@ -479,7 +514,9 @@ function instruction(spec: Spec): string {
     case 'fixed':
       return [help, spec.slot === 'depth_jump' ? `Scored on ${REACTIVE}.` : ''].filter(Boolean).join(' ');
     case 'cmj':
-      return help ?? '';
+      return [help, config.text?.cmj].filter(Boolean).join(' ');
+    case 'phase_test':
+      return [help, 'Nothing moves; it is kept in your log and export.'].filter(Boolean).join(' ');
   }
 }
 
@@ -493,6 +530,8 @@ interface FormOpts {
   submitLabel: string;
   onSubmit: (logs: AnyLog[]) => void;
   onSkip?: (reason?: SkipReason) => void;
+  /** §18 (v1.4): log the item as swapped to one of its swaps. */
+  onSwap?: (log: AnyLog) => void;
   onRemove?: () => void;
   onCancel?: () => void;
   /** §14.2: tick key and the number of sets before the last one; the barbell asks if any is unticked. */
@@ -528,6 +567,10 @@ function valuesFor(app: App, key: string, spec: Spec, initial?: AnyLog): FormVal
     case 'cmj':
       v.value = initial?.kind === 'cmj' ? initial.value : null;
       break;
+    case 'phase_test':
+      v.rsi = initial?.kind === 'phase_test' ? (initial.rsi ?? null) : null;
+      v.trapCm = initial?.kind === 'phase_test' ? (initial.trap_bar_cm ?? null) : null;
+      break;
   }
   app.forms.set(key, v);
   return v;
@@ -543,6 +586,57 @@ function skipRow(app: App, ctx: Ctx, key: string, onSkip: (reason?: SkipReason) 
     h('div', { class: 'choices' }, ...reasons.map((r) => h('button', { type: 'button', onclick: () => { app.skipOpen = null; onSkip(r); } }, r ? SKIP_LABEL[r] : 'No reason'))),
     h('button', { type: 'button', class: 'subtle', onclick: () => { app.skipOpen = null; ctx.rerender(); } }, 'Cancel'),
   );
+}
+
+/**
+ * §18 (v1.4): "Swapped to…": one tap picks the exercise from the slot's
+ * swaps; load, sets, reps and reps left are optional; Log swap saves.
+ * A swap moves nothing (engine A.32).
+ */
+function swapRow(app: App, ctx: Ctx, key: string, spec: Spec, onSwap: (log: AnyLog) => void): HTMLElement | null {
+  const open = app.swapOpen;
+  if (!open || open.key !== key) return null;
+  const options = ctx.config.slots[spec.slot]?.swaps ?? [];
+  const fk = `swap|${key}`;
+  const v = app.forms.get(fk) ?? {};
+  app.forms.set(fk, v);
+  const close = () => { app.swapOpen = null; app.forms.delete(fk); ctx.rerender(); };
+  const box = h('div', { class: 'swap-row' }, h('span', { class: 'lab' }, 'Swapped to… Nothing moves either way.'));
+  box.append(h('div', { class: 'choices', role: 'radiogroup', 'aria-label': 'Swapped to' }, ...options.map((o) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(open.to === o), class: open.to === o ? 'on' : '', onclick: () => { app.swapOpen = { key, to: o }; ctx.rerender(); } }, o))));
+  if (open.to) {
+    box.append(
+      h('div', { class: 'fields' },
+        stepper({ label: 'Load, optional', unit: 'kg', value: v.load ?? null, step: loadStep(spec.slot), start: spec.load ?? 0, onChange: (x) => (v.load = x) }).el,
+        stepper({ label: 'Sets, optional', value: v.sets ?? null, step: 1, start: spec.sets ?? 3, integer: true, onChange: (x) => (v.sets = x) }).el,
+        stepper({ label: 'Reps, last set, optional', value: v.reps ?? null, step: 1, start: spec.reps ?? spec.rep_range?.[0] ?? 1, integer: true, onChange: (x) => (v.reps = x) }).el,
+        choices({ label: 'Reps left, last set, optional', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => (v.rir = x) }),
+      ),
+    );
+    const err = app.errors.get(fk);
+    if (err) box.append(h('p', { class: 'err', role: 'alert' }, err));
+    box.append(
+      h('div', { class: 'row actions' },
+        h('button', { type: 'button', class: 'primary', onclick: () => {
+          if ((v.reps == null) !== (v.rir == null)) {
+            app.errors.set(fk, 'Give both the reps and the reps left for the last set, or neither.');
+            return ctx.rerender();
+          }
+          app.errors.delete(fk);
+          const log: AnyLog = { kind: 'swap', slot: spec.slot, date: spec.date, to: open.to! };
+          if (v.load != null) log.load = v.load;
+          if (v.sets != null) log.sets_done = v.sets;
+          if (v.reps != null && v.rir != null) log.last_set = { reps: v.reps, rir: v.rir };
+          app.swapOpen = null;
+          app.forms.delete(fk);
+          onSwap(log);
+        } }, 'Log swap'),
+        h('button', { type: 'button', class: 'subtle', onclick: close }, 'Cancel'),
+      ),
+    );
+  } else {
+    box.append(h('button', { type: 'button', class: 'subtle', onclick: close }, 'Cancel'));
+  }
+  return box;
 }
 
 function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[] {
@@ -655,10 +749,12 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
         const tickedSets = opts.ticked ? opts.ticked() : 0;
         const sets = init?.sets_done ?? (spec.sets_max !== undefined && tickedSets > 0 ? Math.max(spec.sets ?? 1, tickedSets) : (spec.sets ?? 3));
         const override = planned !== null && v.load !== planned ? { override: { from: planned } } : {};
+        const initTarget = init?.kind === 'slot' ? init.target_reps : undefined;
+        const target = init ? initTarget : spec.targetReps;
         const log: AnyLog =
           spec.type === 'rdl'
             ? { kind: 'rdl', slot: 'rdl', date: spec.date, load: v.load, sets_done: sets, last_set: last, ...override }
-            : { kind: 'slot', slot: spec.slot, date: spec.date, load: v.load, sets_done: sets, last_set: last, ...override };
+            : { kind: 'slot', slot: spec.slot, date: spec.date, load: v.load, sets_done: sets, last_set: last, ...override, ...(target !== undefined ? { target_reps: target } : {}) };
         done([log]);
       };
       break;
@@ -687,6 +783,19 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
       submit = () => {
         if (v.value == null) return fail('Enter the jump height.');
         done([{ kind: 'cmj', date: spec.date, value: v.value }]);
+      };
+      break;
+    }
+    case 'phase_test': {
+      const r = stepper({ label: 'Best reactive strength index', value: v.rsi ?? null, step: 0.01, start: 1.5, onChange: (x) => (v.rsi = x) });
+      const t = stepper({ label: 'Best trap-bar jump height', unit: 'cm', value: v.trapCm ?? null, step: 0.5, start: 35, onChange: (x) => (v.trapCm = x) });
+      fields.append(r.el, t.el);
+      submit = () => {
+        if (v.rsi == null && v.trapCm == null) return fail('Enter at least one number, or skip it.');
+        const log: AnyLog = { kind: 'phase_test', date: spec.date };
+        if (v.rsi != null) log.rsi = Math.round(v.rsi * 100) / 100;
+        if (v.trapCm != null) log.trap_bar_cm = v.trapCm;
+        done([log]);
       };
       break;
     }
@@ -741,13 +850,19 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
   }
   const buttons = h('div', { class: 'row actions' });
   buttons.append(h('button', { type: 'button', class: 'primary', onclick: () => submit() }, opts.submitLabel));
-  if (opts.onSkip) buttons.append(h('button', { type: 'button', onclick: () => { app.skipOpen = app.skipOpen === key ? null : key; ctx.rerender(); } }, 'Skip'));
+  if (opts.onSkip) buttons.append(h('button', { type: 'button', onclick: () => { app.skipOpen = app.skipOpen === key ? null : key; app.swapOpen = null; ctx.rerender(); } }, 'Skip'));
+  const swaps = ctx.config.slots[spec.slot]?.swaps ?? [];
+  if (opts.onSwap && swaps.length) buttons.append(h('button', { type: 'button', onclick: () => { app.swapOpen = app.swapOpen?.key === key ? null : { key }; app.skipOpen = null; ctx.rerender(); } }, 'Swapped to…'));
   if (opts.onRemove) buttons.append(h('button', { type: 'button', class: 'subtle danger-text', onclick: opts.onRemove }, 'Remove'));
   if (opts.onCancel) buttons.append(h('button', { type: 'button', class: 'subtle', onclick: () => { app.forms.delete(key); app.errors.delete(key); opts.onCancel!(); } }, 'Cancel'));
   out.push(buttons);
   if (opts.onSkip) {
     const sr = skipRow(app, ctx, key, opts.onSkip);
     if (sr) out.push(sr);
+  }
+  if (opts.onSwap) {
+    const sw = swapRow(app, ctx, key, spec, opts.onSwap);
+    if (sw) out.push(sw);
   }
   return out;
 }
@@ -804,11 +919,12 @@ function loadTag(log: AnyLog): HTMLElement | null {
 function doneItem(app: App, ctx: Ctx, name: string, step: ReplayStep, key: string, onChange: () => void): HTMLElement {
   const log = step.item.log;
   const skipped = log.kind === 'skip' || (log.kind === 'fixed' && !log.done);
+  const swapped = log.kind === 'swap';
   const line = outcomeLine(step, ctx.config);
   return h(
     'div',
-    { class: `item done-item${skipped ? ' skipped' : ''}` },
-    itemHead(name, h('span', { class: skipped ? 'status skip' : 'status ok' }, skipped ? 'Skipped' : 'Done')),
+    { class: `item done-item${skipped ? ' skipped' : ''}${swapped ? ' swapped' : ''}` },
+    itemHead(name, h('span', { class: skipped ? 'status skip' : 'status ok' }, skipped ? 'Skipped' : swapped ? 'Swapped' : 'Done')),
     h('p', { class: 'did' }, didText(log, ctx.config)),
     line ? h('p', { class: 'outcome' }, line) : null,
     h('div', { class: 'tags' }, loadTag(log), ...correctedTags(step)),
@@ -816,7 +932,7 @@ function doneItem(app: App, ctx: Ctx, name: string, step: ReplayStep, key: strin
   );
 }
 
-const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj']);
+const ROW_KINDS = new Set(['barbell', 'rdl', 'slot', 'fixed', 'explosive', 'skip', 'cmj', 'swap', 'phase_test']);
 
 /** The live session's entries for a slot. */
 function stepsFor(live: LiveView, slot: string): ReplayStep[] {
@@ -895,8 +1011,10 @@ function setRows(app: App, ctx: Ctx, spec: Spec, name: string, tk: string): { ro
   if (spec.type === 'barbell') {
     if (spec.ramp?.length) rows.push(tickRow(app, ctx, `${tk}|warm`, 0, `Warm-up ${spec.ramp.map((r) => `${kg(r.load)} × ${r.reps}`).join(' · ')}`, spec.slot, name));
     const earlier = Math.max(0, sets - 1);
-    for (let i = 0; i < earlier; i++) rows.push(tickRow(app, ctx, tk, i, `Set ${i + 1} · ${spec.load !== null ? `${kg(spec.load)} kg × ` : ''}${spec.reps ?? ''}`, spec.slot, name));
-    return { rows, earlier, lastLabel: `Set ${sets}, the last` };
+    // v1.4: a range of sets (Block 2 doubles, 3 to 4) offers the extra set as optional; the last set is logged below.
+    const rowsN = spec.sets_max !== undefined ? Math.max(earlier, spec.sets_max - 1) : earlier;
+    for (let i = 0; i < rowsN; i++) rows.push(tickRow(app, ctx, tk, i, `Set ${i + 1}${i >= earlier ? ' (optional)' : ''} · ${spec.load !== null ? `${kg(spec.load)} kg × ` : ''}${spec.reps ?? ''}`, spec.slot, name));
+    return { rows, earlier, lastLabel: spec.sets_max !== undefined ? `The last set (set ${sets} or ${spec.sets_max})` : `Set ${sets}, the last` };
   }
   if (spec.type === 'rdl' || spec.type === 'slot') {
     const earlier = Math.max(0, sets - 1);
@@ -948,6 +1066,10 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
           app.open.delete(changeKey);
           ctx.previewCorrection(date, [{ op: 'replace', target: last.item.origin, entry: { kind: 'skip', slot: item.slot, date, ...(reason ? { reason } : {}) } }]);
         },
+        onSwap: (log) => {
+          app.open.delete(changeKey);
+          ctx.previewCorrection(date, [{ op: 'replace', target: last.item.origin, entry: log }]);
+        },
         onRemove: () => {
           app.open.delete(changeKey);
           ctx.previewCorrection(date, [{ op: 'remove', target: last.item.origin }]);
@@ -975,8 +1097,9 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
   if (spec.forced) box.append(h('div', { class: 'callout info' }, 'Two sessions down in a row: light day, two sets.'));
   box.append(rxLine(spec));
   if (spec.type === 'slot' && spec.pending) box.append(h('div', { class: 'callout info' }, h('strong', {}, `Go ${spec.pending} ${spec.incText}`), ' this session. Log whatever you lift.'));
-  const ins = instruction(spec);
+  const ins = instruction(spec, ctx.config);
   if (ins) box.append(h('p', { class: 'sub' }, ins));
+  if (spec.note) box.append(h('p', { class: 'sub item-note' }, spec.note));
   const prev = lastLogged(ctx.history, item.slot, date, spec.type === 'barbell' ? spec.position : undefined);
   if (prev) {
     const label = spec.type === 'barbell' && spec.position !== undefined ? `Last ${POSITION_LABEL[spec.position].toLowerCase()}` : 'Last time';
@@ -996,10 +1119,12 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
     ...itemForm(app, ctx, spec, {
       key,
       submitLabel: spec.type === 'fixed' ? 'Done' : 'Log',
-      ...(lo.contrast ? { ticked: lo.contrast.ticked } : { ticksKey: tk, earlierSets: earlier, ticked: () => countTicks(app, tk) }),
+      // A range of sets counts the ticked earlier sets plus the last one (v1.4); a contrast grid counts rounds.
+      ...(lo.contrast ? { ticked: lo.contrast.ticked } : { ticksKey: tk, earlierSets: earlier, ticked: () => countTicks(app, tk) + (spec.sets_max !== undefined && spec.type !== 'fixed' && spec.type !== 'explosive' ? 1 : 0) }),
       preview: spec.type === 'barbell',
       onSubmit: (logs) => ctx.logLive(logs, name),
       onSkip: (reason) => ctx.logLive([{ kind: 'skip', slot: item.slot, date, ...(reason ? { reason } : {}) }], `${name} skipped`),
+      onSwap: (log) => ctx.logLive([log], `${name} swapped`),
     }),
   );
   return box;
@@ -1007,20 +1132,23 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
 
 function kickerFor(b: SessionBlock, index: number): string {
   if (b.contrast) return `Contrast: heavy set, then jump${b.rounds ? ` · ${Array.isArray(b.rounds) ? b.rounds.join('–') : b.rounds} rounds` : ''}`;
-  if (b.superset) return 'Superset: alternate the two';
+  // After week 22 a superset can be left with one item (config v1.6): then it is a plain block.
+  if (b.superset && b.items.filter((it) => it.kind === 'slot').length > 1) return 'Superset: alternate the two';
   return `Block ${index}`;
 }
 
-function blockCard(b: SessionBlock, index: number, render: (it: SessionSlotItem) => HTMLElement): HTMLElement {
+function blockCard(config: ProgrammeConfig, b: SessionBlock, index: number, render: (it: SessionSlotItem) => HTMLElement): HTMLElement {
   const onlyWarmup = b.items.every((it) => it.kind === 'warmup');
+  const text = warmupText(config);
+  const warm = (name: string): HTMLElement[] => [h('p', { class: 'warm' }, WARMUP_NAMES[name] ?? name.replace(/_/g, ' ')), ...(text ? [h('p', { class: 'sub warm-text' }, text)] : [])];
   if (onlyWarmup) {
-    return h('section', { class: 'card' }, ...b.items.map((it) => (it.kind === 'warmup' ? itemHead(WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' '), b.min !== undefined ? `${b.min} min` : undefined) : null)));
+    return h('section', { class: 'card warmup-card' }, ...b.items.flatMap((it) => (it.kind === 'warmup' ? [itemHead(WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' '), b.min !== undefined ? `${b.min} min` : undefined), ...(text ? [h('p', { class: 'sub warm-text' }, text)] : [])] : [])));
   }
   return h(
     'section',
     { class: 'card focus' },
     h('div', { class: 'head' }, h('span', { class: 'kicker' }, kickerFor(b, index)), b.min !== undefined ? h('span', { class: 'tag' }, `${b.min} min`) : null),
-    ...b.items.map((it) => (it.kind === 'warmup' ? h('p', { class: 'warm' }, WARMUP_NAMES[it.name] ?? it.name.replace(/_/g, ' ')) : render(it))),
+    ...b.items.flatMap((it) => (it.kind === 'warmup' ? warm(it.name) : [render(it)])),
   );
 }
 
@@ -1032,7 +1160,7 @@ function cmjLive(app: App, ctx: Ctx, live: LiveView): HTMLElement {
   const changeKey = `change|${live.key}|cmj`;
   if (last && !app.open.has(changeKey)) return h('section', { class: 'card' }, doneItem(app, ctx, 'Jump test', last, key, () => { app.open.add(changeKey); ctx.rerender(); }));
   const spec: Spec = { slot: 'cmj', type: 'cmj', date, load: null };
-  const box = h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', 'before the warm-up'), h('p', { class: 'sub' }, instruction(spec))));
+  const box = h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', 'before the warm-up'), h('p', { class: 'sub' }, instruction(spec, ctx.config))));
   const inner = box.firstElementChild as HTMLElement;
   if (last) {
     inner.append(...itemForm(app, ctx, spec, {
@@ -1135,14 +1263,22 @@ function liveBody(app: App, ctx: Ctx, live: LiveView, s: Session): HTMLElement[]
     const i = s.blocks.findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
     focus = i === -1 ? -1 : i + 1;
   }
+  // While a session is live the next-session heading is gone, so the time line goes here (v1.4 §18).
+  if (live.group) {
+    const t = minutesText(ctx.config, s.target_min, s.audit_trims);
+    out.push(h('p', { class: 'sub session-time' }, `${t.charAt(0).toUpperCase()}${t.slice(1)}.`));
+  }
+  const note = sessionNote(ctx);
+  if (note) out.push(note);
+  if (ctx.sessionCheck !== undefined) out.push(sessionCheckCard(app, ctx, ctx.sessionCheck));
   if (hasCmj) out.push(cmjLive(app, ctx, live));
   s.blocks.forEach((b, i) => {
     const index = i + 1;
     if (slotsOf(b).length === 0) {
-      out.push(blockCard(b, index, () => h('div')));
+      out.push(blockCard(ctx.config, b, index, () => h('div')));
       return;
     }
-    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, live, b, index) : blockCard(b, index, (it) => liveItem(app, ctx, live, it)));
+    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, live, b, index) : blockCard(ctx.config, b, index, (it) => liveItem(app, ctx, live, it)));
     else if (blockDone(b)) out.push(doneCard(ctx, live, b, index));
     else out.push(nextCard(ctx, live, b, index, plan));
   });
@@ -1157,6 +1293,8 @@ function nextReadOnly(ctx: Ctx, s: Session): HTMLElement[] {
   if (s.pre.includes('cmj')) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, 'Jump test'), h('span', { class: 'dt' }, 'Before the warm-up')));
   for (const it of snap.items) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, planLine(it, ctx.boxCm))));
   out.push(h('div', { class: 'plan-lines' }, ...rows));
+  const note = sessionNote(ctx);
+  if (note) out.push(note);
   return out;
 }
 
@@ -1185,65 +1323,75 @@ function unfinishedCard(ctx: Ctx, u: NonNullable<Ctx['unfinished']>): HTMLElemen
   );
 }
 
-/** §14.9: the morning-after card, and the flare protocol on a day a score was above 3. */
-function tissueCard(app: App, ctx: Ctx): HTMLElement | null {
-  if (ctx.tissueProtocol) {
+/**
+ * §20 (v1.4): the session-start tendon question, at the top of every
+ * session, Day 1 and Day 2. No is one tap; site and score only after Yes.
+ * It never blocks logging: the items below stay live while it is open.
+ */
+function sessionCheckCard(app: App, ctx: Ctx, forDate: IsoDate): HTMLElement {
+  const prompt = ctx.config.tissue_check?.prompt ?? 'Any tendon pain above 3/10 in the last 48 hours?';
+  const key = `scheck|${forDate}`;
+  const head = h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Before you start'));
+  if (!app.open.has(key)) {
     return h(
       'section',
-      { class: 'card protocol' },
-      h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Above 3/10 today: your flare protocol')),
-      h('p', {}, FLARE_PROTOCOL),
-      h('p', { class: 'sub' }, 'Recorded only; the app changes no load for it. Adjust today with the coach in mind.'),
-    );
-  }
-  const due = ctx.tissueDue;
-  if (!due) return null;
-  const v = app.forms.get('tissue') ?? { patellar: 0, gluteal: 0, shoulder: 0 };
-  app.forms.set('tissue', v);
-  const head = h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Check-in'));
-  if (!app.tissueOpen) {
-    return h(
-      'section',
-      { class: 'card checkin' },
+      { class: 'card session-check' },
       head,
-      h('h2', {}, 'How do they feel today?'),
-      h('p', { class: 'sub' }, `After ${prettyDate(due)}'s session: patellar, gluteal and left shoulder, 0 to 10.`),
-      h(
-        'div',
-        { class: 'row actions' },
-        h('button', { type: 'button', class: 'primary', onclick: () => ctx.saveTissue(due, { patellar: 0, gluteal: 0, shoulder: 0 }) }, 'All clear'),
-        h('button', { type: 'button', onclick: () => { app.tissueOpen = true; ctx.rerender(); } }, "Something's sore"),
-        h('button', { type: 'button', class: 'subtle', onclick: () => ctx.dismissTissue(due) }, 'Not now'),
+      h('h2', {}, prompt),
+      h('div', { class: 'row actions' },
+        h('button', { type: 'button', class: 'primary', onclick: () => ctx.saveSessionCheck(forDate, false) }, 'No'),
+        h('button', { type: 'button', onclick: () => { app.open.add(key); ctx.rerender(); } }, 'Yes'),
       ),
     );
   }
-  const err = app.errors.get('tissue');
-  const field = (label: string, k: 'patellar' | 'gluteal' | 'shoulder') =>
-    stepper({ label, unit: 'out of 10', value: v[k] ?? 0, step: 1, start: 0, integer: true, onChange: (x) => (v[k] = x) }).el;
+  const fk = `scheck-form|${forDate}`;
+  const v = app.forms.get(fk) ?? { patellar: 0, gluteal: 0, shoulder: 0 };
+  app.forms.set(fk, v);
+  const field = (label: string, k: 'patellar' | 'gluteal' | 'shoulder') => stepper({ label, unit: 'out of 10', value: v[k] ?? 0, step: 1, start: 0, integer: true, onChange: (x) => (v[k] = x) }).el;
+  const err = app.errors.get(fk);
   return h(
     'section',
-    { class: 'card checkin' },
+    { class: 'card session-check' },
     head,
-    h('h2', {}, 'How do they feel today?'),
-    h('p', { class: 'sub' }, `After ${prettyDate(due)}'s session. 0 is nothing at all.`),
+    h('h2', {}, prompt),
+    h('p', { class: 'sub' }, 'Which site, and how bad? 0 is nothing at all.'),
     h('div', { class: 'fields' }, field('Patellar tendon', 'patellar'), field('Gluteal tendon', 'gluteal'), field('Left shoulder', 'shoulder')),
     err ? h('p', { class: 'err' }, err) : null,
-    h(
-      'div',
-      { class: 'row actions' },
+    h('div', { class: 'row actions' },
       h('button', { type: 'button', class: 'primary', onclick: () => {
         const vals = [v.patellar, v.gluteal, v.shoulder];
         if (vals.some((x) => x == null || x < 0 || x > 10 || !Number.isInteger(x))) {
-          app.errors.set('tissue', 'Each score is a whole number from 0 to 10.');
+          app.errors.set(fk, 'Each score is a whole number from 0 to 10.');
           return ctx.rerender();
         }
-        app.errors.delete('tissue');
-        app.tissueOpen = false;
-        app.forms.delete('tissue');
-        ctx.saveTissue(due, { patellar: v.patellar!, gluteal: v.gluteal!, shoulder: v.shoulder! });
+        app.errors.delete(fk);
+        app.open.delete(key);
+        app.forms.delete(fk);
+        ctx.saveSessionCheck(forDate, true, { patellar: v.patellar!, gluteal: v.gluteal!, shoulder: v.shoulder! });
       } }, 'Save'),
-      h('button', { type: 'button', class: 'subtle', onclick: () => { app.tissueOpen = false; ctx.rerender(); } }, 'Cancel'),
+      h('button', { type: 'button', class: 'subtle', onclick: () => { app.open.delete(key); ctx.rerender(); } }, 'Back'),
     ),
+  );
+}
+
+/** §18 (v1.4): the running-long note, on every session. Display only. */
+function sessionNote(ctx: Ctx): HTMLElement | null {
+  const t = ctx.config.text?.session_note;
+  return t ? h('p', { class: 'sub session-note' }, t) : null;
+}
+
+/**
+ * §14.9: the flare protocol on a day a score was above 3. v1.4 (§20): the
+ * morning-after check-in card is replaced by the session-start question.
+ */
+function tissueCard(_app: App, ctx: Ctx): HTMLElement | null {
+  if (!ctx.tissueProtocol) return null;
+  return h(
+    'section',
+    { class: 'card protocol' },
+    h('div', { class: 'head' }, h('span', { class: 'kicker' }, 'Above 3/10 today: your flare protocol')),
+    h('p', {}, FLARE_PROTOCOL),
+    h('p', { class: 'sub' }, 'Recorded only; the app changes no load for it. Adjust today with the coach in mind.'),
   );
 }
 
@@ -1371,7 +1519,7 @@ function todayScreen(app: App, ctx: Ctx, appVersion: string): { body: Child[]; b
   } else if (ctx.todayState === 'done' && ctx.doneToday && live && s) {
     const g = ctx.doneToday.group;
     body.push(h('section', { class: 'card hist-week' }, sessionRow(ctx, g)));
-    const head = h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session · loads assume your training maxes hold'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · about ${s.target_min} min` : ''}`));
+    const head = h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session · loads assume your training maxes hold'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · ${minutesText(cfg, s.target_min, s.audit_trims)}` : ''}`));
     if (s.kind === 'session') head.append(...nextReadOnly(ctx, s));
     head.append(h('div', { class: 'row actions' }, h('button', { type: 'button', onclick: ctx.startToday }, 'Start it today')));
     body.push(head);
@@ -1380,7 +1528,7 @@ function todayScreen(app: App, ctx: Ctx, appVersion: string): { body: Child[]; b
     const line = live.day === rotation
       ? `Day ${rotation} is next in your rotation. Logging the first item starts the session and fixes the day.`
       : `You've chosen Day ${live.day}. Day ${rotation} is next in your rotation.`;
-    body.push(h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · about ${s.target_min} min` : ''}`), daySwitch(ctx, live.day), h('p', { class: 'sub' }, line)));
+    body.push(h('section', { class: 'card next-head' }, h('span', { class: 'kicker' }, 'Next session'), h('h2', {}, `Day ${live.day}${s.kind === 'session' ? ` · ${minutesText(cfg, s.target_min, s.audit_trims)}` : ''}`), daySwitch(ctx, live.day), h('p', { class: 'sub' }, line)));
     if (s.kind !== 'session') body.push(h('p', { class: 'refer' }, `No session for this date. ${s.reason}`));
     else body.push(...liveBody(app, ctx, live, s));
   }
@@ -1400,7 +1548,7 @@ function todayScreen(app: App, ctx: Ctx, appVersion: string): { body: Child[]; b
 
 function statusChip(row: RecordRow, draft?: Draft): HTMLElement {
   if (draft) return h('span', { class: 'status pending' }, draft.after === null ? 'Will be removed' : 'Change pending');
-  if (row.status === 'done') return h('span', { class: 'status ok' }, 'Done');
+  if (row.status === 'done') return h('span', { class: 'status ok' }, row.swapped ? 'Swapped' : 'Done');
   if (row.status === 'skipped') return h('span', { class: 'status skip' }, 'Skipped');
   return h('span', { class: 'status none' }, 'Not recorded');
 }
@@ -1471,6 +1619,10 @@ function editRow(app: App, ctx: Ctx, date: IsoDate, row: RecordRow, drafts: Draf
           ctx.setDraft({ slot: row.item.slot, actions: step ? replaceActions(step, logs) : logs.map((l) => ({ op: 'insert' as const, entry: l })), after: logs[0]! });
         },
         onSkip: skipTo,
+        onSwap: (log) => {
+          app.open.delete(formKey);
+          ctx.setDraft({ slot: row.item.slot, actions: step ? [{ op: 'replace', target: step.item.origin, entry: log }] : [{ op: 'insert', entry: log }], after: log });
+        },
         onCancel: () => {
           app.open.delete(formKey);
           ctx.rerender();
