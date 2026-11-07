@@ -122,6 +122,12 @@ export function update(state: State, log: AnyLog, config: ProgrammeConfig): Engi
       r = { state: next, explanation: { summary, steps }, outcome: null };
       break;
     }
+    case 'session_length': {
+      // A.42: record only; the athlete's own figure, not the logging clock.
+      if (!Number.isInteger(log.minutes) || log.minutes < 1 || log.minutes > 600) throw new Error('session length must be a whole number of minutes from 1 to 600');
+      r = plain(structuredClone(state), `${describeLog(log, config)}. Nothing moves.`);
+      break;
+    }
     case 'phase_test': {
       // A.35: record only.
       r = plain(structuredClone(state), `${describeLog(log, config)}. Nothing moves.`);

@@ -637,6 +637,16 @@ function render(): void {
       const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
       if (g) finishSession(g);
     },
+    saveLength: (minutes) => {
+      const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
+      if (!g) return;
+      try {
+        setState(update(app.state, { kind: 'session_length', date: g.date, day: g.day ?? 1, minutes }, cfg).state);
+      } catch (e) {
+        app.banner = `Not logged: ${e instanceof Error ? e.message : String(e)}`;
+      }
+      render();
+    },
     skipRest: (slots) => {
       const g = app.sheet?.kind === 'finish' ? findSession(app.sheet.id) : undefined;
       if (!g) return;
@@ -901,6 +911,8 @@ function finishView(g: SessionGroup): FinishView {
   const next = (['front_squat', 'deadlift'] as const).map((lift) => `${displayName(lift, cfg)}: ${nextFor(app.state, lift, cfg, nextDateFor(lift, g.day))}`);
   const v: FinishView = { unrecorded, finished: g.end !== undefined, moved, next, backupOk: backupOk() };
   if (minutes !== undefined) v.minutes = minutes;
+  const length = [...g.steps].reverse().find((s) => s.item.log.kind === 'session_length')?.item.log;
+  if (length && length.kind === 'session_length') v.length = length.minutes;
   return v;
 }
 

@@ -387,3 +387,44 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** Builder, 19 Oct 2026, under the programme owner's brief: the button shows only on items whose slot has a `swaps` list, because an empty list has nothing to pick. Adding an alternative later is a config change only (one more `swaps` entry); no code changes. Skip stays on every item.
 - **Spec revision:** ui_spec_v1_4.md §18.1
+
+## Q48 — release 3.1: who writes the spec files
+- **Raised:** 2026-11-07, release 3.1
+- **Where:** CLAUDE.md rule 1 ("/spec is read-only")
+- **Question:** Release 3.1 needs new spec versions. Who may write them?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 7 Nov 2026: approved the changes and asked the coordinating chat to push them. New versioned files sit beside the old ones (`programme_config_v1_7.json`, `engine_spec_v1_10.md`, `ui_spec_v1_5.md`, `engine_test_vectors_v1_7.json`, `app_build_plan_v1_6.md`); no existing spec file is edited. CLAUDE.md itself is left for the athlete to update to name the new files.
+- **Spec revision:** the files above
+
+## Q49 — accessory loads that never step when sets stop at the target
+- **Raised:** 2026-11-07, programme and app review
+- **Where:** engine_spec_v1_9.md §3, §4, A.33 / src/engine/accessory.ts
+- **Question:** From 24 Sep to 6 Nov the row, split squat, hack squat, landmine press and cable abduction never moved: 18 of 19 last sets ended exactly at the target, and the rule only counts reps past it. The design accepts sets stopped 2 to 4 short of failure (rationale v3.3 P3).
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 7 Nov 2026: a last set at or above the target and below `up_at`, with 4 or more reps in reserve, counts towards a step up, for logs dated on or after 7 Nov 2026 (config `rir_step`), so older logs replay unchanged.
+- **Spec revision:** engine_spec_v1_10.md A.40; programme_config_v1_7.json `rir_step`; engine_test_vectors_v1_7.json `rir_step`
+
+## Q50 — the jump shrug start of "about 70% of your max" came back
+- **Raised:** 2026-11-07, programme and app review
+- **Where:** programme_config_v1_6.json `slots.jump_shrug.cue` / Q10 (withdrawn 26 Sep)
+- **Question:** Q10 withdrew the 70%-of-deadlift start; the v1.6 cue reintroduced it beside the speed rule on the same card.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 7 Nov 2026: load by speed; the cue no longer gives a percentage.
+- **Spec revision:** programme_config_v1_7.json
+
+## Q51 — the seated abduction has no swap; the taper has no jump test
+- **Raised:** 2026-11-07, programme and app review
+- **Where:** programme_config_v1_6.json `slots.seated_abduction`, `templates.TAPER` / rationale v3.3 §6
+- **Ruling:** Athlete 7 Nov 2026: swap "Standing cable hip abduction, 3 s lowering"; taper `pre: ["cmj"]` on Day 1 only (`pre_days`, engine A.41); vectors v1.7 update the taper Day 1 template case.
+- **Spec revision:** programme_config_v1_7.json; engine_spec_v1_10.md A.41; engine_test_vectors_v1_7.json
+
+## Q52 — session length: the clock is not the session
+- **Raised:** 2026-11-07, programme and app review
+- **Where:** `session_end.minutes`
+- **Ruling:** Athlete 7 Nov 2026: the finish sheet asks the length, door to door, and logs `session_length` (record only, engine A.42, interface §24). The clock stays in `session_end.minutes`.
+- **Spec revision:** engine_spec_v1_10.md A.42; ui_spec_v1_5.md §24
+
+## Q53 — the Plan card, the backup log and the footer
+- **Raised:** 2026-11-07, programme and app review
+- **Ruling:** Athlete 7 Nov 2026: Plan card per interface §23; the exported log reads as corrected (§25), Corrections list and JSON block unchanged; app version 3.1.0.
+- **Spec revision:** ui_spec_v1_5.md §23, §25, §26; engine_spec_v1_10.md §12

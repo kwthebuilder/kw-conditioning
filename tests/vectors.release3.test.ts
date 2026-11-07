@@ -58,10 +58,10 @@ function check(s: State, e: VectorExpect & { accessory_unset?: string[] }): void
   if (e.day !== undefined) expect(defaultDay(s)).toBe(e.day);
 }
 
-describe('pinned configs (vectors v1.6 `pinned`)', () => {
+describe('pinned configs (vectors v1.7 `pinned`)', () => {
   it('names the config each template-dependent block is read against', () => {
-    expect(V.pinned).toMatchObject({ golden_sessions: 'programme_config_v1_3.json', 'session.ladder': 'programme_config_v1_5.json', rounds: 'programme_config_v1_5.json', default: 'programme_config_v1_6.json' });
-    expect(cfg.version).toBe('1.6');
+    expect(V.pinned).toMatchObject({ golden_sessions: 'programme_config_v1_3.json', 'session.ladder': 'programme_config_v1_5.json', rounds: 'programme_config_v1_5.json', default: 'programme_config_v1_7.json' });
+    expect(cfg.version).toBe('1.7');
   });
 });
 

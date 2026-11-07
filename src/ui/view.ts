@@ -47,6 +47,7 @@ import {
   minutesText,
   loadStep,
   nextFor,
+  planLiftText,
   outcomeLine,
   plannedText,
   POSITION_LABEL,
@@ -118,7 +119,10 @@ export interface FinishView {
   /** Planned items with neither a log nor a skip, each with its plan. */
   unrecorded: { slot: string; name: string; plan: string }[];
   finished: boolean;
+  /** Minutes from the first log to Finish (the logging clock). */
   minutes?: number;
+  /** A.42 (ui §24): the length the athlete saved for this session, if any. */
+  length?: number;
   moved: string[];
   next: string[];
   backupOk: boolean;
@@ -242,6 +246,8 @@ export interface Ctx {
   /** §10, §14.6 */
   finishView?: FinishView;
   finishNow: () => void;
+  /** ui §24: save the session's length, door to door. */
+  saveLength: (minutes: number) => void;
   skipRest: (slots: string[]) => void;
   backToSession: (slot: string) => void;
   /** §14.2: tick or untick one set; ticking starts the rest timer. */
@@ -1450,13 +1456,14 @@ function historySection(app: App, ctx: Ctx): HTMLElement[] {
 function planCard(app: App, ctx: Ctx): HTMLElement {
   const cfg = ctx.config;
   const current = mesocycleOn(cfg, app.today);
-  const fs = app.state.lifts.front_squat.next_position;
-  const dl = app.state.lifts.deadlift.next_position;
+  // ui §23 (v1.5): each lift's next session in its block's own terms, not the Block 1 wave position.
+  const fs = planLiftText(app.state, 'front_squat', cfg, app.today);
+  const dl = planLiftText(app.state, 'deadlift', cfg, app.today);
   return h(
     'details',
     { class: 'card hist plan' },
     h('summary', {}, h('span', {}, 'Plan'), h('span', { class: 'muted plan-where' }, blockWeekText(cfg, app.today))),
-    h('p', { class: 'plan-now' }, `Week ${programmeWeek(cfg, app.today)} of the programme. Next front squat: ${POSITION_LABEL[fs].toLowerCase()}. Next deadlift: ${POSITION_LABEL[dl].toLowerCase()}.`),
+    h('p', { class: 'plan-now' }, `Week ${programmeWeek(cfg, app.today)} of the programme. Next front squat: ${fs}. Next deadlift: ${dl}.`),
     h(
       'ul',
       { class: 'blocks' },
@@ -1823,6 +1830,29 @@ function previewSheet(ctx: Ctx, sheet: Extract<Sheet, { kind: 'preview' }>): HTM
 }
 
 /** §10: the not-recorded question first; then release 2's summary (§14.6). */
+/**
+ * ui §24 (v1.5): the session's length, door to door, as the athlete gives it.
+ * The logging clock is only a starting guess, and only when it looks like a
+ * session (20 to 150 min); entries logged in bursts make it meaningless.
+ */
+function lengthBlock(ctx: Ctx, f: FinishView): HTMLElement {
+  if (f.length !== undefined) return h('p', { class: 'sub session-length' }, `Session length ${f.length} min, saved.`);
+  const guess = f.minutes !== undefined && f.minutes >= 20 && f.minutes <= 150 ? f.minutes : null;
+  let value: number | null = guess;
+  const msg = h('p', { class: 'sub' });
+  const s = stepper({ label: 'How long was the session, door to door?', unit: 'min', value, step: 5, start: 70, min: 1, max: 600, integer: true, onChange: (x) => { value = x; msg.textContent = ''; } });
+  return h(
+    'div',
+    { class: 'session-length' },
+    s.el,
+    h('button', { type: 'button', onclick: () => {
+      if (value === null || !Number.isInteger(value) || value < 1) { msg.textContent = 'Enter the minutes first.'; return; }
+      ctx.saveLength(value);
+    } }, 'Save length'),
+    msg,
+  );
+}
+
 function finishSheet(app: App, ctx: Ctx, f: FinishView): HTMLElement {
   const body: Child[] = [];
   if (!f.finished && f.unrecorded.length) {
@@ -1842,7 +1872,7 @@ function finishSheet(app: App, ctx: Ctx, f: FinishView): HTMLElement {
   } else {
     body.push(
       h('h2', {}, 'Session finished'),
-      f.minutes !== undefined ? h('p', { class: 'sub' }, `${f.minutes} min from the first log.`) : null,
+      lengthBlock(ctx, f),
       h('h3', {}, 'What moved'),
       f.moved.length ? h('ul', { class: 'list' }, ...f.moved.map((m) => h('li', {}, m))) : h('p', { class: 'sub' }, 'Nothing moved today.'),
       h('h3', {}, "What's next"),

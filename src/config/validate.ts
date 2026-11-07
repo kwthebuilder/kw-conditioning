@@ -526,6 +526,8 @@ function sessionTemplate(v: unknown, path: string): SessionTemplate {
   };
   const pre = optional(o, 'pre', path, listOf(str));
   if (pre !== undefined) t.pre = pre;
+  const preDays = optional(o, 'pre_days', path, listOf(oneOf([1, 2] as const)));
+  if (preDays !== undefined) t.pre_days = preDays;
   return t;
 }
 
@@ -647,10 +649,18 @@ export function parseProgrammeConfig(input: unknown, path = 'config'): Programme
     return out;
   });
   if (before !== undefined) cfg.templates_before = before;
+  const rirStep = optional(o, 'rir_step', path, (v, p) => {
+    const t = obj(v, p);
+    const out: NonNullable<ProgrammeConfig['rir_step']> = { min_rir: req(t, 'min_rir', p, int), from: req(t, 'from', p, isoDate) };
+    const note = optional(t, 'note', p, str);
+    if (note !== undefined) out.note = note;
+    return out;
+  });
+  if (rirStep !== undefined) cfg.rir_step = rirStep;
   const knownTop = new Set([
     'version', 'date', 'governs', 'scope_note', 'budget_min', 'equipment', 'instruments', 'athlete', 'mesocycles',
     'boundary_singles_on_entering', 'freeze', 'wave', 'slots', 'templates', 'ladder', 'text', 'tissue_check',
-    'phase_tests', 'audit_trims', 'templates_before',
+    'phase_tests', 'audit_trims', 'templates_before', 'rir_step',
   ]);
   for (const k of Object.keys(o)) if (!knownTop.has(k)) fail(`${path}.${k}`, 'unknown config field');
 
@@ -1095,6 +1105,33 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
       if (note !== undefined) out.note = note;
       return out;
     }],
+    // v1.7 blocks.
+    ['rir_step', listOf((x, p) => {
+      const r = obj(x, p);
+      const e = req(r, 'expect', p, obj);
+      const expect: NonNullable<TestVectors['rir_step']>[number]['expect'] = { load: req(e, 'load', `${p}.expect`, num) };
+      const su = optional(e, 'streak_up', `${p}.expect`, int);
+      if (su !== undefined) expect.streak_up = su;
+      const pend = optional(e, 'pending', `${p}.expect`, oneOf(['up', 'down'] as const));
+      if (pend !== undefined) expect.pending = pend;
+      return {
+        name: req(r, 'name', p, str),
+        slot: req(r, 'slot', p, str),
+        seed_load: req(r, 'seed_load', p, num),
+        logs: req(r, 'logs', p, listOf((y, q) => {
+          const l = obj(y, q);
+          const out: NonNullable<TestVectors['rir_step']>[number]['logs'][number] = { date: req(l, 'date', q, isoDate), reps: req(l, 'reps', q, int), rir: req(l, 'rir', q, int) };
+          const t = optional(l, 'target_reps', q, int);
+          if (t !== undefined) out.target_reps = t;
+          return out;
+        })),
+        expect,
+      };
+    })],
+    ['taper_pre', listOf((x, p) => {
+      const r = obj(x, p);
+      return { name: req(r, 'name', p, str), date: req(r, 'date', p, isoDate), day: req(r, 'day', p, oneOf([1, 2] as const)), pre: req(r, 'pre', p, listOf(str)) };
+    })],
   ]);
 }
 

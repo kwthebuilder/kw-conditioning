@@ -298,7 +298,9 @@ export function didText(log: AnyLog, config: ProgrammeConfig): string {
     case 'session_start':
       return `Day ${log.day} started`;
     case 'session_end':
-      return `Day ${log.day} finished${log.minutes !== undefined ? ` · ${log.minutes} min` : ''}`;
+      return `Day ${log.day} finished${log.minutes !== undefined ? ` · ${log.minutes} min from the first log` : ''}`;
+    case 'session_length':
+      return `Session length ${log.minutes} min`;
     case 'tissue_check': {
       const sc = log.scores;
       const parts = TISSUE_SITES.filter((t) => sc[t.key] !== undefined).map((t) => `${t.label} ${sc[t.key]}`);
@@ -361,7 +363,7 @@ function numberFrom(step: ReplayStep, key: string): number | undefined {
 export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
   const log = step.item.log;
   const o = step.outcome;
-  if (o === null && !['skip', 'cmj', 'single', 'tm_override', 'depth_jump_height', 'fixed', 'session_start', 'session_end', 'single_skipped', 'tissue_check', 'swap', 'phase_test'].includes(log.kind)) {
+  if (o === null && !['skip', 'cmj', 'single', 'tm_override', 'depth_jump_height', 'fixed', 'session_start', 'session_end', 'single_skipped', 'tissue_check', 'swap', 'phase_test', 'session_length'].includes(log.kind)) {
     return step.explanation.summary;
   }
   switch (log.kind) {
@@ -575,6 +577,23 @@ export function clockText(ms: number): string {
 // ---------------------------------------------------------------------
 
 const LIFTS: LiftId[] = ['front_squat', 'deadlift'];
+
+/**
+ * ui §23 (v1.5): the Plan card's line for a lift, read from the prescription
+ * for the date in its own block's mode: "heavy week 90 kg" in Block 1,
+ * "test single, then 3 to 4 × 2 at 87.5 kg" on entering Block 2, and so on.
+ */
+export function planLiftText(state: State, lift: LiftId, config: ProgrammeConfig, date: IsoDate): string {
+  // The lift's own day, so the template's round range (Block 2: 3 to 4 sets) is read too.
+  const s = prescribe(state, config, date, lift === 'front_squat' ? 1 : 2);
+  const item = s.kind === 'session' ? s.blocks.flatMap((b) => b.items).find((i) => i.kind === 'slot' && i.slot === lift) : undefined;
+  const p = item && item.kind === 'slot' ? item.prescription : prescribeLift(state, config, lift, date);
+  if (p.kind !== 'lift') return 'refer to project';
+  const single = p.single_suggested && !p.single_suggested.taken ? 'test single, then ' : '';
+  if (p.mode === 'wave' && p.position !== undefined) return `${single}${POSITION_LABEL[p.position].toLowerCase()} ${kg(p.load)} kg`;
+  const sets = p.sets_max !== undefined && p.sets_max !== p.sets ? `${p.sets} to ${p.sets_max}` : `${p.sets}`;
+  return `${single}${sets} × ${p.reps} at ${kg(p.load)} kg`;
+}
 
 /** The next session for a lift, in words: "Heavy week 87.5 kg". */
 export function nextFor(state: State, lift: LiftId, config: ProgrammeConfig, date: IsoDate): string {
@@ -908,7 +927,7 @@ function buildRecord(history: History, base: State, state: State, config: Progra
   }
   for (const s of steps) {
     if (used.has(s)) continue;
-    if (s.item.log.kind === 'session_start' || s.item.log.kind === 'session_end') continue;
+    if (s.item.log.kind === 'session_start' || s.item.log.kind === 'session_end' || s.item.log.kind === 'session_length') continue;
     view.extras.push(s);
   }
   view.counts = {
@@ -919,6 +938,9 @@ function buildRecord(history: History, base: State, state: State, config: Progra
   };
   const end = [...steps].reverse().find((s) => s.item.log.kind === 'session_end');
   if (end && end.item.log.kind === 'session_end' && end.item.log.minutes !== undefined) view.minutes = end.item.log.minutes;
+  // A.42: the athlete's own figure wins over the logging clock.
+  const length = [...steps].reverse().find((s) => s.item.log.kind === 'session_length');
+  if (length && length.item.log.kind === 'session_length') view.minutes = length.item.log.minutes;
   return view;
 }
 

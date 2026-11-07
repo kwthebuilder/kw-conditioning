@@ -102,6 +102,8 @@ export function describeLog(log: RecordLog, config: ProgrammeConfig): string {
       if (log.trap_bar_cm !== undefined) nums.push(`best trap-bar jump ${log.trap_bar_cm} cm`);
       return `Phase-start test: ${nums.join(', ') || 'done'}${log.note ? `, ${log.note}` : ''}`;
     }
+    case 'session_length':
+      return `Day ${log.day} session length ${log.minutes} min (your figure)`;
     case 'correction':
       return `Correction to ${log.on}: ${log.actions.length} change${log.actions.length === 1 ? '' : 's'}${log.note ? ` (${log.note})` : ''}`;
   }

@@ -112,6 +112,7 @@ export function prescribeProgression(state: State, config: ProgrammeConfig, id: 
   } else {
     notes.push(`Earlier sets at ${rule.reps} reps, last set to RIR ${rule.rir_cap}; log its reps.`);
   }
+  if (config.rir_step) notes.push(`Stopping at ${rule.reps} with ${config.rir_step.min_rir} or more reps in reserve also counts towards a step up.`);
   if (acc.pending) {
     p.pending = acc.pending;
     notes.push(`Go ${acc.pending} ${incrementText(increment)} from ${kg(acc.load)}; the new load is read from what you lift.`);
@@ -157,10 +158,14 @@ export function updateProgression(state: State, config: ProgrammeConfig, log: Sl
 
   // Streaks from the last set.
   const setText = `Last set ${reps} reps at RIR ${log.last_set.rir}${log.last_set.tempo_break ? ' (tempo broke)' : ''}, prescribed ${rule.reps}.`;
-  if (reps >= rule.up_at) {
+  // A.40 (v1.10): the target reached with enough in reserve also counts towards a step up, from the rule's start date.
+  const rs = config.rir_step;
+  const rirCounts = rs !== undefined && log.date >= rs.from && reps >= rule.reps && reps < rule.up_at && log.last_set.rir >= rs.min_rir;
+  if (reps >= rule.up_at || rirCounts) {
     acc.streak_up += 1;
     acc.streak_down = 0;
-    steps.push(explainStep('streak', `${setText} At or above ${rule.up_at}: ${acc.streak_up} of ${rule.streak} towards a step up.`, { reps, streak_up: acc.streak_up }));
+    const why = rirCounts ? `At ${rule.reps} or more with ${log.last_set.rir} in reserve (${rs!.min_rir} or more counts)` : `At or above ${rule.up_at}`;
+    steps.push(explainStep('streak', `${setText} ${why}: ${acc.streak_up} of ${rule.streak} towards a step up.`, { reps, streak_up: acc.streak_up }));
   } else if (reps < rule.down_below) {
     acc.streak_down += 1;
     acc.streak_up = 0;
