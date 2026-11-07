@@ -42,3 +42,14 @@ test('§26 the jump shrug card loads by speed; the seated abduction offers its s
   const body = await page.locator('body').innerText();
   expect(body).toContain('Seated hip abduction');
 });
+
+test('§28 the short-session list shows under the running-long note, per day, not in the taper', async ({ page }) => {
+  await open(page, '2026-11-09T18:00:00+08:00', ATHLETE_SHAPED);
+  const note = page.locator('.session-note');
+  await expect(note).toContainText('Only 45 to 50 minutes? Keep the jump test, drop jumps, trap-bar jumps, front squat and dumbbell Romanian deadlift.');
+  await page.getByRole('button', { name: 'Day 2', exact: true }).click();
+  await expect(note).toContainText('Only 45 to 50 minutes? Keep the jump shrug and landmine clean and push press at 2 sets each');
+  await page.clock.setSystemTime(new Date('2027-03-01T18:00:00+08:00'));
+  await page.reload();
+  await expect(page.locator('.session-note')).not.toContainText('Only 45 to 50 minutes');
+});

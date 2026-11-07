@@ -428,3 +428,11 @@ Format:
 - **Raised:** 2026-11-07, programme and app review
 - **Ruling:** Athlete 7 Nov 2026: Plan card per interface §23; the exported log reads as corrected (§25), Corrections list and JSON block unchanged; app version 3.1.0.
 - **Spec revision:** ui_spec_v1_5.md §23, §25, §26; engine_spec_v1_10.md §12
+
+## Q54 — the short-session list
+- **Raised:** 2026-11-07, programme and app review (item 5)
+- **Where:** programme_config_v1_7.json `text.session_note` / rationale v3.3 P12 rule 6
+- **Question:** The fixed cut order covers a session that runs long, not one that starts with only 45 to 50 minutes; and Day 1's note named the split squat, a Day 2 exercise.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 7 Nov 2026: list approved as drafted (rationale v3.5). Config v1.8 carries per-day running-long notes and the short-session lines as display text; vectors v1.8 differ from v1.7 only in version and `pinned.default`.
+- **Spec revision:** programme_config_v1_8.json; engine_test_vectors_v1_8.json; ui_spec_v1_6.md §28

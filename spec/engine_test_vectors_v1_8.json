@@ -1,0 +1,3051 @@
+{
+ "version": "1.8",
+ "date": "2026-11-07",
+ "spec": "engine_spec_v1_10.md",
+ "tolerance": {
+  "tm": 0.05,
+  "beta": 0.002,
+  "load": 0
+ },
+ "notes": "Every case must pass before any UI work. 'input' fields map to update(); 'next_loads' are displayed loads at 80/85/90% of the resulting TM after rounding (nearest 2.5, ties down). v1.1: out-of-scope blocks removed (trap_bar_jump, cmj, flare_ladder, gap); accessory slot ids now match the config; cases added for the phase 1 rulings and for manual overrides. v1.2: ramp, ladder and day-selection cases added for phase 3; golden log is now r4; file names corrected. v1.3: explosive (A.24) and rounds (A.25) blocks added. v1.4 (9 Oct 2026): every v1.3 block unchanged; adds `skip` (A.26) and `amend` (A.28). Base for both blocks is initial_state_v1_1.json. Steps are AnyLog objects passed to update(); a correction is a list of actions passed to amend(). Expected values are hand-computed from §2 and §3. v1.5 (10 Oct 2026): every v1.4 block unchanged except `session.ladder`. Under programme_config_v1_5.json the ladder schedule is empty (one 51 cm box, no ladder; ui_spec_v1_3.md §13A test 19), so the cases that expected rsi_ladder now expect the template's normal reactive items: 21 Sep Day 1 holds depth_jump with 6 contacts, and 9 Nov Day 1 holds depth_jump and depth_landing. `golden_sessions` stays pinned to programme_config_v1_3.json, the config in force on 21 Sep. v1.6 (19 Oct 2026): every v1.5 block unchanged. `pinned` names the config each template-dependent block is read against: golden_sessions against programme_config_v1_3.json, session.ladder and rounds against programme_config_v1_5.json (the M2 contrast rounds they describe are gone from v1.6), every other block against programme_config_v1_6.json. Adds `swap` (A.32), `rep_override` (A.33), `first_load`, `audit_trims` (A.34), `phase_tests` (A.35), `record_only` (A.29, A.35, A.36), `templates` and `removed_slots`. Base for every new block is initial_state_v1_1.json; a `state_patch` is deep-merged into it. Expected values are hand-computed from the rules.",
+ "barbell": [
+  {
+   "name": "fs_cal_up",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 9,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 105.917,
+    "T": 95.325,
+    "gap": 0.036,
+    "step": 3.325,
+    "tm": 95.325,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_pos3_load": null,
+   "next_loads": {
+    "1": 77.5,
+    "2": 80.0,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "fs_cal_bias",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 7,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 100.75,
+    "T": 90.675,
+    "gap": -0.014,
+    "step": 0,
+    "tm": 92.0,
+    "beta": 1.015,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "fs_cal_10",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 10,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 108.5,
+    "T": 97.65,
+    "gap": 0.061,
+    "step": 4.6,
+    "tm": 96.6,
+    "beta": 0.989,
+    "single": false
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 87.5
+   }
+  },
+  {
+   "name": "fs_cal_biggap_up",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 11,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 111.083,
+    "T": 99.975,
+    "gap": 0.087,
+    "step": 4.6,
+    "tm": 96.6,
+    "beta": 0.966,
+    "single": true
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 87.5
+   }
+  },
+  {
+   "name": "fs_cal_biggap_down",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 4,
+    "rir": 2
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 93.0,
+    "T": 83.7,
+    "gap": -0.09,
+    "step": 0,
+    "tm": 92.0,
+    "beta": 1.099,
+    "single": true
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "fs_failure_rir",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 3,
+    "rir": 1
+   },
+   "expect": {
+    "rule": "failure",
+    "tm": 89.7,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "fs_failure_missed",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.05,
+    "reps": 3,
+    "rir": 2,
+    "missed": true
+   },
+   "expect": {
+    "rule": "failure",
+    "tm": 89.7,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "fs_position1",
+   "input": {
+    "tm": 92.0,
+    "pos": 1,
+    "load": 72.5,
+    "reps": 4,
+    "rir": 3,
+    "presc": 4
+   },
+   "expect": {
+    "rule": "position1",
+    "tm": 92.0,
+    "beta": null,
+    "single": false
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 77.5,
+    "3": 82.5
+   }
+  },
+  {
+   "name": "matched_normal",
+   "input": {
+    "tm": 95.3,
+    "pos": 2,
+    "load": 80,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "matched",
+    "E": 106.667,
+    "T": 96.0,
+    "gap": 0.007,
+    "step": 0.35,
+    "tm": 95.65,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_loads": {
+    "1": 77.5,
+    "2": 82.5,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "matched_biggap_up",
+   "input": {
+    "tm": 94.0,
+    "pos": 2,
+    "load": 80,
+    "reps": 10,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "biggap",
+    "E": 112.0,
+    "T": 100.8,
+    "gap": 0.072,
+    "step": 4.7,
+    "tm": 98.7,
+    "beta": 1.0,
+    "single": true
+   },
+   "next_loads": {
+    "1": 80.0,
+    "2": 85.0,
+    "3": 90.0
+   }
+  },
+  {
+   "name": "matched_biggap_down",
+   "input": {
+    "tm": 94.0,
+    "pos": 2,
+    "load": 80,
+    "reps": 3,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.0
+   },
+   "expect": {
+    "rule": "biggap",
+    "E": 93.333,
+    "T": 84.0,
+    "gap": -0.106,
+    "step": -4.7,
+    "tm": 89.3,
+    "beta": 1.0,
+    "single": true
+   },
+   "next_loads": {
+    "1": 72.5,
+    "2": 75.0,
+    "3": 80.0
+   }
+  },
+  {
+   "name": "matched_beta_bias",
+   "input": {
+    "tm": 92.0,
+    "pos": 2,
+    "load": 77.5,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "beta": 1.014
+   },
+   "expect": {
+    "rule": "matched",
+    "E": 103.333,
+    "T": 94.302,
+    "gap": 0.025,
+    "step": 1.151,
+    "tm": 93.151,
+    "beta": 1.014,
+    "single": false
+   },
+   "next_loads": {
+    "1": 75.0,
+    "2": 80.0,
+    "3": 85.0
+   }
+  },
+  {
+   "name": "dl_cal",
+   "input": {
+    "tm": 145.2,
+    "pos": 2,
+    "load": 122.5,
+    "reps": 8,
+    "rir": 2,
+    "presc": 3,
+    "calibrating": true,
+    "cal_cap": 0.025
+   },
+   "expect": {
+    "rule": "calibration",
+    "E": 163.333,
+    "T": 147.0,
+    "gap": 0.012,
+    "step": 1.8,
+    "tm": 147.0,
+    "beta": 1.0,
+    "single": false
+   },
+   "next_loads": {
+    "1": 117.5,
+    "2": 125.0,
+    "3": 132.5
+   }
+  }
+ ],
+ "rounding": [
+  {
+   "raw": 78.2,
+   "expect": 77.5
+  },
+  {
+   "raw": 123.4,
+   "expect": 122.5
+  },
+  {
+   "raw": 86.25,
+   "expect": 85.0
+  },
+  {
+   "raw": 83.7,
+   "expect": 82.5
+  },
+  {
+   "raw": 86.94,
+   "expect": 87.5
+  },
+  {
+   "raw": 130.68,
+   "expect": 130.0
+  },
+  {
+   "raw": 132.3,
+   "expect": 132.5
+  },
+  {
+   "raw": 38.75,
+   "expect": 37.5
+  },
+  {
+   "raw": 61.25,
+   "expect": 60.0
+  }
+ ],
+ "audit_rescale": {
+  "tm_before": 96.0,
+  "single": 102.5,
+  "betas_before": {
+   "2": 1.0,
+   "3": 1.02
+  },
+  "expect": {
+   "tm": 99.194,
+   "betas": {
+    "2": 1.033,
+    "3": 1.054
+   }
+  }
+ },
+ "downward_trigger": {
+  "cases": [
+   {
+    "name": "due_position_1",
+    "sequence": "negative step at pos 2, negative step at pos 3",
+    "expect": "next session is position 1 with 2 sets; it counts as the due position 1; next after that is position 2 with 3 sets; streak 0"
+   },
+   {
+    "name": "due_position_3",
+    "sequence": "negative at pos 3, clean pos 1, negative at pos 2",
+    "expect": "next session is a forced position 1 with 2 sets; pointer stays at 3; session after is position 3 with 3 sets; streak 0"
+   },
+   {
+    "name": "failure_in_forced_session",
+    "expect": "TM x 0.975, one more forced session; a second failure returns 'refer to project'"
+   }
+  ]
+ },
+ "rdl": [
+  {
+   "session": 1,
+   "reps": 13,
+   "expect_delta": 10
+  },
+  {
+   "session": 4,
+   "reps": 13,
+   "expect_delta": 5
+  },
+  {
+   "session": 2,
+   "reps": 10,
+   "expect_delta": 5
+  },
+  {
+   "session": 2,
+   "reps": 9,
+   "expect_delta": 2.5
+  },
+  {
+   "session": 2,
+   "reps": 6,
+   "expect_delta": 0
+  },
+  {
+   "session": 2,
+   "reps": 5,
+   "expect_delta": -5
+  }
+ ],
+ "accessory": [
+  {
+   "slot": "db_pp_strength",
+   "history_last_set_reps": [
+    9,
+    8
+   ],
+   "expect": "hold (streak broken)"
+  },
+  {
+   "slot": "db_pp_strength",
+   "history_last_set_reps": [
+    9,
+    9
+   ],
+   "expect": "+2 kg/hand"
+  },
+  {
+   "slot": "pull_up",
+   "history_last_set_reps": [
+    7,
+    8
+   ],
+   "expect": "+2.5 kg"
+  },
+  {
+   "slot": "bss",
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "-2 kg/hand (below prescribed twice)"
+  },
+  {
+   "slot": "hack_squat",
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "expect": "+5 kg"
+  },
+  {
+   "slot": "abductor_hsr",
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "expect": "prompt 'go up one plate'; prompt stays until a heavier load is logged, then streaks reset"
+  },
+  {
+   "slot": "pull_up",
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "programme_week": 23,
+   "expect": "hold (no upward steps after week 22)"
+  }
+ ],
+ "golden_sessions": "Week 2 Day 1 (2026-09-21) and Day 2 (2026-09-24) as written in training_log_2026_w01_w02_r4.md must be reproduced by prescribe() from initial_state_v1_1.json and programme_config_v1_3.json: every computed load, the slot list and the block order. Day 1 shows rsi_ladder, not depth_jump.",
+ "singles": {
+  "boundary": {
+   "fires_on_entering": [
+    "M2",
+    "M3",
+    "M4"
+   ],
+   "never": [
+    "M1 (absent last_mesocycle means M1)",
+    "TAPER",
+    "INTENSIVE"
+   ],
+   "skippable": true
+  },
+  "single_day_work_sets": {
+   "input": {
+    "tm_before": 96.0,
+    "single": 102.5,
+    "pos": 2,
+    "work_last_set": {
+     "load": 85,
+     "reps": 3,
+     "rir": 3
+    }
+   },
+   "expect": {
+    "tm": 99.194,
+    "rule_for_work_sets": "straight sets: no rep-out, no calibration, no matched or big-gap update; failure signal still applies; position advances"
+   }
+  },
+  "big_gap": "sets single_scheduled; shown as a suggestion the athlete can skip; skipping clears the flag and changes nothing else"
+ },
+ "override": [
+  {
+   "name": "load_override",
+   "prescribed_load": 77.5,
+   "athlete_changes_to": 80,
+   "log": {
+    "load": 80,
+    "reps": 7,
+    "rir": 2
+   },
+   "expect": "update() reads 80 kg; export records prescribed 77.5, performed 80, optional note"
+  },
+  {
+   "name": "tm_override",
+   "lift": "front_squat",
+   "tm_before": 92.0,
+   "athlete_sets": 95.0,
+   "expect": {
+    "tm": 95.0,
+    "betas": "each multiplied by 95.0/92.0",
+    "next_loads": {
+     "1": 75.0,
+     "2": 80.0,
+     "3": 85.0
+    },
+    "export": "records manual TM change with optional note"
+   }
+  }
+ ],
+ "ramp": [
+  {
+   "day_load": 77.5,
+   "expect": [
+    [
+     37.5,
+     5
+    ],
+    [
+     55.0,
+     3
+    ],
+    [
+     65.0,
+     1
+    ]
+   ],
+   "note": "each ramp load = pct x the day's displayed load, then rounded by the one barbell rule (nearest 2.5, ties down). 38.75 is a tie and goes down."
+  },
+  {
+   "day_load": 122.5,
+   "expect": [
+    [
+     60.0,
+     5
+    ],
+    [
+     85.0,
+     3
+    ],
+    [
+     105.0,
+     1
+    ]
+   ]
+  }
+ ],
+ "session": {
+  "ladder": [
+   {
+    "date": "2026-09-21",
+    "day": 1,
+    "expect": "no ladder; reactive block holds depth_jump (6 contacts); rsi_ladder absent"
+   },
+   {
+    "date": "2026-09-24",
+    "day": 2,
+    "expect": "no ladder; Day 2 has no reactive item"
+   },
+   {
+    "date": "2026-09-28",
+    "day": 1,
+    "expect": "depth_jump, 6 contacts; rsi_ladder absent"
+   },
+   {
+    "date": "2026-11-09",
+    "day": 1,
+    "expect": "week 9, M2: no ladder; depth_jump and depth_landing both present; rsi_ladder absent; skater_bound unchanged"
+   }
+  ],
+  "day_default": [
+   {
+    "state": "initial_state_v1_1 (front_squat last_logged 2026-09-14, deadlift 2026-09-17)",
+    "expect_day": 1
+   },
+   {
+    "state": "front_squat last_logged later than deadlift",
+    "expect_day": 2
+   },
+   {
+    "state": "both last_logged null",
+    "expect_day": 1
+   },
+   {
+    "state": "any",
+    "explicit_day": 2,
+    "expect_day": 2,
+    "note": "explicit argument always wins; weekday is never consulted"
+   }
+  ]
+ },
+ "explosive": [
+  {
+   "name": "first session sets the load",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 60,
+   "expect_streak": 0
+  },
+  {
+   "name": "two clean sessions after the first step up 2.5 kg",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 62.5,
+   "expect_streak": 0
+  },
+  {
+   "name": "a stop-rule cut resets the streak",
+   "slot": "landmine_cpp",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 20,
+     "cut": false
+    },
+    {
+     "load": 20,
+     "cut": false
+    },
+    {
+     "load": 20,
+     "cut": true
+    },
+    {
+     "load": 20,
+     "cut": false
+    }
+   ],
+   "expect_load": 20,
+   "expect_streak": 1
+  },
+  {
+   "name": "a logged load change is taken and resets the streak",
+   "slot": "jump_shrug",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 65,
+     "cut": false
+    }
+   ],
+   "expect_load": 65,
+   "expect_streak": 0
+  },
+  {
+   "name": "explosive DB never steps",
+   "slot": "db_pp_explosive",
+   "date": "2026-11-12",
+   "sessions": [
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    },
+    {
+     "load": 12,
+     "cut": false
+    }
+   ],
+   "expect_load": 12,
+   "expect_streak": 0
+  },
+  {
+   "name": "no upward step after week 22",
+   "slot": "jump_shrug",
+   "date": "2027-02-18",
+   "sessions": [
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    },
+    {
+     "load": 60,
+     "cut": false
+    }
+   ],
+   "expect_load": 60,
+   "expect_streak": 0
+  }
+ ],
+ "rounds": [
+  {
+   "date": "2026-11-10",
+   "day": 1,
+   "slot": "front_squat",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-10",
+   "day": 1,
+   "slot": "trap_bar_jump",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "deadlift",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "jump_shrug",
+   "expect_sets": 3,
+   "expect_sets_max": 4
+  },
+  {
+   "date": "2026-11-12",
+   "day": 2,
+   "slot": "landmine_cpp",
+   "expect_sets": 3,
+   "expect_sets_max": null
+  }
+ ],
+ "skip": [
+  {
+   "name": "skipped primary lift moves nothing and the position is prescribed again",
+   "steps": [
+    {
+     "kind": "skip",
+     "slot": "front_squat",
+     "date": "2026-09-21",
+     "reason": "time"
+    }
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 92.0
+    },
+    "next_position": {
+     "front_squat": 2
+    },
+    "sessions_logged": {
+     "front_squat": 1
+    }
+   }
+  },
+  {
+   "name": "skip between two qualifying sessions neither counts nor resets the streak (Q13)",
+   "steps": [
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-09-21",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 7,
+      "rir": 2
+     }
+    },
+    {
+     "kind": "skip",
+     "slot": "pull_up",
+     "date": "2026-09-29",
+     "reason": "time"
+    },
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-10-06",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 8,
+      "rir": 2
+     }
+    }
+   ],
+   "expect": {
+    "accessory": {
+     "pull_up": {
+      "load": 2.5,
+      "streak_up": 0
+     }
+    }
+   }
+  },
+  {
+   "name": "skipped Romanian deadlift keeps its load and session count",
+   "steps": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "skip",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "reason": "other"
+    }
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 1
+   }
+  }
+ ],
+ "amend": [
+  {
+   "name": "a 0-rep Romanian deadlift corrected to a skip restores the load",
+   "logs": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "load": 55,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 0,
+      "rir": 2
+     }
+    }
+   ],
+   "before": {
+    "rdl_load": 50,
+    "rdl_sessions": 2
+   },
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "skip",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "reason": "other"
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 1
+   }
+  },
+  {
+   "name": "a duplicate session end removed changes no derived value",
+   "logs": [
+    {
+     "kind": "session_end",
+     "date": "2026-09-24",
+     "day": 2
+    },
+    {
+     "kind": "session_end",
+     "date": "2026-09-24",
+     "day": 2
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "remove",
+      "target": 1
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 92.0,
+     "deadlift": 145.2
+    },
+    "effective_length": 1
+   }
+  },
+  {
+   "name": "a corrected calibration set replays the later session: 122.5 x 6 holds 145.2 (beta2 1.040), then 135 x 4 calibrates +0.6",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "deadlift",
+     "date": "2026-09-24",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 122.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 122.5,
+      "reps": 8,
+      "rir": 2
+     },
+     "missed": false
+    },
+    {
+     "kind": "barbell",
+     "lift": "deadlift",
+     "date": "2026-10-02",
+     "mode": "wave",
+     "position": 3,
+     "prescribed": {
+      "load": 135,
+      "reps": 2,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 135,
+      "reps": 4,
+      "rir": 2
+     },
+     "missed": false,
+     "override": {
+      "from": 132.5
+     }
+    }
+   ],
+   "before": {
+    "tm": {
+     "deadlift": 147.0
+    }
+   },
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 0,
+      "entry": {
+       "kind": "barbell",
+       "lift": "deadlift",
+       "date": "2026-09-24",
+       "mode": "wave",
+       "position": 2,
+       "prescribed": {
+        "load": 122.5,
+        "reps": 3,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 122.5,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "deadlift": 145.8
+    },
+    "beta": {
+     "deadlift": {
+      "2": 1.0397,
+      "3": 1.0
+     }
+    },
+    "next_position": {
+     "deadlift": 1
+    }
+   }
+  },
+  {
+   "name": "a missed session is inserted in date order and advances the pointer",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "front_squat",
+     "date": "2026-09-21",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 77.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 77.5,
+      "reps": 9,
+      "rir": 2
+     },
+     "missed": false
+    },
+    {
+     "kind": "session_end",
+     "date": "2026-10-06",
+     "day": 1
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "insert",
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 96.9
+    },
+    "next_position": {
+     "front_squat": 1
+    },
+    "effective_dates": [
+     "2026-09-21",
+     "2026-09-29",
+     "2026-10-06"
+    ]
+   }
+  },
+  {
+   "name": "the latest correction of the same entry wins",
+   "logs": [
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-21",
+     "load": 50,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     },
+     "override": {
+      "from": 100
+     }
+    },
+    {
+     "kind": "rdl",
+     "slot": "rdl",
+     "date": "2026-09-29",
+     "load": 55,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 0,
+      "rir": 2
+     }
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "skip",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "reason": "other"
+      }
+     }
+    ],
+    [
+     {
+      "op": "replace",
+      "target": 1,
+      "entry": {
+       "kind": "rdl",
+       "slot": "rdl",
+       "date": "2026-09-29",
+       "load": 55,
+       "sets_done": 3,
+       "last_set": {
+        "reps": 7,
+        "rir": 2
+       }
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "rdl_load": 55,
+    "rdl_sessions": 2
+   }
+  },
+  {
+   "name": "an inserted entry can itself be corrected: 85 x 4 at heavy week holds 95.3 (beta3 1.038)",
+   "logs": [
+    {
+     "kind": "barbell",
+     "lift": "front_squat",
+     "date": "2026-09-21",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 77.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 77.5,
+      "reps": 9,
+      "rir": 2
+     },
+     "missed": false
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "insert",
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 6,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ],
+    [
+     {
+      "op": "replace",
+      "target": [
+       1,
+       0
+      ],
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-09-29",
+       "mode": "wave",
+       "position": 3,
+       "prescribed": {
+        "load": 85,
+        "reps": 2,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 85,
+        "reps": 4,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 95.325
+    },
+    "beta": {
+     "front_squat": {
+      "2": 1.0,
+      "3": 1.0384
+     }
+    }
+   }
+  }
+ ],
+ "pinned": {
+  "golden_sessions": "programme_config_v1_3.json",
+  "session.ladder": "programme_config_v1_5.json",
+  "rounds": "programme_config_v1_5.json",
+  "default": "programme_config_v1_8.json"
+ },
+ "swap": [
+  {
+   "name": "a swap moves nothing and an accessory streak neither counts nor resets across it",
+   "logs": [
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-10-19",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 7,
+      "rir": 2
+     }
+    },
+    {
+     "kind": "swap",
+     "slot": "pull_up",
+     "date": "2026-10-26",
+     "to": "Chest-supported row",
+     "load": 30,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 10,
+      "rir": 2
+     }
+    },
+    {
+     "kind": "slot",
+     "slot": "pull_up",
+     "date": "2026-11-02",
+     "load": 0,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 8,
+      "rir": 2
+     }
+    }
+   ],
+   "corrections": [],
+   "expect": {
+    "accessory": {
+     "pull_up": {
+      "load": 2.5,
+      "streak_up": 0
+     }
+    },
+    "identical_at": 1,
+    "explanation": "Weighted pull-up: swapped to Chest-supported row. Nothing moves."
+   }
+  },
+  {
+   "name": "a swapped front squat moves nothing, but counts as the day's main lift, so Day 2 comes next",
+   "logs": [
+    {
+     "kind": "swap",
+     "slot": "front_squat",
+     "date": "2026-10-19",
+     "to": "Belt squat",
+     "load": 60,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 5,
+      "rir": 2
+     }
+    }
+   ],
+   "corrections": [],
+   "expect": {
+    "tm": {
+     "front_squat": 92.0
+    },
+    "next_position": {
+     "front_squat": 2
+    },
+    "sessions_logged": {
+     "front_squat": 1
+    },
+    "last_logged": {
+     "front_squat": "2026-09-14"
+    },
+    "swapped_main": {
+     "front_squat": "2026-10-19"
+    },
+    "day": 2,
+    "identical_at": 0,
+    "identical_apart_from": [
+     "swapped_main"
+    ],
+    "explanation": "Front squat: swapped to Belt squat. Nothing moves."
+   }
+  },
+  {
+   "name": "a deadlift logged after a swapped front squat brings Day 1 back; the front squat's week is unchanged",
+   "logs": [
+    {
+     "kind": "swap",
+     "slot": "front_squat",
+     "date": "2026-10-19",
+     "to": "Belt squat"
+    },
+    {
+     "kind": "barbell",
+     "lift": "deadlift",
+     "date": "2026-10-22",
+     "mode": "wave",
+     "position": 2,
+     "prescribed": {
+      "load": 122.5,
+      "reps": 3,
+      "sets": 3
+     },
+     "last_set": {
+      "load": 122.5,
+      "reps": 7,
+      "rir": 2
+     },
+     "missed": false
+    }
+   ],
+   "corrections": [],
+   "expect": {
+    "day": 1,
+    "next_position": {
+     "front_squat": 2,
+     "deadlift": 3
+    },
+    "tm": {
+     "front_squat": 92.0
+    }
+   }
+  },
+  {
+   "name": "removing a swap by correction restores the rotation",
+   "logs": [
+    {
+     "kind": "swap",
+     "slot": "front_squat",
+     "date": "2026-10-19",
+     "to": "Belt squat"
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "remove",
+      "target": 0
+     }
+    ]
+   ],
+   "expect": {
+    "day": 1,
+    "swapped_main": {},
+    "effective_length": 0
+   }
+  },
+  {
+   "name": "a swap corrected to the lift itself replays as the lift: 77.5 x 9 calibrates 92.0 to 95.3",
+   "logs": [
+    {
+     "kind": "swap",
+     "slot": "front_squat",
+     "date": "2026-10-19",
+     "to": "Belt squat"
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 0,
+      "entry": {
+       "kind": "barbell",
+       "lift": "front_squat",
+       "date": "2026-10-19",
+       "mode": "wave",
+       "position": 2,
+       "prescribed": {
+        "load": 77.5,
+        "reps": 3,
+        "sets": 3
+       },
+       "last_set": {
+        "load": 77.5,
+        "reps": 9,
+        "rir": 2
+       },
+       "missed": false
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "tm": {
+     "front_squat": 95.325
+    },
+    "next_position": {
+     "front_squat": 3
+    },
+    "sessions_logged": {
+     "front_squat": 2
+    },
+    "day": 2,
+    "swapped_main": {}
+   }
+  },
+  {
+   "name": "an accessory logged, then corrected to a swap, gives back its first-session load",
+   "logs": [
+    {
+     "kind": "slot",
+     "slot": "db_rdl",
+     "date": "2026-10-19",
+     "load": 18,
+     "sets_done": 3,
+     "last_set": {
+      "reps": 9,
+      "rir": 2
+     },
+     "target_reps": 8
+    }
+   ],
+   "corrections": [
+    [
+     {
+      "op": "replace",
+      "target": 0,
+      "entry": {
+       "kind": "swap",
+       "slot": "db_rdl",
+       "date": "2026-10-19",
+       "to": "Seated leg curl"
+      }
+     }
+    ]
+   ],
+   "expect": {
+    "accessory_unset": [
+     "db_rdl"
+    ]
+   }
+  }
+ ],
+ "rep_override": [
+  {
+   "name": "db_rdl in Block 1: target 8, up at 10 twice",
+   "slot": "db_rdl",
+   "date": "2026-10-19",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": 8
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 8
+   },
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "expect": "+2 kg/hand"
+  },
+  {
+   "name": "db_rdl in Block 1: below 8 twice steps down",
+   "slot": "db_rdl",
+   "date": "2026-10-19",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": 8
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 8
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "-2 kg/hand"
+  },
+  {
+   "name": "db_rdl in Block 1: 9 twice holds",
+   "slot": "db_rdl",
+   "date": "2026-10-19",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": 8
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 8
+   },
+   "history_last_set_reps": [
+    9,
+    9
+   ],
+   "expect": "hold"
+  },
+  {
+   "name": "db_rdl in Block 2: target 6, up at 8 twice",
+   "slot": "db_rdl",
+   "date": "2026-11-16",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 6,
+    "target_reps": 6
+   },
+   "rule": {
+    "reps": 6,
+    "up_at": 8,
+    "down_below": 6
+   },
+   "history_last_set_reps": [
+    8,
+    8
+   ],
+   "expect": "+2 kg/hand"
+  },
+  {
+   "name": "db_rdl in Block 2: below 6 twice steps down",
+   "slot": "db_rdl",
+   "date": "2026-11-16",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 6,
+    "target_reps": 6
+   },
+   "rule": {
+    "reps": 6,
+    "up_at": 8,
+    "down_below": 6
+   },
+   "history_last_set_reps": [
+    5,
+    5
+   ],
+   "expect": "-2 kg/hand"
+  },
+  {
+   "name": "db_rdl in Block 2: 7 twice holds (it would step down against a target of 8)",
+   "slot": "db_rdl",
+   "date": "2026-11-16",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 6,
+    "target_reps": 6
+   },
+   "rule": {
+    "reps": 6,
+    "up_at": 8,
+    "down_below": 6
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "hold"
+  },
+  {
+   "name": "db_rdl in Block 3: target 6, up at 8 twice",
+   "slot": "db_rdl",
+   "date": "2026-12-28",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 6,
+    "target_reps": 6
+   },
+   "rule": {
+    "reps": 6,
+    "up_at": 8,
+    "down_below": 6
+   },
+   "history_last_set_reps": [
+    8,
+    8
+   ],
+   "expect": "+2 kg/hand"
+  },
+  {
+   "name": "a log without a target reads the slot's own reps (every log made before v1.9): 7 twice against 8 steps down",
+   "slot": "db_rdl",
+   "date": "2026-11-16",
+   "day": 1,
+   "seed_load": 20,
+   "expect_prescribed": {
+    "reps": 6,
+    "target_reps": 6
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 8
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "-2 kg/hand",
+   "omit_target": true
+  },
+  {
+   "name": "pull-up: no item reps, so the slot's own rule (5, up at 7)",
+   "slot": "pull_up",
+   "date": "2026-10-19",
+   "day": 1,
+   "seed_load": 10,
+   "expect_prescribed": {
+    "reps": 5,
+    "target_reps": null
+   },
+   "rule": {
+    "reps": 5,
+    "up_at": 7,
+    "down_below": 5
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "+2.5 kg"
+  },
+  {
+   "name": "Bulgarian split squat: no item reps, slot rule unchanged",
+   "slot": "bss",
+   "date": "2026-10-22",
+   "day": 2,
+   "seed_load": 16,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": null
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 8
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "-2 kg/hand"
+  },
+  {
+   "name": "seated abduction: abductor rule, up at 10 twice owes one stack plate",
+   "slot": "seated_abduction",
+   "date": "2026-10-22",
+   "day": 2,
+   "seed_load": 40,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": null
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 7
+   },
+   "history_last_set_reps": [
+    10,
+    10
+   ],
+   "expect": "prompt 'go up one stack plate'"
+  },
+  {
+   "name": "seated abduction: under 7 twice owes one stack plate down; 7 holds",
+   "slot": "seated_abduction",
+   "date": "2026-10-22",
+   "day": 2,
+   "seed_load": 40,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": null
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 7
+   },
+   "history_last_set_reps": [
+    6,
+    6
+   ],
+   "expect": "prompt 'go down one stack plate'"
+  },
+  {
+   "name": "seated abduction: 7 twice holds",
+   "slot": "seated_abduction",
+   "date": "2026-10-22",
+   "day": 2,
+   "seed_load": 40,
+   "expect_prescribed": {
+    "reps": 8,
+    "target_reps": null
+   },
+   "rule": {
+    "reps": 8,
+    "up_at": 10,
+    "down_below": 7
+   },
+   "history_last_set_reps": [
+    7,
+    7
+   ],
+   "expect": "hold"
+  }
+ ],
+ "first_load": [
+  {
+   "name": "db_rdl: no load before the first session; the first logged session sets it (per hand)",
+   "slot": "db_rdl",
+   "date": "2026-10-19",
+   "day": 1,
+   "load": 18,
+   "reps": 8,
+   "expect_load": 18
+  },
+  {
+   "name": "seated abduction: the first logged session sets the load",
+   "slot": "seated_abduction",
+   "date": "2026-10-22",
+   "day": 2,
+   "load": 45,
+   "reps": 8,
+   "expect_load": 45
+  },
+  {
+   "name": "the cable abductor's load does not carry over to the machine",
+   "slot": "seated_abduction",
+   "date": "2026-10-22",
+   "day": 2,
+   "state_patch": {
+    "accessories": {
+     "abductor_hsr": {
+      "load": 15,
+      "streak_up": 1,
+      "streak_down": 0
+     }
+    }
+   },
+   "load": 50,
+   "reps": 9,
+   "expect_load": 50
+  }
+ ],
+ "audit_trims": [
+  {
+   "name": "first Day 1 of Block 2: Romanian deadlift and the upper pair capped at 2; the rest unchanged",
+   "date": "2026-11-09",
+   "day": 1,
+   "audit": true,
+   "expect_sets": {
+    "db_rdl": 2,
+    "db_pp_strength": 2,
+    "pull_up": 2,
+    "trap_bar_jump": 3,
+    "skater_bound": 2,
+    "front_squat": 3
+   },
+   "expect_sets_max": {
+    "front_squat": 4
+   }
+  },
+  {
+   "name": "first Day 2 of Block 2: split squat and the last upper block capped at 2",
+   "date": "2026-11-12",
+   "day": 2,
+   "audit": true,
+   "expect_sets": {
+    "bss": 2,
+    "oh_carry": 2,
+    "cs_row": 2,
+    "seated_abduction": 3,
+    "jump_shrug": 3,
+    "landmine_cpp": 3,
+    "deadlift": 3
+   },
+   "expect_sets_max": {
+    "deadlift": 4
+   }
+  },
+  {
+   "name": "the same day after the test single is logged still reads trimmed",
+   "date": "2026-11-09",
+   "day": 1,
+   "audit": true,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-09-14",
+      "entered_on": "2026-11-09",
+      "single_taken": {
+       "date": "2026-11-09",
+       "reason": "boundary"
+      },
+      "tm": 96.0
+     }
+    }
+   },
+   "expect_sets": {
+    "db_rdl": 2,
+    "pull_up": 2
+   }
+  },
+  {
+   "name": "a later Day 1 in Block 2: no caps",
+   "date": "2026-11-16",
+   "day": 1,
+   "audit": false,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-09",
+      "entered_on": "2026-11-09"
+     }
+    }
+   },
+   "expect_sets": {
+    "db_rdl": 3,
+    "db_pp_strength": 3,
+    "pull_up": 3
+   }
+  },
+  {
+   "name": "first Day 1 of Block 3: the last upper block (Romanian deadlift with pull-up) capped at 2",
+   "date": "2026-12-21",
+   "day": 1,
+   "audit": true,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-12-17",
+      "entered_on": "2026-11-09"
+     }
+    }
+   },
+   "expect_sets": {
+    "db_rdl": 2,
+    "pull_up": 2,
+    "trap_bar_jump": 4,
+    "db_pp_explosive": 3,
+    "spanish_squat_iso": 4
+   }
+  },
+  {
+   "name": "first Day 2 of Block 3",
+   "date": "2026-12-24",
+   "day": 2,
+   "audit": true,
+   "state_patch": {
+    "lifts": {
+     "deadlift": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-12-17",
+      "entered_on": "2026-11-12"
+     }
+    }
+   },
+   "expect_sets": {
+    "bss": 2,
+    "seated_abduction": 2,
+    "oh_carry": 2,
+    "cs_row": 2,
+    "jump_shrug": 4,
+    "landmine_cpp": 4
+   }
+  },
+  {
+   "name": "first Day 1 of Block 4",
+   "date": "2027-01-25",
+   "day": 1,
+   "audit": true,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M3",
+      "last_logged": "2027-01-21",
+      "entered_on": "2026-12-21"
+     }
+    }
+   },
+   "expect_sets": {
+    "db_rdl": 2,
+    "pull_up": 2
+   }
+  },
+  {
+   "name": "first Day 1 of the taper: no boundary single, so no caps",
+   "date": "2027-03-01",
+   "day": 1,
+   "audit": false,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-25",
+      "entered_on": "2027-01-25"
+     }
+    }
+   },
+   "expect_sets": {
+    "pull_up": 2,
+    "trap_bar_jump": 2
+   }
+  },
+  {
+   "name": "Block 1: no caps",
+   "date": "2026-10-19",
+   "day": 1,
+   "audit": false,
+   "expect_sets": {
+    "db_rdl": 3,
+    "db_pp_strength": 3,
+    "pull_up": 3
+   }
+  }
+ ],
+ "phase_tests": [
+  {
+   "name": "first Day 1 of Block 2: present, just before the depth jump",
+   "date": "2026-11-09",
+   "day": 1,
+   "expect": "present",
+   "expect_before": "depth_jump"
+  },
+  {
+   "name": "first Day 2 of Block 2: absent",
+   "date": "2026-11-12",
+   "day": 2,
+   "expect": "absent"
+  },
+  {
+   "name": "the same Day 1 after the front squat is logged: still present",
+   "date": "2026-11-09",
+   "day": 1,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-09",
+      "entered_on": "2026-11-09"
+     }
+    }
+   },
+   "expect": "present",
+   "expect_before": "depth_jump"
+  },
+  {
+   "name": "a later Day 1 in Block 2: absent",
+   "date": "2026-11-16",
+   "day": 1,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-09",
+      "entered_on": "2026-11-09"
+     }
+    }
+   },
+   "expect": "absent"
+  },
+  {
+   "name": "first Day 1 of Block 3: present",
+   "date": "2026-12-21",
+   "day": 1,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-12-17",
+      "entered_on": "2026-11-09"
+     }
+    }
+   },
+   "expect": "present",
+   "expect_before": "depth_jump"
+  },
+  {
+   "name": "first Day 1 of Block 4: present",
+   "date": "2027-01-25",
+   "day": 1,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M3",
+      "last_logged": "2027-01-21",
+      "entered_on": "2026-12-21"
+     }
+    }
+   },
+   "expect": "present",
+   "expect_before": "depth_jump"
+  },
+  {
+   "name": "first Day 1 of the taper: present",
+   "date": "2027-03-01",
+   "day": 1,
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-25",
+      "entered_on": "2027-01-25"
+     }
+    }
+   },
+   "expect": "present",
+   "expect_before": "depth_jump"
+  },
+  {
+   "name": "Block 1: absent",
+   "date": "2026-10-19",
+   "day": 1,
+   "expect": "absent"
+  }
+ ],
+ "record_only": [
+  {
+   "name": "phase-start test",
+   "log": {
+    "kind": "phase_test",
+    "date": "2026-11-09",
+    "rsi": 2.14,
+    "trap_bar_cm": 41.5
+   }
+  },
+  {
+   "name": "phase-start test skipped",
+   "log": {
+    "kind": "skip",
+    "slot": "phase_test",
+    "date": "2026-11-09",
+    "reason": "time"
+   }
+  },
+  {
+   "name": "session-start tissue question answered No",
+   "log": {
+    "kind": "tissue_check",
+    "date": "2026-10-19",
+    "for_date": "2026-10-19",
+    "above_3": false,
+    "scores": {}
+   }
+  },
+  {
+   "name": "session-start tissue question answered Yes, with scores",
+   "log": {
+    "kind": "tissue_check",
+    "date": "2026-10-19",
+    "for_date": "2026-10-19",
+    "above_3": true,
+    "scores": {
+     "patellar": 1,
+     "gluteal": 4,
+     "shoulder": 0
+    }
+   }
+  }
+ ],
+ "templates": [
+  {
+   "name": "Block 1 Day 1, from 19 Oct",
+   "date": "2026-10-19",
+   "day": 1,
+   "target_min": 70,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "trap_bar_jump",
+    "front_squat",
+    "db_rdl",
+    "db_pp_strength",
+    "pull_up"
+   ],
+   "items": {
+    "depth_jump": {
+     "contacts": 6
+    },
+    "trap_bar_jump": {
+     "sets": 2,
+     "reps": 3
+    },
+    "front_squat": {
+     "mode": "wave",
+     "sets": 3
+    },
+    "db_rdl": {
+     "sets": 3,
+     "reps": 8
+    },
+    "db_pp_strength": {
+     "sets": 3,
+     "reps": 6
+    },
+    "pull_up": {
+     "sets": 3,
+     "reps": 5
+    }
+   }
+  },
+  {
+   "name": "Block 1 Day 2",
+   "date": "2026-10-22",
+   "day": 2,
+   "target_min": 63,
+   "pre": [],
+   "order": [
+    "warmup",
+    "kb_swing",
+    "deadlift",
+    "bss",
+    "seated_abduction",
+    "landmine_press",
+    "cs_row"
+   ],
+   "items": {
+    "kb_swing": {
+     "sets": 2,
+     "reps": 6
+    },
+    "deadlift": {
+     "mode": "wave",
+     "sets": 3
+    },
+    "bss": {
+     "sets": 3,
+     "reps": 8,
+     "per_side": true
+    },
+    "seated_abduction": {
+     "sets": 3,
+     "reps": 8
+    },
+    "landmine_press": {
+     "sets": 3,
+     "reps": 6,
+     "per_side": true
+    },
+    "cs_row": {
+     "sets": 3,
+     "reps": 10
+    }
+   }
+  },
+  {
+   "name": "Block 2 Day 1 (a later week: no test, no caps)",
+   "date": "2026-11-16",
+   "day": 1,
+   "target_min": 72,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "skater_bound",
+    "trap_bar_jump",
+    "front_squat",
+    "db_rdl",
+    "db_pp_strength",
+    "pull_up"
+   ],
+   "items": {
+    "depth_jump": {
+     "contacts": 6,
+     "note": "You may take up to 9 jumps by judgement."
+    },
+    "skater_bound": {
+     "sets": 2,
+     "reps": 4,
+     "per_side": true,
+     "variant": "stuck landing"
+    },
+    "trap_bar_jump": {
+     "sets": 3,
+     "reps": 3
+    },
+    "front_squat": {
+     "mode": "band_87_90",
+     "sets": 3,
+     "sets_max": 4,
+     "reps": 2
+    },
+    "db_rdl": {
+     "sets": 3,
+     "reps": 6
+    },
+    "db_pp_strength": {
+     "sets": 3,
+     "reps": 6
+    },
+    "pull_up": {
+     "sets": 3,
+     "reps": 5
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-12",
+      "entered_on": "2026-11-09"
+     },
+     "deadlift": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-12",
+      "entered_on": "2026-11-09"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 2 Day 2",
+   "date": "2026-11-19",
+   "day": 2,
+   "target_min": 68,
+   "pre": [],
+   "order": [
+    "warmup",
+    "jump_shrug",
+    "landmine_cpp",
+    "deadlift",
+    "bss",
+    "seated_abduction",
+    "oh_carry",
+    "cs_row"
+   ],
+   "items": {
+    "jump_shrug": {
+     "sets": 3,
+     "reps": 3
+    },
+    "landmine_cpp": {
+     "sets": 3,
+     "reps": 3,
+     "per_side": true
+    },
+    "deadlift": {
+     "mode": "band_87_90",
+     "sets": 3,
+     "sets_max": 4,
+     "reps": 2
+    },
+    "bss": {
+     "sets": 3,
+     "reps": 8,
+     "per_side": true
+    },
+    "seated_abduction": {
+     "sets": 3,
+     "reps": 8
+    },
+    "oh_carry": {
+     "sets": 2,
+     "per_side": true
+    },
+    "cs_row": {
+     "sets": 3,
+     "reps": 10
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-16",
+      "entered_on": "2026-11-09"
+     },
+     "deadlift": {
+      "last_mesocycle": "M2",
+      "last_logged": "2026-11-16",
+      "entered_on": "2026-11-09"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 3 Day 1",
+   "date": "2026-12-28",
+   "day": 1,
+   "target_min": 64,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "spanish_squat_iso",
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "skater_bound",
+    "trap_bar_jump",
+    "db_pp_explosive",
+    "front_squat",
+    "db_rdl",
+    "pull_up"
+   ],
+   "items": {
+    "spanish_squat_iso": {
+     "sets": 4,
+     "secs": 10
+    },
+    "depth_jump": {
+     "contacts": 9
+    },
+    "skater_bound": {
+     "sets": 2,
+     "reps": 4,
+     "per_side": true
+    },
+    "trap_bar_jump": {
+     "sets": 4,
+     "reps": 3
+    },
+    "db_pp_explosive": {
+     "sets": 3,
+     "reps": 3
+    },
+    "front_squat": {
+     "mode": "primer_2x2_90",
+     "sets": 2,
+     "reps": 2
+    },
+    "db_rdl": {
+     "sets": 2,
+     "reps": 6
+    },
+    "pull_up": {
+     "sets": 3,
+     "reps": 5
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M3",
+      "last_logged": "2026-12-24",
+      "entered_on": "2026-12-21"
+     },
+     "deadlift": {
+      "last_mesocycle": "M3",
+      "last_logged": "2026-12-24",
+      "entered_on": "2026-12-21"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 3 Day 2",
+   "date": "2026-12-31",
+   "day": 2,
+   "target_min": 66,
+   "pre": [],
+   "order": [
+    "warmup",
+    "jump_shrug",
+    "landmine_cpp",
+    "deadlift",
+    "bss",
+    "seated_abduction",
+    "oh_carry",
+    "cs_row"
+   ],
+   "items": {
+    "jump_shrug": {
+     "sets": 4,
+     "reps": 3
+    },
+    "landmine_cpp": {
+     "sets": 4,
+     "reps": 4,
+     "per_side": true
+    },
+    "deadlift": {
+     "mode": "primer_2x2_90",
+     "sets": 2,
+     "reps": 2
+    },
+    "bss": {
+     "sets": 2,
+     "reps": 8,
+     "per_side": true
+    },
+    "seated_abduction": {
+     "sets": 2,
+     "reps": 8
+    },
+    "oh_carry": {
+     "sets": 2,
+     "per_side": true
+    },
+    "cs_row": {
+     "sets": 3,
+     "reps": 10
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M3",
+      "last_logged": "2026-12-28",
+      "entered_on": "2026-12-21"
+     },
+     "deadlift": {
+      "last_mesocycle": "M3",
+      "last_logged": "2026-12-28",
+      "entered_on": "2026-12-21"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 4 Day 1, week 21: 12 depth jumps, skater bound 2 x 3 per side",
+   "date": "2027-02-01",
+   "day": 1,
+   "target_min": 64,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "spanish_squat_iso",
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "skater_bound",
+    "trap_bar_jump",
+    "db_pp_explosive",
+    "front_squat",
+    "db_rdl",
+    "pull_up"
+   ],
+   "items": {
+    "depth_jump": {
+     "contacts": 12
+    },
+    "skater_bound": {
+     "sets": 2,
+     "reps": 3,
+     "per_side": true
+    },
+    "db_rdl": {
+     "sets": 2,
+     "reps": 6
+    },
+    "pull_up": {
+     "sets": 3,
+     "reps": 5
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-01-28",
+      "entered_on": "2027-01-25"
+     },
+     "deadlift": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-01-28",
+      "entered_on": "2027-01-25"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 4 Day 1, week 23: 9 depth jumps, skater bound 2 x 4, the Romanian deadlift gone, the pull-up alone",
+   "date": "2027-02-15",
+   "day": 1,
+   "target_min": 64,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "spanish_squat_iso",
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "skater_bound",
+    "trap_bar_jump",
+    "db_pp_explosive",
+    "front_squat",
+    "pull_up"
+   ],
+   "items": {
+    "depth_jump": {
+     "contacts": 9
+    },
+    "skater_bound": {
+     "sets": 2,
+     "reps": 4,
+     "per_side": true
+    },
+    "pull_up": {
+     "sets": 3,
+     "reps": 5
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-11",
+      "entered_on": "2027-01-25"
+     },
+     "deadlift": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-11",
+      "entered_on": "2027-01-25"
+     }
+    }
+   }
+  },
+  {
+   "name": "Block 4 Day 2, week 23: the split squat gone, the abduction stays",
+   "date": "2027-02-18",
+   "day": 2,
+   "target_min": 66,
+   "pre": [],
+   "order": [
+    "warmup",
+    "jump_shrug",
+    "landmine_cpp",
+    "deadlift",
+    "seated_abduction",
+    "oh_carry",
+    "cs_row"
+   ],
+   "items": {
+    "seated_abduction": {
+     "sets": 2,
+     "reps": 8
+    },
+    "cs_row": {
+     "sets": 3,
+     "reps": 10
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-15",
+      "entered_on": "2027-01-25"
+     },
+     "deadlift": {
+      "last_mesocycle": "M4",
+      "last_logged": "2027-02-15",
+      "entered_on": "2027-01-25"
+     }
+    }
+   }
+  },
+  {
+   "name": "Taper Day 1 (after the phase test day)",
+   "date": "2027-03-04",
+   "day": 1,
+   "target_min": 40,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "warmup",
+    "depth_jump",
+    "trap_bar_jump",
+    "front_squat",
+    "pull_up"
+   ],
+   "items": {
+    "depth_jump": {
+     "contacts": 6
+    },
+    "trap_bar_jump": {
+     "sets": 2,
+     "reps": 3
+    },
+    "front_squat": {
+     "mode": "single_1x2_90",
+     "sets": 1,
+     "reps": 2
+    },
+    "pull_up": {
+     "sets": 2,
+     "reps": 5
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "TAPER",
+      "last_logged": "2027-03-02",
+      "entered_on": "2027-03-01"
+     },
+     "deadlift": {
+      "last_mesocycle": "TAPER",
+      "last_logged": "2027-03-02",
+      "entered_on": "2027-03-01"
+     }
+    }
+   }
+  },
+  {
+   "name": "Taper Day 2",
+   "date": "2027-03-05",
+   "day": 2,
+   "target_min": 40,
+   "pre": [],
+   "order": [
+    "warmup",
+    "jump_shrug",
+    "landmine_cpp",
+    "deadlift",
+    "seated_abduction",
+    "cs_row"
+   ],
+   "items": {
+    "jump_shrug": {
+     "sets": 2,
+     "reps": 3
+    },
+    "landmine_cpp": {
+     "sets": 2,
+     "reps": 3,
+     "per_side": true
+    },
+    "deadlift": {
+     "mode": "single_1x2_90",
+     "sets": 1,
+     "reps": 2
+    },
+    "seated_abduction": {
+     "sets": 2,
+     "reps": 8
+    },
+    "cs_row": {
+     "sets": 2,
+     "reps": 10
+    }
+   },
+   "state_patch": {
+    "lifts": {
+     "front_squat": {
+      "last_mesocycle": "TAPER",
+      "last_logged": "2027-03-04",
+      "entered_on": "2027-03-01"
+     },
+     "deadlift": {
+      "last_mesocycle": "TAPER",
+      "last_logged": "2027-03-04",
+      "entered_on": "2027-03-01"
+     }
+    }
+   }
+  },
+  {
+   "name": "a session dated before 19 Oct is planned from the v1.5 Block 1 template",
+   "date": "2026-10-12",
+   "day": 1,
+   "target_min": 72,
+   "pre": [
+    "cmj"
+   ],
+   "order": [
+    "warmup_glute_shoulder",
+    "depth_jump",
+    "trap_bar_jump",
+    "front_squat",
+    "db_pp_strength",
+    "pull_up",
+    "rdl",
+    "nordic",
+    "abd_iso",
+    "y_raise"
+   ],
+   "items": {
+    "rdl": {
+     "sets": 3
+    },
+    "nordic": {
+     "sets": 2,
+     "reps": 3
+    }
+   }
+  }
+ ],
+ "removed_slots": {
+  "slots": [
+   "nordic",
+   "abd_iso",
+   "y_raise",
+   "pallof",
+   "hack_squat",
+   "depth_landing",
+   "rdl",
+   "abductor_hsr",
+   "rsi_ladder"
+  ],
+  "note": "Absent from every template in programme_config_v1_6.json `templates`, on every date from 19 Oct 2026 to 7 Mar 2027 and both days; still defined in `slots`, so every older log replays and exports. hack_squat appears only as a swap target, in text."
+ },
+ "rir_step": [
+  {
+   "name": "split squat: 8 at 4 in reserve twice, on or after 7 Nov, steps up",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 8,
+     "rir": 4
+    },
+    {
+     "date": "2026-11-19",
+     "reps": 8,
+     "rir": 4
+    }
+   ],
+   "expect": {
+    "load": 18,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "split squat: 8 at 3 in reserve twice holds",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 8,
+     "rir": 3
+    },
+    {
+     "date": "2026-11-19",
+     "reps": 8,
+     "rir": 3
+    }
+   ],
+   "expect": {
+    "load": 16,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "split squat: 8 at 4 in reserve twice before 7 Nov holds (older logs replay unchanged)",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-10-23",
+     "reps": 8,
+     "rir": 4
+    },
+    {
+     "date": "2026-10-30",
+     "reps": 8,
+     "rir": 4
+    }
+   ],
+   "expect": {
+    "load": 16,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "split squat: one set at the target with 4 in reserve, then one at up_at, steps up",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 8,
+     "rir": 4
+    },
+    {
+     "date": "2026-11-19",
+     "reps": 10,
+     "rir": 2
+    }
+   ],
+   "expect": {
+    "load": 18,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "split squat: below the target with 5 in reserve twice steps down",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 7,
+     "rir": 5
+    },
+    {
+     "date": "2026-11-19",
+     "reps": 7,
+     "rir": 5
+    }
+   ],
+   "expect": {
+    "load": 14,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "split squat: one qualifying set counts 1 of 2",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 9,
+     "rir": 4
+    }
+   ],
+   "expect": {
+    "load": 16,
+    "streak_up": 1
+   }
+  },
+  {
+   "name": "seated abduction (class B): 8 at 4 in reserve twice owes a step up of one stack plate",
+   "slot": "seated_abduction",
+   "seed_load": 40,
+   "logs": [
+    {
+     "date": "2026-11-12",
+     "reps": 8,
+     "rir": 4
+    },
+    {
+     "date": "2026-11-19",
+     "reps": 8,
+     "rir": 4
+    }
+   ],
+   "expect": {
+    "load": 40,
+    "streak_up": 0,
+    "pending": "up"
+   }
+  },
+  {
+   "name": "dumbbell Romanian deadlift in Block 2: target 6 reached at 4 in reserve twice steps up",
+   "slot": "db_rdl",
+   "seed_load": 20,
+   "logs": [
+    {
+     "date": "2026-11-16",
+     "reps": 6,
+     "rir": 4,
+     "target_reps": 6
+    },
+    {
+     "date": "2026-11-23",
+     "reps": 6,
+     "rir": 4,
+     "target_reps": 6
+    }
+   ],
+   "expect": {
+    "load": 22,
+    "streak_up": 0
+   }
+  },
+  {
+   "name": "no upward step after week 22 even at 4 in reserve",
+   "slot": "bss",
+   "seed_load": 16,
+   "logs": [
+    {
+     "date": "2027-02-15",
+     "reps": 8,
+     "rir": 4
+    },
+    {
+     "date": "2027-02-18",
+     "reps": 8,
+     "rir": 4
+    }
+   ],
+   "expect": {
+    "load": 16
+   }
+  }
+ ],
+ "taper_pre": [
+  {
+   "name": "taper Day 1 opens with the jump test",
+   "date": "2027-03-01",
+   "day": 1,
+   "pre": [
+    "cmj"
+   ]
+  },
+  {
+   "name": "taper Day 2 has no jump test",
+   "date": "2027-03-04",
+   "day": 2,
+   "pre": []
+  },
+  {
+   "name": "Block 3 Day 1 unchanged",
+   "date": "2026-12-28",
+   "day": 1,
+   "pre": [
+    "cmj"
+   ]
+  }
+ ]
+}
