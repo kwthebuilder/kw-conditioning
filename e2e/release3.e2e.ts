@@ -43,10 +43,11 @@ test('the session-start question on Day 2 asks site and score only after Yes', a
 test('the running-long note and the minutes line show on every session', async ({ page }) => {
   await open(page, MON_19_OCT, ATHLETE_SHAPED);
   await expect(page.locator('.next-head h2')).toContainText('Day 1 · about 70 min, 80 max');
-  await expect(page.locator('.session-note')).toHaveText(NOTE);
+  // Config v1.8 (ui §28): Day 1 has its own running-long line; Day 2 keeps the v1.6 line.
+  await expect(page.locator('.session-note')).toContainText('Running long? First drop the upper pair to 2 rounds, then leave it out.');
   await page.getByRole('button', { name: 'Day 2', exact: true }).click();
   await expect(page.locator('.next-head h2')).toContainText('Day 2 · about 63 min, 80 max');
-  await expect(page.locator('.session-note')).toHaveText(NOTE);
+  await expect(page.locator('.session-note')).toContainText(NOTE);
 });
 
 test('the warm-up and the jump test carry the new words', async ({ page }) => {

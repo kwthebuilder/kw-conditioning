@@ -1274,7 +1274,7 @@ function liveBody(app: App, ctx: Ctx, live: LiveView, s: Session): HTMLElement[]
     const t = minutesText(ctx.config, s.target_min, s.audit_trims);
     out.push(h('p', { class: 'sub session-time' }, `${t.charAt(0).toUpperCase()}${t.slice(1)}.`));
   }
-  const note = sessionNote(ctx);
+  const note = sessionNote(ctx, s);
   if (note) out.push(note);
   if (ctx.sessionCheck !== undefined) out.push(sessionCheckCard(app, ctx, ctx.sessionCheck));
   if (hasCmj) out.push(cmjLive(app, ctx, live));
@@ -1299,7 +1299,7 @@ function nextReadOnly(ctx: Ctx, s: Session): HTMLElement[] {
   if (s.pre.includes('cmj')) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, 'Jump test'), h('span', { class: 'dt' }, 'Before the warm-up')));
   for (const it of snap.items) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, planLine(it, ctx.boxCm))));
   out.push(h('div', { class: 'plan-lines' }, ...rows));
-  const note = sessionNote(ctx);
+  const note = sessionNote(ctx, s);
   if (note) out.push(note);
   return out;
 }
@@ -1380,10 +1380,17 @@ function sessionCheckCard(app: App, ctx: Ctx, forDate: IsoDate): HTMLElement {
   );
 }
 
-/** §18 (v1.4): the running-long note, on every session. Display only. */
-function sessionNote(ctx: Ctx): HTMLElement | null {
-  const t = ctx.config.text?.session_note;
-  return t ? h('p', { class: 'sub session-note' }, t) : null;
+/**
+ * §18 (v1.4): the running-long note, on every session. Display only.
+ * v1.6 §28: the note for the session's own day when the config has one,
+ * and the short-session list under it (not in the taper).
+ */
+function sessionNote(ctx: Ctx, s: Session): HTMLElement | null {
+  const text = ctx.config.text ?? {};
+  const t = text[`session_note_day${s.day}`] ?? text.session_note;
+  const short = s.mesocycle === 'TAPER' ? undefined : text[`short_day${s.day}`];
+  if (!t && !short) return null;
+  return h('div', { class: 'session-note' }, t ? h('p', { class: 'sub' }, t) : null, short ? h('p', { class: 'sub short-day' }, short) : null);
 }
 
 /**
