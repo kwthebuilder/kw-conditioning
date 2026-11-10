@@ -1,0 +1,1213 @@
+{
+ "version": "1.9",
+ "date": "2026-11-10",
+ "governs": "programme_design_rationale_v3_6.md; engine_spec_v1_10.md",
+ "budget_min": {
+  "normal": 80,
+  "audit": 80
+ },
+ "equipment": {
+  "barbell_round_kg": 2.5,
+  "trap_bar_kg": 24,
+  "trap_bar_kg_confirmed": true,
+  "db_min_kg": 2,
+  "db_max_kg": 40,
+  "db_step_kg": 2
+ },
+ "instruments": {
+  "cmj": "My Jump Lab, average of 3, at the end of the Day 1 warm-up (straight after the jump ramp), from 16 Nov 2026; readings up to 10 Nov 2026 were taken before the warm-up and are not compared with later ones",
+  "rsi": "My Jump Lab drop jump, or the app's frame calculator; RSI = flight time / contact time; same method always"
+ },
+ "athlete": {
+  "body_mass_kg": 72
+ },
+ "mesocycles": [
+  {
+   "id": "M1",
+   "weeks": [
+    1,
+    8
+   ],
+   "start": "2026-09-14",
+   "end": "2026-11-08",
+   "template": "M1",
+   "barbell_mode": "wave"
+  },
+  {
+   "id": "M2",
+   "weeks": [
+    9,
+    14
+   ],
+   "start": "2026-11-09",
+   "end": "2026-12-20",
+   "template": "M2",
+   "barbell_mode": "band_87_90"
+  },
+  {
+   "id": "M3",
+   "weeks": [
+    15,
+    19
+   ],
+   "start": "2026-12-21",
+   "end": "2027-01-24",
+   "template": "M34",
+   "barbell_mode": "primer_2x2_90"
+  },
+  {
+   "id": "M4",
+   "weeks": [
+    20,
+    24
+   ],
+   "start": "2027-01-25",
+   "end": "2027-02-28",
+   "template": "M34",
+   "barbell_mode": "primer_2x2_90"
+  },
+  {
+   "id": "TAPER",
+   "weeks": [
+    25,
+    25
+   ],
+   "start": "2027-03-01",
+   "end": "2027-03-07",
+   "template": "TAPER",
+   "barbell_mode": "single_1x2_90"
+  },
+  {
+   "id": "INTENSIVE",
+   "weeks": [
+    26,
+    27
+   ],
+   "start": "2027-03-08",
+   "end": "2027-03-19",
+   "template": null,
+   "barbell_mode": null
+  }
+ ],
+ "freeze": {
+  "no_upward_steps_after_week": 22,
+  "depth_jump_height_frozen_after_week": 22
+ },
+ "ladder": {
+  "weeks": [],
+  "day": 1,
+  "slot": "rsi_ladder",
+  "replaces": [
+   "depth_jump",
+   "depth_landing"
+  ],
+  "note": "On Day 1 of these programme weeks the rsi_ladder item takes the place of the first replaced item in the template and every other replaced item is dropped. Fixed text only; no ladder logic in the app. Spec A.21."
+ },
+ "wave": {
+  "positions": {
+   "1": {
+    "reps": 4,
+    "pct": 0.8,
+    "amrap": false
+   },
+   "2": {
+    "reps": 3,
+    "pct": 0.85,
+    "amrap": true,
+    "par": 7
+   },
+   "3": {
+    "reps": 2,
+    "pct": 0.9,
+    "amrap": true,
+    "par": 5
+   }
+  },
+  "sets": 3,
+  "rir_cap": 2,
+  "ramp": [
+   [
+    0.5,
+    5
+   ],
+   [
+    0.7,
+    3
+   ],
+   [
+    0.85,
+    1
+   ]
+  ]
+ },
+ "text": {
+  "warmup": "Your glute warm-up. Finish with 3 to 5 small bounces on the spot and 2 jumps building from easy to near-max. On Day 1 the jump test comes straight after; then start the first explosive exercise within 1 to 3 minutes.",
+  "cmj": "Straight after the 2 building jumps that end your warm-up. Leave the same gap between the three jumps every time.",
+  "cmj_when": "End of the warm-up",
+  "light_week": "Light week: {sets} sets of {reps} at this load. Stop at {reps}, even if you have more.",
+  "session_note": "Running long? First drop the upper pair to 2 rounds, then swap the split squat for the hack squat. Never cut the explosive work or the abduction.",
+  "session_note_day1": "Running long? First drop the upper pair to 2 rounds, then leave it out. Never cut the jumps, the front squat or the Romanian deadlift.",
+  "session_note_day2": "Running long? First drop the upper pair to 2 rounds, then swap the split squat for the hack squat. Never cut the explosive work or the abduction.",
+  "short_day1": "Only 45 to 50 minutes? Keep the jump test, drop jumps, trap-bar jumps, front squat and dumbbell Romanian deadlift. Everything else goes this time; skip it with Time as the reason.",
+  "short_day2": "Only 45 to 50 minutes? Keep the jump shrug and landmine clean and push press at 2 sets each, the deadlift, and the split squat with the seated abduction. The carry and row go this time; skip them with Time as the reason.",
+  "note": "Shown on screen as written. In light_week, {sets} and {reps} are that day's light-week prescription: 3 and 4 on every normal light week, so it reads exactly as approved; on a forced two-set light day it reads 2 sets. Display only; no rule reads any of these. Engine spec A.39. v1.8: session_note_day1 and session_note_day2 replace session_note on their day; short_day1 and short_day2 are the short-session list (rationale v3.5), shown on every session except the taper. Display only. v1.9: cmj_when labels the jump test on today's and the next session; the jump test moves to the end of the warm-up (rationale v3.6)."
+ },
+ "tissue_check": {
+  "when": "session_start",
+  "prompt": "Any tendon pain above 3/10 in the last 48 hours?",
+  "note": "Record only (engine spec A.29, A.36). Asked at the start of every session, Day 1 and Day 2. No is one tap; site and score are asked only after Yes. It never blocks logging."
+ },
+ "phase_tests": {
+  "slot": "phase_test",
+  "mesocycles": [
+   "M2",
+   "M3",
+   "M4",
+   "TAPER"
+  ],
+  "day": 1,
+  "before_slot": "depth_jump",
+  "note": "Record only (engine spec A.35). On the first Day 1 of each listed block the slot named here is placed just before before_slot, at the start of the explosive work. Its text is the slot's cue."
+ },
+ "audit_trims": {
+  "max_sets": 2,
+  "slots_by_day": {
+   "1": [
+    "db_rdl"
+   ],
+   "2": [
+    "bss"
+   ]
+  },
+  "final_upper_block": true,
+  "note": "On a session whose main lift is entering one of boundary_singles_on_entering (the session that opens with a boundary test single, engine spec A.8 and A.15), the listed slots for that day and every item in the day's last block marked upper are prescribed at most max_sets sets. Nothing else changes. Engine spec A.34."
+ },
+ "slots": {
+  "depth_jump": {
+   "id": "depth_jump",
+   "name": "Depth jump",
+   "cls": "E",
+   "sites": [
+    "patellar"
+   ],
+   "contacts": {
+    "M1": 6,
+    "M2": 6,
+    "M3": 9,
+    "M4": {
+     "20-22": 12,
+     "23-24": 9
+    },
+    "TAPER": 6
+   },
+   "alt": "skater_bound",
+   "note": "Fixed prescription. Athlete edits contacts by judgement; the design intent for late M2 is 8, see rationale.",
+   "swaps": [
+    "Skater bound"
+   ]
+  },
+  "rsi_ladder": {
+   "id": "rsi_ladder",
+   "name": "RSI ladder 20/30/40 cm x3 + 3 at winner",
+   "cls": "E",
+   "sites": [
+    "patellar"
+   ],
+   "contacts": 12,
+   "when": "descriptive only; the schedule is the top-level ladder field"
+  },
+  "depth_landing": {
+   "id": "depth_landing",
+   "name": "Depth landing above optimum",
+   "cls": "E",
+   "sites": [
+    "patellar"
+   ],
+   "landings": [
+    4,
+    6
+   ]
+  },
+  "skater_bound": {
+   "id": "skater_bound",
+   "name": "Skater bound",
+   "cls": "E",
+   "sites": [
+    "gluteal",
+    "patellar"
+   ],
+   "cue": "Stick each landing with a level pelvis and the knee over the foot. End the set if the hip drops or the knee caves in."
+  },
+  "trap_bar_jump": {
+   "id": "trap_bar_jump",
+   "name": "Trap-bar jump",
+   "cls": "D",
+   "sites": [
+    "patellar"
+   ],
+   "band_pct_fs_tm": [
+    0.1,
+    0.2
+   ],
+   "ceiling_pct_est_1rm": 0.3,
+   "increment_kg": 2.5,
+   "progress": "height at fixed load; +2.5 after rise then two flat sessions",
+   "swaps": [
+    "Bodyweight squat jump"
+   ]
+  },
+  "kb_swing": {
+   "id": "kb_swing",
+   "name": "KB swing, heavy",
+   "cls": "D",
+   "sites": [
+    "gluteal"
+   ],
+   "progress": "none"
+  },
+  "jump_shrug": {
+   "id": "jump_shrug",
+   "name": "Jump shrug",
+   "cls": "D",
+   "increment_kg": 2.5,
+   "progress": "load at visible speed: you set it at the first session; +2.5 kg after two sessions with no stop-rule cut",
+   "load_rule": "carry",
+   "streak": 2,
+   "cue": "Take these from the deadlift bar during your warm-up, before loading it for the work sets. Load by speed, not by a percentage: work up in small jumps and stop at the heaviest load where every rep is still fast.",
+   "swaps": [
+    "Heavy kettlebell swing"
+   ]
+  },
+  "db_pp_explosive": {
+   "id": "db_pp_explosive",
+   "name": "DB push press, explosive",
+   "cls": "D",
+   "progress": "speed at a fixed dumbbell: you set it at the first session; no load step inside a mesocycle",
+   "load_rule": "carry"
+  },
+  "landmine_cpp": {
+   "id": "landmine_cpp",
+   "name": "1-arm landmine clean and push press",
+   "cls": "D",
+   "increment_kg": 2.5,
+   "load_rule": "carry",
+   "streak": 2,
+   "progress": "load at catch speed: you set it at the first session; +2.5 kg after two sessions with no stop-rule cut",
+   "swaps": [
+    "DB push press"
+   ]
+  },
+  "front_squat": {
+   "id": "front_squat",
+   "name": "Front squat",
+   "cls": "A",
+   "sites": [
+    "patellar"
+   ],
+   "tm_seed": 92.0,
+   "cal_cap": 0.05,
+   "swaps": [
+    "Belt squat"
+   ]
+  },
+  "deadlift": {
+   "id": "deadlift",
+   "name": "Conventional deadlift",
+   "cls": "A",
+   "sites": [
+    "gluteal"
+   ],
+   "tm_seed": 145.2,
+   "cal_cap": 0.025
+  },
+  "rdl": {
+   "id": "rdl",
+   "name": "Romanian deadlift, 3 s lowering",
+   "cls": "B",
+   "sites": [
+    "gluteal"
+   ],
+   "start_kg": 100,
+   "rep_range": [
+    6,
+    8
+   ],
+   "rir_cap": 2,
+   "table": [
+    [
+     12,
+     10,
+     "first 3 sessions"
+    ],
+    [
+     10,
+     5
+    ],
+    [
+     8,
+     2.5
+    ],
+    [
+     6,
+     0
+    ],
+    [
+     0,
+     -5
+    ]
+   ],
+   "group": "accessory_hinge_or_single_leg"
+  },
+  "db_rdl": {
+   "id": "db_rdl",
+   "name": "Romanian deadlift, dumbbells, 3 s lowering",
+   "cls": "B",
+   "sites": [
+    "gluteal"
+   ],
+   "reps": 8,
+   "rir_cap": 2,
+   "up_at": 10,
+   "down_below": 8,
+   "streak": 2,
+   "increment": "2 kg/hand",
+   "group": "accessory_hinge_or_single_leg",
+   "note": "Load per hand. The rep target comes from the template item (8 in Block 1, 6 from Block 2): up at the target + 2 twice running, down below the target twice running (engine spec A.33).",
+   "swaps": [
+    "Seated leg curl"
+   ]
+  },
+  "hack_squat": {
+   "id": "hack_squat",
+   "name": "Hack squat, 3 s lowering",
+   "cls": "B",
+   "sites": [
+    "patellar"
+   ],
+   "reps": 8,
+   "rir_cap": 2,
+   "up_at": 10,
+   "down_below": 7,
+   "streak": 2,
+   "increment": "5 kg"
+  },
+  "abductor_hsr": {
+   "id": "abductor_hsr",
+   "name": "Standing cable hip abduction, 3 s, stance leg loaded",
+   "cls": "B",
+   "sites": [
+    "gluteal"
+   ],
+   "reps": 8,
+   "rir_cap": 2,
+   "up_at": 10,
+   "down_below": 7,
+   "streak": 2,
+   "never_zero": true,
+   "increment": "one stack plate"
+  },
+  "seated_abduction": {
+   "id": "seated_abduction",
+   "name": "Seated hip abduction machine, heavy, 3 s lowering",
+   "cls": "B",
+   "sites": [
+    "gluteal"
+   ],
+   "reps": 8,
+   "rir_cap": 2,
+   "up_at": 10,
+   "down_below": 7,
+   "streak": 2,
+   "never_zero": true,
+   "increment": "one stack plate",
+   "note": "Same rule as abductor_hsr. The cable abductor's load does not carry over, because the implement differs.",
+   "swaps": [
+    "Standing cable hip abduction, 3 s lowering"
+   ]
+  },
+  "db_pp_strength": {
+   "id": "db_pp_strength",
+   "name": "DB push press, strength thread (hammer grip)",
+   "cls": "C",
+   "reps": 6,
+   "rir_cap": 2,
+   "up_at": 9,
+   "streak": 2,
+   "increment": "2 kg/hand",
+   "start_hint_kg": 26
+  },
+  "pull_up": {
+   "id": "pull_up",
+   "name": "Weighted pull-up",
+   "cls": "C",
+   "reps": 5,
+   "rir_cap": 2,
+   "up_at": 7,
+   "streak": 2,
+   "increment": "2.5 kg",
+   "group": "pull",
+   "swaps": [
+    "Chest-supported row"
+   ]
+  },
+  "landmine_press": {
+   "id": "landmine_press",
+   "name": "1-arm landmine press",
+   "cls": "C",
+   "reps": 6,
+   "rir_cap": 2,
+   "up_at": 8,
+   "streak": 2,
+   "increment": "2.5 kg",
+   "swaps": [
+    "DB push press"
+   ]
+  },
+  "cs_row": {
+   "id": "cs_row",
+   "name": "Chest-supported row",
+   "cls": "C",
+   "reps": 10,
+   "rir_cap": 2,
+   "up_at": 12,
+   "streak": 2,
+   "increment": "one plate or 2 kg/hand",
+   "group": "pull"
+  },
+  "bss": {
+   "id": "bss",
+   "name": "Bulgarian split squat",
+   "cls": "C",
+   "sites": [
+    "patellar",
+    "gluteal"
+   ],
+   "reps": 8,
+   "rir_cap": 3,
+   "up_at": 10,
+   "streak": 2,
+   "increment": "2 kg/hand",
+   "group": "accessory_hinge_or_single_leg",
+   "swaps": [
+    "Hack squat, 3 s lowering"
+   ]
+  },
+  "nordic": {
+   "id": "nordic",
+   "name": "Nordic curl",
+   "cls": "F",
+   "progress": "reps to 2x5 then ROM",
+   "never_zero": true,
+   "group": "prehab"
+  },
+  "abd_iso": {
+   "id": "abd_iso",
+   "name": "Hip abduction isometric",
+   "cls": "F",
+   "sites": [
+    "gluteal"
+   ],
+   "never_zero": true,
+   "group": "prehab"
+  },
+  "y_raise": {
+   "id": "y_raise",
+   "name": "Incline prone Y-raise, light",
+   "cls": "F",
+   "alt": "cable external rotation",
+   "group": "prehab"
+  },
+  "pallof": {
+   "id": "pallof",
+   "name": "Pallof press",
+   "cls": "F",
+   "group": "prehab"
+  },
+  "spanish_squat_iso": {
+   "id": "spanish_squat_iso",
+   "name": "Spanish-squat isometric primer",
+   "cls": "F",
+   "sites": [
+    "patellar"
+   ],
+   "cue": "4 hard holds of about 10 seconds, first thing in the warm-up.",
+   "swaps": [
+    "Leg extension hold"
+   ]
+  },
+  "oh_carry": {
+   "id": "oh_carry",
+   "name": "1-arm overhead carry",
+   "cls": "F",
+   "progress": "distance then load",
+   "regression": "front-rack carry on shoulder flag",
+   "cue": "2 carries per side, about 20 m each. Progress distance, then load. Use a front-rack carry if the shoulder flags.",
+   "swaps": [
+    "Front-rack carry"
+   ]
+  },
+  "phase_test": {
+   "id": "phase_test",
+   "name": "Phase-start test",
+   "cls": "F",
+   "cue": "Film 3 drop jumps and 1 trap-bar jump set in slow motion; they are the first 3 of your drop jumps and your first trap-bar set, not extra. Reactive strength index is time in the air divided by time on the floor: My Jump Lab's drop jump test gives it, or use Calculate from video. Enter your best of each.",
+   "note": "Record only. Never in a template: placed by the top-level phase_tests rule (engine spec A.35) and logged with kind phase_test, which changes nothing but the log."
+  }
+ },
+ "templates": {
+  "M1": {
+   "day1": {
+    "target_min": 70,
+    "pre": [
+     "cmj"
+    ],
+    "blocks": [
+     {
+      "items": [
+       "warmup_glute_shoulder"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "depth_jump"
+       },
+       {
+        "slot": "trap_bar_jump",
+        "sets": 2,
+        "reps": 3
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "front_squat",
+        "mode": "wave"
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "db_rdl",
+        "sets": 3,
+        "reps": 8
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "db_pp_strength",
+        "sets": 3
+       },
+       {
+        "slot": "pull_up",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   },
+   "day2": {
+    "target_min": 63,
+    "blocks": [
+     {
+      "items": [
+       "warmup"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "kb_swing",
+        "sets": 2,
+        "reps": 6
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "deadlift",
+        "mode": "wave"
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "items": [
+       {
+        "slot": "bss",
+        "sets": 3,
+        "per_side": true
+       },
+       {
+        "slot": "seated_abduction",
+        "sets": 3
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "landmine_press",
+        "sets": 3,
+        "per_side": true
+       },
+       {
+        "slot": "cs_row",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "M2": {
+   "day1": {
+    "target_min": 72,
+    "pre": [
+     "cmj"
+    ],
+    "blocks": [
+     {
+      "items": [
+       "warmup_glute_shoulder"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "depth_jump",
+        "note": "You may take up to 9 jumps by judgement."
+       },
+       {
+        "slot": "skater_bound",
+        "variant": "stuck landing",
+        "sets": 2,
+        "reps": 4,
+        "per_side": true
+       },
+       {
+        "slot": "trap_bar_jump",
+        "sets": 3,
+        "reps": 3
+       }
+      ]
+     },
+     {
+      "rounds": [
+       3,
+       4
+      ],
+      "items": [
+       {
+        "slot": "front_squat",
+        "mode": "band_87_90",
+        "reps": 2
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "db_rdl",
+        "sets": 3,
+        "reps": 6
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "db_pp_strength",
+        "sets": 3
+       },
+       {
+        "slot": "pull_up",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   },
+   "day2": {
+    "target_min": 68,
+    "blocks": [
+     {
+      "items": [
+       "warmup"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "jump_shrug",
+        "sets": 3,
+        "reps": 3
+       },
+       {
+        "slot": "landmine_cpp",
+        "sets": 3,
+        "reps": 3,
+        "per_side": true
+       }
+      ]
+     },
+     {
+      "rounds": [
+       3,
+       4
+      ],
+      "items": [
+       {
+        "slot": "deadlift",
+        "mode": "band_87_90",
+        "reps": 2
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "items": [
+       {
+        "slot": "bss",
+        "sets": 3,
+        "per_side": true
+       },
+       {
+        "slot": "seated_abduction",
+        "sets": 3
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "oh_carry",
+        "sets": 2,
+        "per_side": true
+       },
+       {
+        "slot": "cs_row",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "M34": {
+   "day1": {
+    "target_min": 68,
+    "pre": [
+     "cmj"
+    ],
+    "blocks": [
+     {
+      "items": [
+       {
+        "slot": "spanish_squat_iso",
+        "sets": 4,
+        "secs": 10
+       },
+       "warmup_glute_shoulder"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "depth_jump"
+       },
+       {
+        "slot": "skater_bound",
+        "sets": 2,
+        "reps": 4,
+        "per_side": true,
+        "reps_by_week": {
+         "20-22": 3
+        }
+       },
+       {
+        "slot": "trap_bar_jump",
+        "sets": 4,
+        "reps": 3
+       },
+       {
+        "slot": "db_pp_explosive",
+        "sets": 3,
+        "reps": 3
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "front_squat",
+        "mode": "primer_2x2_90"
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "db_rdl",
+        "sets": 2,
+        "reps": 6,
+        "until_week": 22
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "db_pp_strength",
+        "sets": 2
+       },
+       {
+        "slot": "pull_up",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   },
+   "day2": {
+    "target_min": 66,
+    "blocks": [
+     {
+      "items": [
+       "warmup"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "jump_shrug",
+        "sets": 4,
+        "reps": 3
+       },
+       {
+        "slot": "landmine_cpp",
+        "sets": 4,
+        "reps": 4,
+        "per_side": true
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "deadlift",
+        "mode": "primer_2x2_90"
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "items": [
+       {
+        "slot": "bss",
+        "sets": 2,
+        "per_side": true,
+        "until_week": 22
+       },
+       {
+        "slot": "seated_abduction",
+        "sets": 2
+       }
+      ]
+     },
+     {
+      "superset": true,
+      "upper": true,
+      "items": [
+       {
+        "slot": "oh_carry",
+        "sets": 2,
+        "per_side": true
+       },
+       {
+        "slot": "cs_row",
+        "sets": 3
+       }
+      ]
+     }
+    ]
+   }
+  },
+  "TAPER": {
+   "both_days": {
+    "target_min": 40,
+    "pre": [
+     "cmj"
+    ],
+    "pre_days": [
+     1
+    ],
+    "blocks": [
+     {
+      "items": [
+       "warmup"
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "depth_jump",
+        "contacts": 6,
+        "day": 1
+       },
+       {
+        "slot": "trap_bar_jump",
+        "sets": 2,
+        "reps": 3,
+        "day": 1
+       },
+       {
+        "slot": "jump_shrug",
+        "sets": 2,
+        "reps": 3,
+        "day": 2
+       },
+       {
+        "slot": "landmine_cpp",
+        "sets": 2,
+        "reps": 3,
+        "per_side": true,
+        "day": 2
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "front_squat",
+        "mode": "single_1x2_90",
+        "day": 1
+       },
+       {
+        "slot": "deadlift",
+        "mode": "single_1x2_90",
+        "day": 2
+       }
+      ]
+     },
+     {
+      "items": [
+       {
+        "slot": "pull_up",
+        "sets": 2,
+        "day": 1
+       },
+       {
+        "slot": "seated_abduction",
+        "sets": 2,
+        "day": 2
+       },
+       {
+        "slot": "cs_row",
+        "sets": 2,
+        "day": 2
+       }
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "templates_before": {
+  "date": "2026-10-19",
+  "from_config": "programme_config_v1_5.json",
+  "templates": {
+   "M1": {
+    "day1": {
+     "target_min": 72,
+     "pre": [
+      "cmj"
+     ],
+     "blocks": [
+      {
+       "min": 10,
+       "items": [
+        "warmup_glute_shoulder"
+       ]
+      },
+      {
+       "min": 5,
+       "items": [
+        {
+         "slot": "depth_jump"
+        }
+       ]
+      },
+      {
+       "min": 5,
+       "items": [
+        {
+         "slot": "trap_bar_jump",
+         "sets": 2,
+         "reps": 3
+        }
+       ]
+      },
+      {
+       "min": 20,
+       "items": [
+        {
+         "slot": "front_squat",
+         "mode": "wave"
+        }
+       ]
+      },
+      {
+       "min": 12,
+       "superset": true,
+       "items": [
+        {
+         "slot": "db_pp_strength",
+         "sets": 3
+        },
+        {
+         "slot": "pull_up",
+         "sets": 3
+        }
+       ]
+      },
+      {
+       "min": 10,
+       "items": [
+        {
+         "slot": "rdl",
+         "sets": 3
+        }
+       ]
+      },
+      {
+       "min": 8,
+       "superset": true,
+       "items": [
+        {
+         "slot": "nordic",
+         "sets": 2,
+         "reps": 3
+        },
+        {
+         "slot": "abd_iso",
+         "sets": 2,
+         "secs": 30,
+         "per_side": true
+        },
+        {
+         "slot": "y_raise",
+         "sets": 2,
+         "reps": 10
+        }
+       ]
+      }
+     ]
+    },
+    "day2": {
+     "target_min": 70,
+     "blocks": [
+      {
+       "min": 10,
+       "items": [
+        "warmup"
+       ]
+      },
+      {
+       "min": 5,
+       "items": [
+        {
+         "slot": "kb_swing",
+         "sets": 2,
+         "reps": 6
+        }
+       ]
+      },
+      {
+       "min": 20,
+       "items": [
+        {
+         "slot": "deadlift",
+         "mode": "wave"
+        }
+       ]
+      },
+      {
+       "min": 12,
+       "superset": true,
+       "items": [
+        {
+         "slot": "landmine_press",
+         "sets": 3,
+         "per_side": true
+        },
+        {
+         "slot": "cs_row",
+         "sets": 3
+        }
+       ]
+      },
+      {
+       "min": 14,
+       "superset": true,
+       "items": [
+        {
+         "slot": "abductor_hsr",
+         "sets": 3
+        },
+        {
+         "slot": "bss",
+         "sets": 3,
+         "per_side": true
+        }
+       ]
+      },
+      {
+       "min": 8,
+       "superset": true,
+       "items": [
+        {
+         "slot": "hack_squat",
+         "sets": 2
+        },
+        {
+         "slot": "pallof",
+         "sets": 2,
+         "reps": 10,
+         "per_side": true
+        }
+       ]
+      }
+     ]
+    }
+   }
+  },
+  "note": "A session dated before this date is planned from these templates (the Block 1 templates of programme_config_v1_5.json, unchanged) instead of the ones above: the plan rebuilt for a session that has no saved plan, a missed session added for such a date, and a session carried on from such a date. Every log, old or new, replays through the same slot rules. Engine spec A.37."
+ },
+ "boundary_singles_on_entering": [
+  "M2",
+  "M3",
+  "M4"
+ ],
+ "scope_note": "v1.1: classes D, E, F are fixed prescriptions with no engine logic. Fields such as 'sites', 'group', 'progress' on slots are descriptive only. v1.2: ladder schedule added as data (top-level 'ladder'); nothing else changed. v1.6 (19 Oct 2026): new templates for every block, with no contrast rounds anywhere; slots db_rdl and seated_abduction added; nordic, abd_iso, y_raise, pallof, hack_squat, depth_landing, rdl, abductor_hsr and rsi_ladder leave every template but stay defined so older logs replay and export; per-slot swaps and on-screen cues; slot phase_test added; top-level text, tissue_check, phase_tests, audit_trims and templates_before added; template items may carry note and reps_by_week, blocks may carry upper. Slot fields sites, group, progress, note, cue and swaps stay descriptive for the engine. v1.7: rir_step (A.40), TAPER pre_days (A.41), jump shrug cue by speed, seated abduction swap; nothing else changed. v1.8: per-day running-long notes and the short-session list (display text only); nothing else changed. v1.9: Blocks 3 and 4 Day 1 keep the DB push press strength thread at 2 sets with the pull-up; jump test at the end of the warm-up; phase-test words; nothing else changed.",
+ "rir_step": {
+  "min_rir": 4,
+  "from": "2026-11-07",
+  "note": "Engine spec A.40 (v1.10). On class B and C streak slots, a last set that reaches the rep target (and stays below up_at) with at least min_rir reps in reserve counts towards a step up, the same as a set at or above up_at. Applies only to logs dated on or after `from`, so every older log replays to the same numbers."
+ }
+}

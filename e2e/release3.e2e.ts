@@ -52,7 +52,8 @@ test('the running-long note and the minutes line show on every session', async (
 
 test('the warm-up and the jump test carry the new words', async ({ page }) => {
   await open(page, MON_19_OCT, ATHLETE_SHAPED);
-  await expect(page.locator('.warm-text').first()).toHaveText('Your glute warm-up. Finish with 3 to 5 small bounces on the spot and 2 jumps building from easy to near-max, then start the first explosive exercise within 1 to 3 minutes.');
+  // Config v1.9 (ui §30): the warm-up hands over to the jump test on Day 1.
+  await expect(page.locator('.warm-text').first()).toContainText('2 jumps building from easy to near-max. On Day 1 the jump test comes straight after');
   await expect(item(page, 'Jump test')).toContainText('Leave the same gap between the three jumps every time.');
 });
 
@@ -116,7 +117,8 @@ test('the phase-start test sits at the start of the explosive work on the first 
   await logJumpTest(page);
   await page.locator('.session-check').getByRole('button', { name: 'No', exact: true }).click();
   const pt = item(page, 'Phase-start test');
-  await expect(pt).toContainText('Phase-start test: film 3 depth jumps and 1 trap-bar jump set in My Jump Lab. Enter your best reactive strength index and best trap-bar jump height.');
+  // Config v1.9 (ui §31): filmed in slow motion, counted inside the session, with the formula in words.
+  await expect(pt).toContainText('Film 3 drop jumps and 1 trap-bar jump set in slow motion; they are the first 3 of your drop jumps and your first trap-bar set, not extra.');
   const before = await stored(page);
   await pt.getByLabel('Best reactive strength index', { exact: true }).fill('2.137');
   await pt.getByLabel('Best trap-bar jump height', { exact: true }).fill('41.5');

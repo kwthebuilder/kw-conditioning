@@ -429,10 +429,10 @@ function planLine(item: PlanItem, box?: number): string {
 // help text
 // ---------------------------------------------------------------------
 
-const REACTIVE = 'reactive strength: bounce height divided by time on the floor; quick and high wins';
+const REACTIVE = 'reactive strength: time in the air divided by time on the floor, the method My Jump Lab uses; quick and high wins';
 
 const SLOT_HELP: Record<string, string> = {
-  phase_test: 'Film 3 depth jumps and 1 trap-bar jump set in My Jump Lab, then enter your best numbers.',
+  phase_test: 'Film 3 drop jumps and 1 trap-bar jump set in slow motion, then enter your best numbers.',
   depth_jump: 'Step off the box, do not jump off. Land and rebound as fast and as high as you can, with the least time on the floor. Full rest between jumps.',
   depth_landing: 'Step off a box a little higher than your usual drop height. Land soft, quiet and balanced, and hold it. No rebound.',
   skater_bound: 'Push off one leg sideways, land on the other and stick the landing before the next bound.',
@@ -457,7 +457,7 @@ const SLOT_HELP: Record<string, string> = {
   pallof: 'Cable at chest height, stand side on. Press the handle straight out and hold it there against the pull.',
   spanish_squat_iso: 'Strap behind the knees anchored in front. Sit back into a squat with a vertical shin and hold.',
   oh_carry: 'One dumbbell locked out overhead. Walk tall for the distance, then swap arms.',
-  cmj: 'Average of three jumps, before the warm-up.',
+  cmj: 'Average of three jumps.',
 };
 
 const WARMUP_NAMES: Record<string, string> = {
@@ -795,7 +795,11 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
     case 'phase_test': {
       const r = stepper({ label: 'Best reactive strength index', value: v.rsi ?? null, step: 0.01, start: 1.5, onChange: (x) => (v.rsi = x) });
       const t = stepper({ label: 'Best trap-bar jump height', unit: 'cm', value: v.trapCm ?? null, step: 0.5, start: 35, onChange: (x) => (v.trapCm = x) });
-      fields.append(r.el, t.el);
+      // ui §31 (v1.7): each number can come from the frame calculator, as on the drop jump and trap-bar jump cards.
+      fields.append(
+        r.el, calculator('rsi', (x) => { v.rsi = x; r.input.value = String(x); }),
+        t.el, calculator('height', (x) => { v.trapCm = x; t.input.value = String(x); }),
+      );
       submit = () => {
         if (v.rsi == null && v.trapCm == null) return fail('Enter at least one number, or skip it.');
         const log: AnyLog = { kind: 'phase_test', date: spec.date };
@@ -1166,7 +1170,7 @@ function cmjLive(app: App, ctx: Ctx, live: LiveView): HTMLElement {
   const changeKey = `change|${live.key}|cmj`;
   if (last && !app.open.has(changeKey)) return h('section', { class: 'card' }, doneItem(app, ctx, 'Jump test', last, key, () => { app.open.add(changeKey); ctx.rerender(); }));
   const spec: Spec = { slot: 'cmj', type: 'cmj', date, load: null };
-  const box = h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', 'before the warm-up'), h('p', { class: 'sub' }, instruction(spec, ctx.config))));
+  const box = h('section', { class: 'card' }, h('div', { class: 'item' }, itemHead('Jump test', (ctx.config.text?.cmj_when ?? 'Before the warm-up').toLowerCase()), h('p', { class: 'sub' }, instruction(spec, ctx.config))));
   const inner = box.firstElementChild as HTMLElement;
   if (last) {
     inner.append(...itemForm(app, ctx, spec, {
@@ -1262,8 +1266,13 @@ function liveBody(app: App, ctx: Ctx, live: LiveView, s: Session): HTMLElement[]
   const hasCmj = s.pre.includes('cmj');
   const cmjDone = itemLogged(live, 'cmj');
   // 0 = the jump test, 1..n = a block, -1 = everything logged.
+  // ui §30 (v1.7): the jump test sits straight after the warm-up block; a slotted
+  // warm-up block (the Spanish squat holds) comes first.
+  const warmIdx = s.blocks.findIndex((b) => b.items.some((it) => it.kind === 'warmup'));
+  const leadOpen = s.blocks.slice(0, warmIdx + 1).findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
   let focus: number;
   if (app.focus && app.focus.key === live.key) focus = app.focus.block;
+  else if (leadOpen >= 0) focus = leadOpen + 1;
   else if (hasCmj && !cmjDone) focus = 0;
   else {
     const i = s.blocks.findIndex((b) => slotsOf(b).length > 0 && !blockDone(b));
@@ -1277,16 +1286,14 @@ function liveBody(app: App, ctx: Ctx, live: LiveView, s: Session): HTMLElement[]
   const note = sessionNote(ctx, s);
   if (note) out.push(note);
   if (ctx.sessionCheck !== undefined) out.push(sessionCheckCard(app, ctx, ctx.sessionCheck));
-  if (hasCmj) out.push(cmjLive(app, ctx, live));
+  if (hasCmj && warmIdx < 0) out.push(cmjLive(app, ctx, live));
   s.blocks.forEach((b, i) => {
     const index = i + 1;
-    if (slotsOf(b).length === 0) {
-      out.push(blockCard(ctx.config, b, index, () => h('div')));
-      return;
-    }
-    if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, live, b, index) : blockCard(ctx.config, b, index, (it) => liveItem(app, ctx, live, it)));
+    if (slotsOf(b).length === 0) out.push(blockCard(ctx.config, b, index, () => h('div')));
+    else if (index === focus) out.push(b.contrast ? contrastBlock(app, ctx, live, b, index) : blockCard(ctx.config, b, index, (it) => liveItem(app, ctx, live, it)));
     else if (blockDone(b)) out.push(doneCard(ctx, live, b, index));
     else out.push(nextCard(ctx, live, b, index, plan));
+    if (hasCmj && i === warmIdx) out.push(cmjLive(app, ctx, live));
   });
   return out;
 }
@@ -1296,7 +1303,7 @@ function nextReadOnly(ctx: Ctx, s: Session): HTMLElement[] {
   const snap = planSnapshot(s, ctx.config);
   const out: HTMLElement[] = [];
   const rows: HTMLElement[] = [];
-  if (s.pre.includes('cmj')) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, 'Jump test'), h('span', { class: 'dt' }, 'Before the warm-up')));
+  if (s.pre.includes('cmj')) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, 'Jump test'), h('span', { class: 'dt' }, ctx.config.text?.cmj_when ?? 'Before the warm-up')));
   for (const it of snap.items) rows.push(h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(it.slot, ctx.config)), h('span', { class: 'dt' }, planLine(it, ctx.boxCm))));
   out.push(h('div', { class: 'plan-lines' }, ...rows));
   const note = sessionNote(ctx, s);
@@ -1582,7 +1589,7 @@ function recordItem(app: App, ctx: Ctx, view: RecordView, row: RecordRow): HTMLE
   const name = displayName(row.item.slot, ctx.config);
   const key = `rec|${view.date}|${row.item.slot}`;
   const box = h('div', { class: `item rec st-${row.status}` }, itemHead(name, statusChip(row)));
-  const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)));
+  const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Average of 3 jumps' : plannedText(row.item)));
   const log = row.step!.item.log;
   const skipped = row.status === 'skipped';
   const did = h('div', {}, h('span', { class: 'lab' }, skipped ? 'Recorded' : 'You did'), h('span', {}, skipped && log.kind === 'skip' ? `Skipped${log.reason ? ` · ${SKIP_LABEL[log.reason]}` : ''}` : didText(log, ctx.config)));
@@ -1600,7 +1607,7 @@ function editRow(app: App, ctx: Ctx, date: IsoDate, row: RecordRow, drafts: Draf
   const name = displayName(row.item.slot, ctx.config);
   const draft = drafts.find((d) => d.slot === row.item.slot);
   const box = h('div', { class: `item rec st-${row.status}` }, itemHead(name, statusChip(row, draft)));
-  const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)));
+  const planned = h('div', {}, h('span', { class: 'lab' }, 'Planned'), h('span', {}, row.item.slot === 'cmj' ? 'Average of 3 jumps' : plannedText(row.item)));
   if (row.step) {
     const did = h('div', {}, h('span', { class: 'lab' }, row.status === 'skipped' ? 'Recorded' : 'You did'), h('span', {}, didText(row.step.item.log, ctx.config)));
     box.append(h('div', { class: 'pvd' }, planned, did), h('div', { class: 'tags' }, ...rowTags(row)));
@@ -1713,7 +1720,7 @@ function recordScreen(app: App, ctx: Ctx): { body: Child[]; bar: HTMLElement | n
         { class: 'card not-recorded' },
         h('h2', {}, `Not recorded (${missing.length})`),
         group.date < RELEASE_1 ? h('p', { class: 'sub' }, 'Logged before the app could record a skip. Use Edit to add or skip them; skipping moves nothing.') : null,
-        ...missing.map((row) => h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(row.item.slot, ctx.config)), h('span', { class: 'dt' }, row.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(row.item)))),
+        ...missing.map((row) => h('div', { class: 'line' }, h('span', { class: 'nm' }, displayName(row.item.slot, ctx.config)), h('span', { class: 'dt' }, row.item.slot === 'cmj' ? 'Average of 3 jumps' : plannedText(row.item)))),
       ),
     );
   }

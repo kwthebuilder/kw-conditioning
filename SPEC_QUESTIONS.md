@@ -436,3 +436,27 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** Athlete 7 Nov 2026: list approved as drafted (rationale v3.5). Config v1.8 carries per-day running-long notes and the short-session lines as display text; vectors v1.8 differ from v1.7 only in version and `pinned.default`.
 - **Spec revision:** programme_config_v1_8.json; engine_test_vectors_v1_8.json; ui_spec_v1_6.md §28
+
+## Q55 — overhead strength stops after Block 2
+- **Raised:** 2026-11-10, final programme evaluation
+- **Where:** programme_config_v1_8.json `templates.M34.day1` / rationale v3.3 §6 / 01_Evaluation_Criteria_v1_2.md measure A3 (a non-ballistic vertical press every week)
+- **Question:** From week 15 the overhead work is the light, fast push press, the landmine clean and press loaded by speed and the carry; no overhead set is heavy enough to keep strength for the 9 to 10 weeks before the intensive (Spiering 2021: intensity is what maintains strength).
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Nov 2026: keep the dumbbell push press strength thread at 2 × 6 alternating with the pull-up on Day 1 of Blocks 3 and 4; Day 1 target 68 minutes.
+- **Spec revision:** programme_config_v1_9.json; engine_test_vectors_v1_9.json; ui_spec_v1_7.md §29
+
+## Q56 — the jump test was taken cold
+- **Raised:** 2026-11-10, final programme evaluation
+- **Where:** programme_config_v1_8.json `text.cmj`, `instruments.cmj` / rationale v3.3 P11
+- **Question:** The jump test ran before the warm-up, against the programme's own rule that a measure follows a standard warm-up, so a reading moves with how warm the athlete is.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Nov 2026: the test comes straight after the warm-up jump ramp on Day 1; comparisons restart from 16 Nov 2026. The engine's running mean is display only and is left as it is.
+- **Spec revision:** programme_config_v1_9.json `text.warmup`, `text.cmj`, `text.cmj_when`, `instruments.cmj`; ui_spec_v1_7.md §30
+
+## Q57 — two meanings of reactive strength index
+- **Raised:** 2026-11-10, athlete question during the Block 2 phase-start test
+- **Where:** src/ui/view.ts drop jump help / engine frame calculator / programme_config_v1_8.json `slots.phase_test.cue`
+- **Question:** The drop jump help said "bounce height divided by time on the floor" while the frame calculator and My Jump Lab compute time in the air divided by time on the floor; the phase-start test card gave no way to work the number out.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 Nov 2026: one definition, time in the air divided by time on the floor, everywhere; the phase-start test gets the frame calculator; the filmed jumps count as the session's first drop jumps and trap-bar set.
+- **Spec revision:** programme_config_v1_9.json `slots.phase_test.cue`, `instruments.rsi`; ui_spec_v1_7.md §31

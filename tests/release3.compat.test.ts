@@ -133,7 +133,7 @@ describe('interface lines (ui_spec_v1_4.md)', () => {
       ['2026-10-22', 2, 'about 63 min, 80 max'],
       ['2026-11-16', 1, 'about 72 min, 80 max'],
       ['2026-11-19', 2, 'about 68 min, 80 max'],
-      ['2026-12-28', 1, 'about 64 min, 80 max'],
+      ['2026-12-28', 1, 'about 68 min, 80 max'], // config v1.9: the push press stays in Blocks 3 and 4
       ['2026-12-31', 2, 'about 66 min, 80 max'],
       ['2027-03-04', 1, 'about 40 min, 80 max'],
     ] as const) {
