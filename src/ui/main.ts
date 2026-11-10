@@ -896,7 +896,7 @@ const backupOk = (): boolean => app.backup.settings !== null && backupError === 
 
 function finishView(g: SessionGroup): FinishView {
   const rec = recordOfGroup(g);
-  const unrecorded = rec.rows.filter((r) => r.status === 'not_logged').map((r) => ({ slot: r.item.slot, name: displayName(r.item.slot, cfg), plan: r.item.slot === 'cmj' ? 'Before the warm-up' : plannedText(r.item) }));
+  const unrecorded = rec.rows.filter((r) => r.status === 'not_logged').map((r) => ({ slot: r.item.slot, name: displayName(r.item.slot, cfg), plan: r.item.slot === 'cmj' ? (cfg.text?.cmj_when ?? 'Before the warm-up') : plannedText(r.item) }));
   const start = g.start?.item.log;
   const end = g.end?.item.log;
   let minutes: number | undefined;
