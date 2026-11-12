@@ -19,7 +19,7 @@ function seeded(slot: string, load: number): State {
 
 describe('config v1.7', () => {
   it('carries the reserve step rule from 7 Nov 2026 at 4 or more in reserve', () => {
-    expect(cfg.version).toBe('1.10');
+    expect(cfg.version).toBe('1.11');
     expect(cfg.rir_step).toMatchObject({ min_rir: 4, from: '2026-11-07' });
   });
   it('loads the jump shrug by speed, not by a percentage of the deadlift', () => {

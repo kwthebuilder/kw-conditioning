@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import configV111 from '../spec/programme_config_v1_11.json';
 import configV110 from '../spec/programme_config_v1_10.json';
 import configV19 from '../spec/programme_config_v1_9.json';
 import configV18 from '../spec/programme_config_v1_8.json';
@@ -8,6 +9,7 @@ import configJson from '../spec/programme_config_v1_5.json';
 import configV14 from '../spec/programme_config_v1_4.json';
 import configV13 from '../spec/programme_config_v1_3.json';
 import stateJson from '../spec/initial_state_v1_1.json';
+import vectorsV111 from '../spec/engine_test_vectors_v1_11.json';
 import vectorsV110 from '../spec/engine_test_vectors_v1_10.json';
 import vectorsV19 from '../spec/engine_test_vectors_v1_9.json';
 import vectorsV18 from '../spec/engine_test_vectors_v1_8.json';
@@ -26,6 +28,8 @@ import {
 import { ConfigError, parseProgrammeConfig, parseState, parseTestVectors } from '../src/config/validate';
 
 const files: Record<string, unknown> = {
+  'programme_config_v1_11.json': configV111,
+  'engine_test_vectors_v1_11.json': vectorsV111,
   'programme_config_v1_10.json': configV110,
   'engine_test_vectors_v1_10.json': vectorsV110,
   'programme_config_v1_9.json': configV19,
@@ -47,23 +51,23 @@ const raw = (name: string): unknown => files[name];
 
 describe('spec loader', () => {
   it('loads and validates all three files', () => {
-    expect(PROGRAMME_CONFIG.version).toBe('1.10');
-    expect(TEST_VECTORS.version).toBe('1.10');
+    expect(PROGRAMME_CONFIG.version).toBe('1.11');
+    expect(TEST_VECTORS.version).toBe('1.11');
     expect(INITIAL_STATE.schema).toBe(1);
-    expect(CONFIG_VERSION).toBe('1.10');
-    expect(VECTORS_VERSION).toBe('1.10');
+    expect(CONFIG_VERSION).toBe('1.11');
+    expect(VECTORS_VERSION).toBe('1.11');
     expect(STATE_SCHEMA).toBe(1);
   });
 
   it('returns values structurally identical to the files (nothing dropped or coerced)', () => {
-    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_10.json'));
+    expect(PROGRAMME_CONFIG).toEqual(raw('programme_config_v1_11.json'));
     expect(INITIAL_STATE).toEqual(raw('initial_state_v1_1.json'));
-    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_10.json'));
+    expect(TEST_VECTORS).toEqual(raw('engine_test_vectors_v1_11.json'));
   });
 
   it('every earlier config and vectors file still parses unchanged', () => {
-    for (const name of ['programme_config_v1_9.json', 'programme_config_v1_8.json', 'programme_config_v1_7.json', 'programme_config_v1_6.json', 'programme_config_v1_5.json', 'programme_config_v1_4.json', 'programme_config_v1_3.json']) expect(parseProgrammeConfig(raw(name))).toEqual(raw(name));
-    for (const name of ['engine_test_vectors_v1_9.json', 'engine_test_vectors_v1_8.json', 'engine_test_vectors_v1_7.json', 'engine_test_vectors_v1_6.json', 'engine_test_vectors_v1_5.json', 'engine_test_vectors_v1_4.json']) expect(parseTestVectors(raw(name))).toEqual(raw(name));
+    for (const name of ['programme_config_v1_10.json', 'programme_config_v1_9.json', 'programme_config_v1_8.json', 'programme_config_v1_7.json', 'programme_config_v1_6.json', 'programme_config_v1_5.json', 'programme_config_v1_4.json', 'programme_config_v1_3.json']) expect(parseProgrammeConfig(raw(name))).toEqual(raw(name));
+    for (const name of ['engine_test_vectors_v1_10.json', 'engine_test_vectors_v1_9.json', 'engine_test_vectors_v1_8.json', 'engine_test_vectors_v1_7.json', 'engine_test_vectors_v1_6.json', 'engine_test_vectors_v1_5.json', 'engine_test_vectors_v1_4.json']) expect(parseTestVectors(raw(name))).toEqual(raw(name));
   });
 
   it('carries the shapes the types promise', () => {
