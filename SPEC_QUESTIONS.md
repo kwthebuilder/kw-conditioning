@@ -460,3 +460,43 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** Athlete 10 Nov 2026: one definition, time in the air divided by time on the floor, everywhere; the phase-start test gets the frame calculator; the filmed jumps count as the session's first drop jumps and trap-bar set.
 - **Spec revision:** programme_config_v1_9.json `slots.phase_test.cue`, `instruments.rsi`; ui_spec_v1_7.md §31
+
+## Q58 — heavy doubles: how the training max moves in Blocks 2 to 4
+- **Raised:** 2026-11-10, strength periodisation review v2 (project), after the athlete questioned holding strength from week 9
+- **Where:** engine_spec_v1_10.md §2.9 / programme_config_v1_9.json `mesocycles`, `templates.M2`, `templates.M34`, `templates.TAPER`
+- **Question:** After Block 1 the main lifts sat at about 78 to 81% of estimated max with the training max held, a holding dose five months from the peak. Should strength keep moving, and by what rule?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete 10 and 12 Nov 2026: heavy doubles at 87% of estimated max, 3 in Block 2, 2 in Blocks 3 and 4, 1 in the taper; the last double moves the training max by the Block 1 matched rule until week 22; failure is 0 left, a short double or a missed one. Builder ruling: no scale factor β for doubles (engine A.43 says why); the big-gap rule and its suggested single are kept.
+- **Spec revision:** engine_spec_v1_11.md A.43; programme_config_v1_10.json; engine_test_vectors_v1_10.json `heavy_doubles`
+
+## Q59 — a test single with fewer or more than 2 left
+- **Raised:** 2026-11-10, athlete during the Block 2 test single: the app read every single as 2 left and would not let a logged single be changed
+- **Where:** engine_spec_v1_10.md §2.1, §2.8 / ui_spec_v1_7.md single callout
+- **Question:** A single taken with 0 or 1 left was read as 2 left, overstating the max by about 3 to 7%.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete approved 10 Nov 2026: a reps-left choice of 0 to 3 with factors 1.00, 0.955, 0.93, 0.892; 2 left keeps 0.93 so older logs replay; a logged single can be changed or removed by correction.
+- **Spec revision:** engine_spec_v1_11.md A.44; engine_test_vectors_v1_10.json `single_rir`; ui_spec_v1_8.md §32
+
+## Q60 — which max the athlete sees
+- **Raised:** 2026-11-10, athlete: "Is the max referring to maximum maximum like real 1rm, or a training max?"
+- **Where:** ui_spec_v1_7.md chips, max sheet and outcome lines
+- **Question:** The app labelled the training max (90% of the estimated max) "max", so it read about 10% below what the athlete lifts.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete approved 10 Nov 2026: show the estimated max as the headline; the training max is named once, on the sheet, as what loads come from. A max set by hand is entered as an estimated max.
+- **Spec revision:** engine_spec_v1_11.md A.45; ui_spec_v1_8.md §33
+
+## Q61 — a skipped single stayed on screen
+- **Raised:** 2026-11-12, builder, while adding the reps-left choice (a phone test found two "3" choices on the lift after Skip single)
+- **Where:** src/ui/view.ts single callout / engine A.17
+- **Question:** A boundary single's callout stayed after Skip single until the lift was logged, because a skip clears only a scheduled single.
+- **Blocked:** Nothing.
+- **Ruling:** Builder: the interface hides the callout once a skip is logged for that lift that day. No engine change.
+- **Spec revision:** ui_spec_v1_8.md §32
+
+## Q62 — the effort rule
+- **Raised:** 2026-11-10, athlete: last sets were taken closer than 2 left to technical failure
+- **Where:** design rationale v3.3 P3 / programme_config_v1_9.json `slots.*.rir_cap`
+- **Question:** How close to technical failure should each kind of set go?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete approved 10 and 12 Nov 2026: front squat and deadlift, earlier doubles 2 to 3 left, the last may go to 1 left, not 0; accessories, earlier sets 1 to 2 left, the last may go to technical failure (`rir_cap` 0 on every class B and C slot, including the split squat, which had 3); jumps and explosive lifts unchanged; test singles 1 to 2 left with the number logged; always log the reps actually left.
+- **Spec revision:** programme_config_v1_10.json `slots`, `text`; ui_spec_v1_8.md §34

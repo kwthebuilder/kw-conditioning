@@ -41,7 +41,8 @@ import type {
 // ---------------------------------------------------------------------
 
 export const POSITION_LABEL: Record<Position, string> = { 1: 'Light week', 2: 'Medium week', 3: 'Heavy week' };
-export const POSITION_PCT: Record<Position, string> = { 1: '80%', 2: '85%', 3: '90%' };
+/** v1.8 §33: wave loads as a share of the estimated max (80/85/90% of the training max). */
+export const POSITION_PCT: Record<Position, string> = { 1: '72% of max', 2: '77% of max', 3: '81% of max' };
 
 export const BLOCK_LABEL: Record<MesocycleId, string> = {
   M1: 'Block 1: build tissue and reserve',
@@ -134,6 +135,14 @@ export function kg(n: number): string {
   return String(Math.round(n * 100) / 100);
 }
 const f1 = (n: number): string => n.toFixed(1);
+/**
+ * v1.8 §33: the estimated max, the number the athlete sees. The engine keeps
+ * the training max (TM), which is 90% of it (engine 2.1), and loads come from that.
+ */
+export const estimatedMax = (tm: number): number => tm / 0.9;
+const em = (tm: number): string => f1(estimatedMax(tm));
+/** One decimal, for estimated and training maxes. */
+export const kg1 = f1;
 export const leftText = (rir: number): string => (rir >= 4 ? '4+ left' : `${rir} left`);
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -288,11 +297,11 @@ export function didText(log: AnyLog, config: ProgrammeConfig): string {
     case 'cmj':
       return `${kg(log.value)} cm`;
     case 'single':
-      return `Test single ${kg(log.load)} kg`;
+      return `Test single ${kg(log.load)} kg, ${log.rir} left`;
     case 'single_skipped':
       return 'Test single skipped';
     case 'tm_override':
-      return `Max set by hand to ${f1(log.tm)} kg`;
+      return `Estimated max set by hand to ${em(log.tm)} kg`;
     case 'depth_jump_height':
       return `Drop height ${log.height_cm} cm`;
     case 'session_start':
@@ -373,27 +382,27 @@ export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
       const delta = b.tm_after - b.tm_before;
       switch (b.rule) {
         case 'position1':
-          line = `Light week: max unchanged at ${f1(b.tm_after)} kg.`;
+          line = `Light week: estimated max unchanged at ${em(b.tm_after)} kg.`;
           if (log.last_set.reps > log.prescribed.reps + 2) line += ` ${LIGHT_WEEK_EXTRA}`;
           break;
         case 'failure':
-          line = `Short of the prescription: max ${f1(b.tm_before)} → ${f1(b.tm_after)} kg (−2.5%).`;
+          line = `${log.mode === 'heavy_doubles' ? 'No reps left, or a double short' : 'Short of the prescription'}: estimated max ${em(b.tm_before)} → ${em(b.tm_after)} kg (−2.5%).`;
           break;
         case 'single':
-          line = `Straight sets after a test single. Max ${f1(b.tm_after)} kg.`;
+          line = `${log.mode === 'heavy_doubles' ? 'Doubles after a test single change nothing' : 'Straight sets after a test single'}. Estimated max ${em(b.tm_after)} kg.`;
           break;
         case 'hold':
-          line = `Max held at ${f1(b.tm_after)} kg in this block.`;
+          line = `Estimated max held at ${em(b.tm_after)} kg in this block.`;
           break;
         default:
-          line = Math.abs(delta) < 0.05 ? `Max holds at ${f1(b.tm_after)} kg.` : `Max ${f1(b.tm_before)} → ${f1(b.tm_after)} kg (${delta > 0 ? '+' : '−'}${f1(Math.abs(delta))}).`;
+          line = Math.abs(delta) < 0.05 ? `Estimated max holds at ${em(b.tm_after)} kg.` : `Estimated max ${em(b.tm_before)} → ${em(b.tm_after)} kg (${delta > 0 ? '+' : '−'}${em(Math.abs(delta))}).`;
       }
       if (b.single_scheduled && b.rule !== 'position1') line += ' A test single is suggested next time.';
       return line;
     }
     case 'single': {
       const tm = numberFrom(step, 'tm_after');
-      return tm !== undefined ? `Max reset to ${f1(tm)} kg. Today's sets are straight sets.` : step.explanation.summary;
+      return tm !== undefined ? `Estimated max reset to ${em(tm)} kg. Today's sets are worked out from it.` : step.explanation.summary;
     }
     case 'rdl': {
       const r = o as RdlOutcome;
@@ -452,7 +461,7 @@ export function outcomeLine(step: ReplayStep, config: ProgrammeConfig): string {
     case 'tm_override': {
       const from = numberFrom(step, 'from');
       const to = numberFrom(step, 'to');
-      return from !== undefined && to !== undefined ? `Max set by hand ${f1(from)} → ${f1(to)} kg.` : step.explanation.summary;
+      return from !== undefined && to !== undefined ? `Estimated max set by hand ${em(from)} → ${em(to)} kg.` : step.explanation.summary;
     }
     case 'depth_jump_height':
       return `Drop height set to ${log.height_cm} cm.`;
@@ -619,7 +628,7 @@ export function stateDiff(a: State, b: State, config: ProgrammeConfig, date: Iso
     const name = displayName(lift, config);
     const la = a.lifts[lift];
     const lb = b.lifts[lift];
-    if (Math.abs(la.tm - lb.tm) >= 0.05) lines.push(`${name} max ${f1(la.tm)} → ${f1(lb.tm)} kg`);
+    if (Math.abs(la.tm - lb.tm) >= 0.05) lines.push(`${name} estimated max ${em(la.tm)} → ${em(lb.tm)} kg`);
     const na = nextFor(a, lift, config, date);
     const nb = nextFor(b, lift, config, date);
     if (na !== nb) lines.push(`${name} next session: ${na} → ${nb}`);

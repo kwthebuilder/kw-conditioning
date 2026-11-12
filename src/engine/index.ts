@@ -14,7 +14,7 @@ export { update, bindConfig } from './update';
 export { roundLoad } from './rounding';
 export { daysBetween, mesocycleOn, programmeWeek } from './calendar';
 // Class A
-export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, opensBlock, SEED_FACTOR } from './barbell';
+export { prescribeLift, updateLift, updateSingle, applySingle, rampSets, tmFromSingle, rawEstimate, failureSignal, opensBlock, SEED_FACTOR, DOUBLES_PCT, SINGLE_FACTORS } from './barbell';
 // Class B
 export { prescribeRdl, updateRdl, rdlRow, rowBand, WIDE_WINDOW_SESSIONS } from './rdl';
 export { prescribeTempo, updateTempo, ruleForClassB } from './tempo';

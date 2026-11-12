@@ -10,7 +10,7 @@
  * through update(), corrections through amend() (engine A.23, A.28).
  */
 import type { BarbellMode, IsoDate, LiftId, Position, ProgrammeConfig, State } from '../config/types';
-import { defaultDay, isCarrySlot, mesocycleOn, planSnapshot, programmeWeek, slotOfLog } from '../engine';
+import { defaultDay, DOUBLES_PCT, isCarrySlot, mesocycleOn, planSnapshot, programmeWeek, roundLoad, slotOfLog } from '../engine';
 import type {
   AnyLog,
   CorrectionAction,
@@ -23,6 +23,7 @@ import type {
   SessionDay,
   SessionResult,
   SessionSlotItem,
+  SingleLog,
   SingleReason,
   SkipReason,
 } from '../engine';
@@ -36,10 +37,12 @@ import {
   countsText,
   didText,
   displayName,
+  estimatedMax,
   FLARE_PROTOCOL,
   historyLines,
   historyLineText,
   kg,
+  kg1,
   lastLogged,
   leftText,
   lightWeekText,
@@ -511,9 +514,20 @@ function instruction(spec: Spec, config: ProgrammeConfig): string {
     case 'barbell':
       if (spec.amrap) return `Last set: as many clean reps as you can, stop with 2 left.${spec.par !== undefined ? ` About ${spec.par} reps keeps your max where it is; more raises it, fewer lowers it.` : ''}`;
       if (spec.position === 1) return lightWeekText(config, spec.sets ?? 3, spec.reps ?? 4);
+      // v1.8 §34 (rationale v3.7): the heavy-doubles effort rule.
+      if (spec.mode === 'heavy_doubles') {
+        return (spec.sets ?? 0) <= 1
+          ? config.text?.double_one ?? 'One double with 2 to 3 left. Log the reps you really had left.'
+          : config.text?.doubles ?? 'Earlier doubles: stop with 2 to 3 left. The last double may go to 1 left, never to 0. Log the reps you really had left.';
+      }
       return 'All sets at the prescribed reps, with 2 or more left in the tank.';
     case 'rdl':
     case 'slot':
+      // v1.8 §34: a cap of 0 means the last set may go to the last rep with good form.
+      if (spec.rirCap === 0) {
+        const effort = config.text?.accessory_effort ?? 'Earlier sets with 1 to 2 left. Last set: as many clean reps as you can, up to the last one with good form.';
+        return `${help ? `${help} ` : ''}${effort}${spec.tempo ? ' Stop as soon as the 3-second lowering speeds up.' : ''}`;
+      }
       return `${help ? `${help} ` : ''}Last set: as many clean reps as you can, stop with ${spec.rirCap ?? 2} left${spec.tempo ? ', or as soon as the 3-second lowering speeds up' : ''}.`;
     case 'explosive':
       return [help, spec.load === null ? 'Work up in small jumps until a rep slows down. Log the heaviest load that stayed fast; the app keeps it from here.' : spec.streakNote].filter(Boolean).join(' ');
@@ -705,7 +719,7 @@ function itemForm(app: App, ctx: Ctx, spec: Spec, opts: FormOpts): HTMLElement[]
         stepper({ label: spec.amrap ? 'Reps, last set' : 'Reps per set', value: v.reps ?? null, step: 1, start: spec.reps ?? 1, integer: true, onChange: (x) => { v.reps = x; refresh(); }, invalid: err !== undefined && v.reps == null }).el,
         choices({ label: 'Reps left in the tank, last set', options: RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => { v.rir = x; refresh(); }, invalid: err !== undefined && v.rir == null }),
       );
-      if (!usesTicks) fields.append(checkbox(spec.mode === 'band_87_90' ? 'An earlier double fell short' : 'An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)));
+      if (!usesTicks) fields.append(checkbox(spec.mode === 'band_87_90' || spec.mode === 'heavy_doubles' ? 'An earlier double fell short' : 'An earlier set fell short', v.missed ?? false, (x) => (v.missed = x)));
       if (pv) {
         fields.append(pv);
         refresh();
@@ -965,6 +979,19 @@ function replaceActions(step: ReplayStep, logs: AnyLog[]): CorrectionAction[] {
 // live session (§4.1) and the next session ready to start (§4.4)
 // ---------------------------------------------------------------------
 
+/** v1.8 §32 (engine A.44): reps left on a test single; 4 or more is not a test. */
+const SINGLE_RIR_OPTIONS = [0, 1, 2, 3].map((v) => ({ value: v, text: String(v) }));
+
+/** v1.8 §32: the load and reps-left fields of a test single, shared by logging and changing it. */
+function singleFields(v: FormValues, start: number, err: boolean): HTMLElement {
+  return h(
+    'div',
+    { class: 'fields' },
+    stepper({ label: 'Single', unit: 'kg', value: v.single ?? null, step: 2.5, start, onChange: (x) => (v.single = x) }).el,
+    choices({ label: 'Reps left after the single', options: SINGLE_RIR_OPTIONS, value: v.rir ?? null, onChange: (x) => (v.rir = x), invalid: err && v.rir == null }),
+  );
+}
+
 function singleCallout(app: App, ctx: Ctx, spec: Spec): HTMLElement | null {
   if (!spec.single || spec.singleTaken) return null;
   const lift = spec.slot as LiftId;
@@ -972,26 +999,121 @@ function singleCallout(app: App, ctx: Ctx, spec: Spec): HTMLElement | null {
   const v = app.forms.get(key) ?? {};
   app.forms.set(key, v);
   const why = spec.single.reason === 'boundary' ? 'a new block starts' : 'your last session disagreed with the training max';
+  const err = app.errors.get(key);
   return h(
     'div',
     { class: 'callout warn' },
-    h('div', {}, h('strong', {}, 'Test single suggested'), ` because ${why}. Work up to one clean rep with 2 left, log it, and today's sets are recomputed from it. Or skip it.`),
-    h('div', { class: 'fields' }, stepper({ label: 'Single', unit: 'kg', value: v.single ?? null, step: 2.5, start: spec.load ?? 0, onChange: (x) => (v.single = x) }).el),
+    h('div', {}, h('strong', {}, 'Test single suggested'), ` because ${why}. ${ctx.config.text?.single ?? 'Work up to one clean rep with 1 to 2 left, then log the weight and how many you had left.'} Or skip it.`),
+    singleFields(v, spec.load ?? 0, err !== undefined),
     h(
       'div',
       { class: 'row actions' },
       h('button', { type: 'button', class: 'primary', onclick: () => {
-        if (v.single == null) {
-          app.errors.set(key, 'Enter the single.');
+        if (v.single == null || v.rir == null) {
+          app.errors.set(key, v.single == null ? 'Enter the single.' : 'Choose how many reps you had left.');
           return ctx.rerender();
         }
         app.forms.delete(key);
-        ctx.logLive([{ kind: 'single', lift, date: spec.date, load: v.single, rir: 2 }], `${displayName(lift, ctx.config)} test single`);
+        app.errors.delete(key);
+        ctx.logLive([{ kind: 'single', lift, date: spec.date, load: v.single, rir: v.rir }], `${displayName(lift, ctx.config)} test single`);
       } }, 'Log single'),
       h('button', { type: 'button', onclick: () => ctx.logLive([{ kind: 'single_skipped', date: spec.date, lift }], 'Test single skipped') }, 'Skip single'),
     ),
-    app.errors.get(key) ? h('p', { class: 'err' }, app.errors.get(key)!) : null,
+    err ? h('p', { class: 'err' }, err) : null,
   );
+}
+
+/**
+ * v1.8 §32: a logged test single, with a Change control. Changing it goes
+ * through a correction (engine A.28), so everything after it is rebuilt.
+ * `step` is the single's own entry; `onDone` reopens the view after a cancel.
+ */
+function singleRecord(app: App, ctx: Ctx, step: ReplayStep, date: IsoDate, key: string, opts: { onDraft?: (actions: CorrectionAction[]) => void } = {}): HTMLElement {
+  const log = step.item.log as SingleLog;
+  const name = displayName(log.lift, ctx.config);
+  const openKey = `single-change|${key}`;
+  const tm = step.explanation.steps.map((x) => x.numbers?.['tm_after']).find((x): x is number => typeof x === 'number');
+  const est = tm !== undefined ? ` Estimated max ${kg1(estimatedMax(tm))} kg.` : '';
+  const when = date === app.today ? "Today's sets are worked out from it." : "That day's sets were worked out from it.";
+  if (!app.open.has(openKey)) {
+    return h(
+      'div',
+      { class: 'callout info single-record' },
+      h('div', {}, h('strong', {}, 'Test single logged: '), `${kg(log.load)} kg with ${log.rir} left.${est} ${when}`),
+      h('div', { class: 'row tight' }, h('button', { type: 'button', class: 'quiet', onclick: () => {
+        app.forms.set(openKey, { single: log.load, rir: log.rir });
+        app.open.add(openKey);
+        ctx.rerender();
+      } }, 'Change single')),
+    );
+  }
+  const v = app.forms.get(openKey) ?? { single: log.load, rir: log.rir };
+  app.forms.set(openKey, v);
+  const err = app.errors.get(openKey);
+  const close = (): void => {
+    app.open.delete(openKey);
+    app.forms.delete(openKey);
+    app.errors.delete(openKey);
+  };
+  const send = (actions: CorrectionAction[]): void => {
+    close();
+    if (opts.onDraft) opts.onDraft(actions);
+    else ctx.previewCorrection(date, actions);
+  };
+  return h(
+    'div',
+    { class: 'callout warn single-record' },
+    h('div', {}, h('strong', {}, `Change the ${name.toLowerCase()} test single`), '. Everything logged after it is worked out again.'),
+    singleFields(v, log.load, err !== undefined),
+    h(
+      'div',
+      { class: 'row actions' },
+      h('button', { type: 'button', class: 'primary', onclick: () => {
+        if (v.single == null || v.rir == null) {
+          app.errors.set(openKey, v.single == null ? 'Enter the single.' : 'Choose how many reps you had left.');
+          return ctx.rerender();
+        }
+        send([{ op: 'replace', target: step.item.origin, entry: { kind: 'single', lift: log.lift, date: log.date, load: v.single, rir: v.rir } }]);
+      } }, 'Check the change'),
+      h('button', { type: 'button', onclick: () => send([{ op: 'remove', target: step.item.origin }]) }, 'Remove single'),
+      h('button', { type: 'button', class: 'quiet', onclick: () => {
+        close();
+        ctx.rerender();
+      } }, 'Cancel'),
+    ),
+    err ? h('p', { class: 'err' }, err) : null,
+  );
+}
+
+/** v1.8 §32: the test single in Edit: a pending draft with Undo, or the record with a Change control. */
+function singleEdit(app: App, ctx: Ctx, date: IsoDate, single: ReplayStep, drafts: Draft[]): HTMLElement {
+  const lift = (single.item.log as SingleLog).lift;
+  const slot = `single|${lift}`;
+  const draft = drafts.find((d) => d.slot === slot);
+  if (draft) {
+    return h(
+      'div',
+      { class: 'callout info single-record' },
+      h('p', { class: 'pending-text' }, draft.after === null ? 'The test single will be removed.' : `The test single will read: ${didText(draft.after, ctx.config)}`),
+      h('div', { class: 'row tight' }, h('button', { type: 'button', class: 'quiet', onclick: () => ctx.dropDraft(slot) }, 'Undo this change')),
+    );
+  }
+  return singleRecord(app, ctx, single, date, `edit|${date}|${lift}`, {
+    onDraft: (actions) => {
+      const a = actions[0]!;
+      ctx.setDraft({ slot, actions, after: a.op === 'remove' ? null : (a as { entry: AnyLog }).entry });
+    },
+  });
+}
+
+/** Whether today's suggested single for a lift was skipped. */
+function singleSkipped(live: LiveView, lift: string): boolean {
+  return live.steps.some((s) => s.item.log.kind === 'single_skipped' && s.item.log.lift === lift);
+}
+
+/** The live session's test single for a lift, if one was logged today. */
+function singleStepFor(live: LiveView, lift: string): ReplayStep | undefined {
+  return live.steps.filter((s) => s.item.log.kind === 'single' && (s.item.log as SingleLog).lift === lift).pop();
 }
 
 /** §14.2: one tickable set row. Ticking updates in place and starts the rest timer. */
@@ -1054,12 +1176,17 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
   const spec = specFromLive(item, date, ctx.config, ctx.boxCm);
   const mine = stepsFor(live, item.slot);
   const last = mine[mine.length - 1];
+  // v1.8 §32: a test single logged today shows with a Change control, before or after the work sets.
+  const sstep = spec.type === 'barbell' && !lo.contrast ? singleStepFor(live, item.slot) : undefined;
+  const srec = sstep ? singleRecord(app, ctx, sstep, date, `${live.key}|${item.slot}`) : null;
 
   if (last && !app.open.has(changeKey)) {
-    return doneItem(app, ctx, name, last, key, () => {
+    const done = doneItem(app, ctx, name, last, key, () => {
       app.open.add(changeKey);
       ctx.rerender();
     });
+    if (srec) done.insertBefore(srec, done.children[1] ?? null);
+    return done;
   }
   if (last) {
     const box = h('div', { class: 'item editing' }, itemHead(name, 'Changing what you logged'));
@@ -1093,7 +1220,7 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
     return box;
   }
 
-  const right = spec.type === 'barbell' && spec.position !== undefined ? `${POSITION_LABEL[spec.position]} · ${POSITION_PCT[spec.position]}` : spec.type === 'barbell' && spec.pct !== undefined ? `${Math.round(spec.pct * 100)}% of max` : undefined;
+  const right = spec.type === 'barbell' && spec.position !== undefined ? `${POSITION_LABEL[spec.position]} · ${POSITION_PCT[spec.position]}` : spec.type === 'barbell' && spec.pct !== undefined ? `${Math.round(spec.pct * 90)}% of max` : undefined;
   const box = h('div', { class: 'item' }, itemHead(name, right));
   const tags = tissueTags(ctx.history, app.today, item.slot, ctx.config);
   if (tags.length) box.append(h('div', { class: 'tags' }, ...tags.map((t) => h('span', { class: 'tag warn' }, t))));
@@ -1101,9 +1228,11 @@ function liveItem(app: App, ctx: Ctx, live: LiveView, item: SessionSlotItem, lo:
     box.append(h('p', { class: 'refer' }, `Ask the coach: ${spec.refer}`));
     return box;
   }
-  const single = spec.type === 'barbell' && !lo.contrast ? singleCallout(app, ctx, spec) : null;
+  // A.17: a skipped single is gone for the day; before v1.8 its callout stayed until the lift was logged.
+  const single = spec.type === 'barbell' && !lo.contrast && !singleSkipped(live, item.slot) ? singleCallout(app, ctx, spec) : null;
   if (single) box.append(single);
-  if (spec.singleTaken) box.append(h('div', { class: 'callout info' }, 'Single logged. Straight sets today from the new training max.'));
+  if (srec) box.append(srec);
+  else if (spec.singleTaken) box.append(h('div', { class: 'callout info' }, 'Single logged. Straight sets today from the new training max.'));
   if (spec.forced) box.append(h('div', { class: 'callout info' }, 'Two sessions down in a row: light day, two sets.'));
   box.append(rxLine(spec));
   if (spec.type === 'slot' && spec.pending) box.append(h('div', { class: 'callout info' }, h('strong', {}, `Go ${spec.pending} ${spec.incText}`), ' this session. Log whatever you lift.'));
@@ -1212,7 +1341,7 @@ function contrastBlock(app: App, ctx: Ctx, live: LiveView, b: SessionBlock, inde
   // A test single comes before the rounds, so its callout sits above the grid.
   const lift = items.find((it) => it.prescription.kind === 'lift');
   const liftLogged = lift ? itemLogged(live, lift.slot) : true;
-  const single = lift && !liftLogged ? singleCallout(app, ctx, specFromLive(lift, live.date, ctx.config)) : null;
+  const single = lift && !liftLogged && !singleSkipped(live, lift.slot) ? singleCallout(app, ctx, specFromLive(lift, live.date, ctx.config)) : null;
   return h(
     'section',
     { class: 'card focus' },
@@ -1520,7 +1649,7 @@ function todayScreen(app: App, ctx: Ctx, appVersion: string): { body: Child[]; b
     h(
       'div',
       { class: 'tms' },
-      ...(['front_squat', 'deadlift'] as LiftId[]).map((id) => h('button', { type: 'button', class: 'chip', onclick: () => ctx.openTm(id) }, h('span', { class: 'lab' }, `${displayName(id, cfg)} max`), h('b', {}, `${app.state.lifts[id].tm.toFixed(1)} kg`))),
+      ...(['front_squat', 'deadlift'] as LiftId[]).map((id) => h('button', { type: 'button', class: 'chip', onclick: () => ctx.openTm(id) }, h('span', { class: 'lab' }, `${displayName(id, cfg)} estimated max`), h('b', {}, `${estimatedMax(app.state.lifts[id].tm).toFixed(1)} kg`))),
     ),
   );
   if (app.banner) body.push(h('div', { class: 'banner', role: 'alert' }, app.banner));
@@ -1614,6 +1743,9 @@ function editRow(app: App, ctx: Ctx, date: IsoDate, row: RecordRow, drafts: Draf
   } else {
     box.append(h('div', { class: 'pvd' }, planned));
   }
+  // v1.8 §32: the day's test single can be changed or removed here too, as its own draft.
+  if (row.single && !locked) box.append(singleEdit(app, ctx, date, row.single, drafts));
+  else if (row.single) box.append(h('p', { class: 'outcome' }, didText(row.single.item.log, ctx.config)));
   if (locked) return box;
   if (draft) {
     box.append(h('p', { class: 'pending-text' }, draft.after === null ? 'This entry will be removed.' : `Will read: ${didText(draft.after, ctx.config)}`));
@@ -1696,7 +1828,7 @@ function alsoLogged(ctx: Ctx, view: RecordView): HTMLElement | null {
     ...view.extras.map((s) => {
       const line = outcomeLine(s, ctx.config);
       const slot = slotOfLog(s.item.log);
-      const title = s.item.log.kind === 'tm_override' && slot ? `${displayName(slot, ctx.config)} max` : slot ? displayName(slot, ctx.config) : didText(s.item.log, ctx.config);
+      const title = s.item.log.kind === 'tm_override' && slot ? `${displayName(slot, ctx.config)} estimated max` : slot ? displayName(slot, ctx.config) : didText(s.item.log, ctx.config);
       return h('div', { class: 'item compact' }, itemHead(title), h('p', { class: line ? 'outcome' : 'did' }, line || didText(s.item.log, ctx.config)), h('div', { class: 'tags' }, ...correctedTags(s)));
     }),
   );
@@ -1912,15 +2044,26 @@ function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
   const cfg = ctx.config;
   const name = displayName(lift, cfg);
   const cur = app.state.lifts[lift].tm;
-  let next = Math.round(cur * 10) / 10;
-  const loadsFor = (tm: number) => (['1', '2', '3'] as const).map((p) => `${POSITION_LABEL[Number(p) as Position].split(' ')[0]!.toLowerCase()} ${kg(Math.ceil((tm * cfg.wave.positions[p].pct) / 2.5 - 0.5) * 2.5)}`).join(' · ');
-  const loads = h('p', { class: 'sub' }, `At this max: ${loadsFor(cur)} kg`);
+  // v1.8 §33: the athlete sees and sets the estimated max; the engine keeps the training max, 90% of it.
+  const curEst = estimatedMax(cur);
+  let next = Math.round(curEst * 10) / 10;
+  const mode = mesocycleOn(cfg, app.today)?.barbell_mode;
+  const round = (x: number) => roundLoad(x, cfg.equipment.barbell_round_kg);
+  const loadsFor = (est: number): string => {
+    const tm = est * 0.9;
+    if (mode === 'heavy_doubles') return `doubles ${kg(round(tm * DOUBLES_PCT))} kg (87% of it)`;
+    return `${(['1', '2', '3'] as const).map((p) => `${POSITION_LABEL[Number(p) as Position].split(' ')[0]!.toLowerCase()} ${kg(round(tm * cfg.wave.positions[p].pct))}`).join(' · ')} kg`;
+  };
+  const tmLine = (est: number) => `Training max ${kg1(est * 0.9)} kg: 90% of the estimated max, the number your loads come from.`;
+  const loads = h('p', { class: 'sub' }, `At this max: ${loadsFor(curEst)}`);
+  const tmText = h('p', { class: 'sub muted' }, tmLine(curEst));
   const msg = h('p', { class: 'sub' });
   const note = h('input', { type: 'text', placeholder: 'Felt strong on the single', 'aria-label': 'Reason, optional' });
-  const s = stepper({ label: 'Set by hand', unit: 'kg', value: next, step: 0.5, start: next, onChange: (x) => {
+  const s = stepper({ label: 'Estimated max', unit: 'kg', value: next, step: 0.5, start: next, onChange: (x) => {
     if (x !== null) {
       next = x;
-      loads.textContent = `At this max: ${loadsFor(x)} kg`;
+      loads.textContent = `At this max: ${loadsFor(x)}`;
+      tmText.textContent = tmLine(x);
       msg.textContent = '';
     }
   } });
@@ -1938,9 +2081,11 @@ function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
     { class: 'sheet-wrap', onclick: (e: Event) => { if (e.target === e.currentTarget) ctx.closeSheet(); } },
     h(
       'div',
-      { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${name} training max` },
-      h('h2', {}, `${name} training max`),
-      h('div', { class: 'rx' }, h('span', { class: 'big' }, cur.toFixed(1)), h('span', { class: 'unit' }, 'kg')),
+      { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': `${name} estimated max` },
+      h('h2', {}, `${name} estimated max`),
+      h('div', { class: 'rx' }, h('span', { class: 'big' }, curEst.toFixed(1)), h('span', { class: 'unit' }, 'kg')),
+      h('p', { class: 'sub' }, 'Your best single worked out from what you log. It is an estimate, not a tested max.'),
+      tmText,
       loads,
       h('p', { class: 'sub' }, `Next session: ${nextFor(app.state, lift, cfg, app.today)}`),
       history.length ? h('h3', {}, 'History') : null,
@@ -1953,11 +2098,11 @@ function tmSheet(app: App, ctx: Ctx, lift: LiftId): HTMLElement {
         'div',
         { class: 'row actions' },
         h('button', { type: 'button', class: 'primary', onclick: () => {
-          if (Math.abs(next - cur) < 0.05) {
+          if (Math.abs(next - curEst) < 0.05) {
             msg.textContent = "That's the current max. Nothing to save.";
             return;
           }
-          ctx.saveTm(lift, next, note.value.trim());
+          ctx.saveTm(lift, next * 0.9, note.value.trim());
         } }, 'Save'),
         h('button', { type: 'button', onclick: ctx.closeSheet }, 'Close'),
       ),

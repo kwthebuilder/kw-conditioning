@@ -43,6 +43,7 @@ import type {
   RoundingVector,
   SessionTemplate,
   SinglesVector,
+  LogSequenceVector,
   Site,
   Slot,
   SlotClass,
@@ -204,7 +205,7 @@ export const SITES = ['patellar', 'gluteal'] as const satisfies readonly Site[];
 export const SLOT_CLASSES = ['A', 'B', 'C', 'D', 'E', 'F'] as const satisfies readonly SlotClass[];
 export const MESOCYCLE_IDS = ['M1', 'M2', 'M3', 'M4', 'TAPER', 'INTENSIVE'] as const satisfies readonly MesocycleId[];
 export const TEMPLATE_IDS = ['M1', 'M2', 'M34', 'TAPER'] as const satisfies readonly TemplateId[];
-export const BARBELL_MODES = ['wave', 'band_87_90', 'primer_2x2_90', 'single_1x2_90'] as const satisfies readonly BarbellMode[];
+export const BARBELL_MODES = ['wave', 'band_87_90', 'primer_2x2_90', 'single_1x2_90', 'heavy_doubles'] as const satisfies readonly BarbellMode[];
 export const CUT_GROUPS = ['prehab', 'pull', 'accessory_hinge_or_single_leg'] as const satisfies readonly CutGroup[];
 export const LIFT_IDS = ['front_squat', 'deadlift'] as const satisfies readonly LiftId[];
 export const POSITIONS = [1, 2, 3] as const satisfies readonly Position[];
@@ -819,6 +820,26 @@ function accessoryVector(v: unknown, path: string): AccessoryVector {
   return out;
 }
 
+/** v1.10: a sequence of logs from a patched initial state, with the lift's expected result. */
+function logSequenceVector(v: unknown, path: string): LogSequenceVector {
+  const o = obj(v, path);
+  const e = req(o, 'expect', path, obj);
+  const pe = `${path}.expect`;
+  const expect: LogSequenceVector['expect'] = { lift: req(e, 'lift', pe, oneOf(LIFT_IDS)) };
+  const tm = optional(e, 'tm', pe, num);
+  if (tm !== undefined) expect.tm = tm;
+  const rule = optional(e, 'rule', pe, str);
+  if (rule !== undefined) expect.rule = rule;
+  const ss = optional(e, 'single_scheduled', pe, bool);
+  if (ss !== undefined) expect.single_scheduled = ss;
+  const refused = optional(e, 'refused', pe, bool);
+  if (refused !== undefined) expect.refused = refused;
+  const out: LogSequenceVector = { name: req(o, 'name', path, str), logs: req(o, 'logs', path, listOf((x, p) => obj(x, p) as unknown)), expect };
+  const patch = optional(o, 'state_patch', path, obj);
+  if (patch !== undefined) out.state_patch = patch;
+  return out;
+}
+
 function singlesVector(v: unknown, path: string): SinglesVector {
   const o = obj(v, path);
   return {
@@ -1132,6 +1153,36 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
       const r = obj(x, p);
       return { name: req(r, 'name', p, str), date: req(r, 'date', p, isoDate), day: req(r, 'day', p, oneOf([1, 2] as const)), pre: req(r, 'pre', p, listOf(str)) };
     })],
+    // v1.10 blocks.
+    ['heavy_doubles', (x, p) => {
+      const r = obj(x, p);
+      return {
+        prescribe: req(r, 'prescribe', p, listOf((y, q) => {
+          const c = obj(y, q);
+          const e = req(c, 'expect', q, obj);
+          const qe = `${q}.expect`;
+          const out: NonNullable<TestVectors['heavy_doubles']>['prescribe'][number] = {
+            name: req(c, 'name', q, str),
+            date: req(c, 'date', q, isoDate),
+            day: req(c, 'day', q, oneOf([1, 2] as const)),
+            lift: req(c, 'lift', q, oneOf(LIFT_IDS)),
+            expect: {
+              mode: req(e, 'mode', qe, barbellMode),
+              load: req(e, 'load', qe, num),
+              sets: req(e, 'sets', qe, int),
+              sets_max: req(e, 'sets_max', qe, (z, w) => nullable(z, w, int)),
+              reps: req(e, 'reps', qe, int),
+              single: req(e, 'single', qe, bool),
+            },
+          };
+          const patch = optional(c, 'state_patch', q, obj);
+          if (patch !== undefined) out.state_patch = patch;
+          return out;
+        })),
+        update: req(r, 'update', p, listOf(logSequenceVector)),
+      };
+    }],
+    ['single_rir', listOf(logSequenceVector)],
   ]);
 }
 

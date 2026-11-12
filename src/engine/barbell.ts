@@ -1,6 +1,7 @@
 /**
  * Class A engine: front squat and conventional deadlift.
- * engine_spec_v1_8.md §2, §10 and Appendix A; vectors in the
+ * engine_spec_v1_8.md §2, §10 and Appendix A (v1.11: A.43 heavy doubles,
+ * A.44 test singles by reps left); vectors in the
  * barbell, rounding, audit_rescale and downward_trigger blocks.
  *
  * Pure: no clock, no randomness, no I/O. Dates come in on the log.
@@ -51,6 +52,14 @@ const BAND_PROMOTE_RIR = 3;
 const BAND_PROMOTE_SESSIONS = 2;
 /** 2.9 M3/M4 and taper. */
 const PRIMER_PCT = 0.9;
+/**
+ * A.43 (v1.11): heavy doubles in Blocks 2 to 4 and the taper load at 87% of
+ * the estimated max, which is the TM ÷ 0.90, so 0.87 ÷ 0.90 of the TM.
+ */
+export const DOUBLES_PCT_OF_MAX = 0.87;
+export const DOUBLES_PCT = DOUBLES_PCT_OF_MAX / 0.9;
+/** A.44 (v1.11): a test single's share of the estimated max, by reps left. 2 left keeps 0.93 (2.1). */
+export const SINGLE_FACTORS: Readonly<Record<number, number>> = { 0: 1, 1: 0.955, 2: 0.93, 3: 0.892 };
 const SINGLE_REASON_TEXT: Record<SingleReason, string> = {
   big_gap: 'Last session disagreed with the TM by 7% or more.',
   boundary: 'First session of a new mesocycle.',
@@ -60,9 +69,23 @@ const SINGLE_REASON_TEXT: Record<SingleReason, string> = {
 // small helpers
 // ---------------------------------------------------------------------
 
-/** 2.1 / 2.8. */
-export function tmFromSingle(single: number): number {
-  return single * SEED_FACTOR;
+/**
+ * 2.1 / 2.8, and A.44 (v1.11): the estimated max is the single divided by its
+ * factor for the reps left, and the TM is 0.90 of that. At 2 left this is the
+ * v1.10 rule to the last bit (0.90 ÷ 0.93 × single), so every older log replays.
+ */
+export function tmFromSingle(single: number, rir = 2): number {
+  if (rir === 2) return single * SEED_FACTOR;
+  const f = SINGLE_FACTORS[rir];
+  if (f === undefined) throw new Error(`a test single is logged with 0 to 3 reps left, not ${rir}`);
+  return single * (0.9 / f);
+}
+
+/** A.44: the factor for a single's reps left, or an error naming the allowed values. */
+export function singleFactor(rir: number): number {
+  const f = SINGLE_FACTORS[rir];
+  if (f === undefined || !Number.isInteger(rir)) throw new Error(`a test single is logged with 0 to 3 reps left, not ${rir}`);
+  return f;
 }
 
 /** 2.3. */
@@ -118,7 +141,8 @@ export function rampSets(dayLoad: number, config: ProgrammeConfig): RampSet[] {
  */
 export function applySingle(ls: LiftState, single: { load: number; rir: number }): ExplanationStep {
   const tmOld = ls.tm;
-  const tmNew = tmFromSingle(single.load);
+  const f = singleFactor(single.rir);
+  const tmNew = tmFromSingle(single.load, single.rir);
   const ratio = tmNew / tmOld;
   const betaText: string[] = [];
   for (const p of ['2', '3'] as const) {
@@ -130,10 +154,11 @@ export function applySingle(ls: LiftState, single: { load: number; rir: number }
   }
   ls.tm = tmNew;
   ls.single_scheduled = false;
+  const est = single.rir === 2 ? '' : ` Estimated max = ${f1(single.load)} ÷ ${f} = ${f1(single.load / f)} kg.`;
   return explainStep(
     'single',
-    `Ramp single ${f1(single.load)} kg at RIR ${single.rir}. TM = 0.90 × ${f1(single.load)} ÷ 0.93 = ${f1(tmNew)} kg (was ${f1(tmOld)}). Every β scales by ${f3(ratio)}${betaText.length ? ': ' + betaText.join(', ') : ''}.`,
-    { single: single.load, tm_before: tmOld, tm_after: tmNew, ratio },
+    `Ramp single ${f1(single.load)} kg at RIR ${single.rir}.${est} TM = 0.90 × ${f1(single.load)} ÷ ${f === 0.93 ? '0.93' : f} = ${f1(tmNew)} kg (was ${f1(tmOld)}). Every β scales by ${f3(ratio)}${betaText.length ? ': ' + betaText.join(', ') : ''}.`,
+    { single: single.load, rir: single.rir, tm_before: tmOld, tm_after: tmNew, ratio },
   );
 }
 
@@ -193,6 +218,7 @@ export function prescribeLift(
   lift: LiftId,
   date: string,
   singleLoad?: number,
+  singleRir = 2,
 ): BarbellPrescription {
   const ls = state.lifts[lift];
   const meso = mesocycleOn(config, date);
@@ -213,9 +239,13 @@ export function prescribeLift(
   const reason = takenToday ? takenToday.reason : singleReason(ls, config, meso);
   const taken = takenToday !== undefined || (reason !== undefined && singleLoad !== undefined);
   const notes: string[] = [];
-  const tm = !takenToday && reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad) : ls.tm;
+  const tm = !takenToday && reason !== undefined && singleLoad !== undefined ? tmFromSingle(singleLoad, singleRir) : ls.tm;
   if (reason && !taken) {
-    notes.push(`${SINGLE_REASON_TEXT[reason]} A ramp single at RIR 2 is suggested before the work sets. Skip it and the session runs as normal.`);
+    notes.push(
+      meso.barbell_mode === 'heavy_doubles'
+        ? `${SINGLE_REASON_TEXT[reason]} A ramp single at 1 to 2 reps left is suggested before the work sets; log the reps left. Skip it and the session runs as normal.`
+        : `${SINGLE_REASON_TEXT[reason]} A ramp single at RIR 2 is suggested before the work sets. Skip it and the session runs as normal.`,
+    );
   }
   const step = roundStep(config);
   const base: Omit<LiftPrescription, 'pct' | 'load' | 'sets' | 'reps' | 'amrap' | 'ramp'> = {
@@ -267,6 +297,11 @@ export function prescribeLift(
       return { ...base, pct: PRIMER_PCT, load: roundLoad(tm * PRIMER_PCT, step), sets: 2, reps: 2, amrap: false, ramp: [] };
     case 'single_1x2_90':
       return { ...base, pct: PRIMER_PCT, load: roundLoad(tm * PRIMER_PCT, step), sets: 1, reps: 2, amrap: false, ramp: [] };
+    case 'heavy_doubles': {
+      // A.43: the template item gives the number of doubles (session.ts); 2 when read on its own.
+      const load = roundLoad(tm * DOUBLES_PCT, step);
+      return { ...base, pct: DOUBLES_PCT, load, sets: 2, reps: 2, amrap: false, ramp: taken ? [] : rampSets(load, config) };
+    }
   }
 }
 
@@ -274,12 +309,20 @@ export function prescribeLift(
 // update
 // ---------------------------------------------------------------------
 
-/** 2.6: any set short, or the last set at prescribed reps below RIR 2. */
+/**
+ * 2.6: any set short, or the last set at prescribed reps below RIR 2.
+ * A.43 (v1.11): on heavy doubles the cut-off is 0 left (technical failure),
+ * so a last double honestly logged with 1 left is not a failure.
+ */
 export function failureSignal(log: BarbellLog): boolean {
   const { reps, rir } = log.last_set;
   const presc = log.prescribed.reps;
-  return log.missed || reps < presc || (reps === presc && rir < 2);
+  const floor = log.mode === 'heavy_doubles' ? DOUBLES_FAILURE_RIR : 2;
+  return log.missed || reps < presc || (reps === presc && rir < floor);
 }
+
+/** A.43: on heavy doubles a last double at prescribed reps is a failure below 1 left. */
+const DOUBLES_FAILURE_RIR = 1;
 
 interface Work {
   rule: BarbellRule;
@@ -446,6 +489,80 @@ function evaluateWave(
   };
 }
 
+/**
+ * A.43 (v1.11): heavy doubles. The last double moves the TM by the Block 1
+ * matched rule without a scale factor: half the gap to 90% of its estimate,
+ * capped at 2.5% a session; 7% or more is the big-gap rule (2.5a). A
+ * failure (0 left, a short double, or a missed one) cuts 2.5%. A double after
+ * a test single the same day moves nothing but a failure (A.16). Past week 22
+ * no upward step is taken (A.10).
+ */
+function evaluateDoubles(ls: LiftState, log: BarbellLog, frozen: boolean, singleDay: boolean): Work {
+  const tm = ls.tm;
+  const { load, reps, rir } = log.last_set;
+  const setText = `Last double ${f1(load)} kg × ${reps} at RIR ${rir} (prescribed ${log.prescribed.sets} × ${log.prescribed.reps}).`;
+  if (failureSignal(log)) {
+    const step = -FAILURE_CUT * tm;
+    const why = log.missed
+      ? 'an earlier double fell short'
+      : reps < log.prescribed.reps
+        ? `${reps} reps is short of the prescribed ${log.prescribed.reps}`
+        : 'prescribed reps reached with 0 left';
+    return {
+      rule: 'failure',
+      step,
+      scheduleSingle: false,
+      steps: [
+        explainStep('failure', `${setText} Failure signal: ${why}. TM drops 2.5% with no damping: ${f1(tm)} − ${f1(-step)} = ${f1(tm + step)} kg.`, {
+          tm_before: tm,
+          cut_pct: FAILURE_CUT,
+          step,
+          tm_after: tm + step,
+        }),
+      ],
+    };
+  }
+  if (singleDay) {
+    return {
+      rule: 'single',
+      step: 0,
+      scheduleSingle: false,
+      steps: [explainStep('straight_sets', `${setText} Doubles after a test single the same day: no update. TM stays ${f1(tm)} kg.`, { tm })],
+    };
+  }
+  const E = rawEstimate(load, reps, rir);
+  const T = TARGET_FRACTION * E;
+  const gap = (T - tm) / tm;
+  const head = `${setText} Estimate E = ${f1(load)} × (1 + (${reps} + ${rir}) / 30) = ${f1(E)}. Target T = 0.90 × E = ${f1(T)}. Gap ${pct(gap)} of TM ${f1(tm)}.`;
+  let rule: BarbellRule;
+  let step: number;
+  let scheduleSingle = false;
+  let text: string;
+  if (Math.abs(gap) >= BIG_GAP) {
+    rule = 'biggap';
+    scheduleSingle = true;
+    step = clamp(T - tm, -BIG_GAP_CAP * tm, BIG_GAP_CAP * tm);
+    text = `Gap is at or past 7%: step = clamp(${signed(T - tm)}, ±5% = ${f1(BIG_GAP_CAP * tm)}) = ${signed(step)} kg, undamped, and a ramp single is suggested for the next session.`;
+  } else {
+    rule = 'matched';
+    step = clamp(GAIN * (T - tm), -MATCHED_CAP * tm, MATCHED_CAP * tm);
+    text = `Half the gap, capped at 2.5%: step = clamp(0.5 × ${signed(T - tm)}, ±2.5% = ${f1(MATCHED_CAP * tm)}) = ${signed(step)} kg.`;
+  }
+  if (frozen && step > 0) {
+    text += ' Week is past the freeze, so the upward step is withheld.';
+    step = 0;
+  }
+  return {
+    rule,
+    step,
+    E,
+    T,
+    gap,
+    scheduleSingle,
+    steps: [explainStep(rule, `${head} ${text} TM ${f1(tm + step)} kg.`, { E, T, gap, step, tm_before: tm, tm_after: tm + step, single_scheduled: scheduleSingle })],
+  };
+}
+
 /** M2, M3/M4 and taper (2.9, A.9): only the failure signal moves the TM. */
 function evaluateHeld(ls: LiftState, log: BarbellLog, frozen: boolean, singleDay: boolean): Work {
   const tm = ls.tm;
@@ -526,7 +643,12 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
   // A.17: a suggested single that was not taken is cleared, not carried.
   const skippedSingle = !singleDay && ls.single_scheduled;
   const tmBefore = ls.tm;
-  const work = log.mode === 'wave' ? evaluateWave(ls, config, log.lift, log, frozen, singleDay) : evaluateHeld(ls, log, frozen, singleDay);
+  const work =
+    log.mode === 'wave'
+      ? evaluateWave(ls, config, log.lift, log, frozen, singleDay)
+      : log.mode === 'heavy_doubles'
+        ? evaluateDoubles(ls, log, frozen, singleDay)
+        : evaluateHeld(ls, log, frozen, singleDay);
   delete ls.single_taken;
   ls.tm = tmBefore + work.step;
   steps.push(...work.steps);
@@ -570,6 +692,7 @@ export function updateLift(state: State, config: ProgrammeConfig, log: BarbellLo
     }
     if (frozen) steps.push(explainStep('freeze', `Week ${week} is past week ${config.freeze.no_upward_steps_after_week}: no upward steps.`, { week }));
   }
+  if (log.mode === 'heavy_doubles' && frozen) steps.push(explainStep('freeze', `Week ${week} is past week ${config.freeze.no_upward_steps_after_week}: no upward steps.`, { week }));
 
   ls.sessions_logged += 1;
   ls.last_logged = log.date;

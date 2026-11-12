@@ -1,12 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { PROGRAMME_CONFIG } from '../src/config/load';
 import type { State } from '../src/config/types';
+import { parseProgrammeConfig } from '../src/config/validate';
+import configV19 from '../spec/programme_config_v1_9.json';
 import type { BarbellLog } from '../src/engine';
 import { prescribeLift, roundLoad, updateLift } from '../src/engine';
 import { stateWith } from './helpers';
 
 const m = (id: string) => PROGRAMME_CONFIG.mesocycles.find((x) => x.id === id)!;
 const step = PROGRAMME_CONFIG.equipment.barbell_round_kg;
+/**
+ * The band, primer and single modes are what config v1.9 prescribed in
+ * Blocks 2 to 4 and the taper. Config v1.10 prescribes heavy doubles there
+ * (A.43, tests/release34.test.ts); these modes stay so every older log
+ * replays by its own rule, so they are tested against the config that used them.
+ */
+const OLD = parseProgrammeConfig(configV19 as unknown);
 
 /** State that has already logged in the mesocycle, so no boundary single fires. */
 function inMeso(id: 'M2' | 'M3' | 'M4' | 'TAPER', tm: number): { s: State; date: string } {
@@ -23,7 +32,7 @@ function heldLog(date: string, mode: BarbellLog['mode'], load: number, reps: num
 describe('M2 band_87_90 (2.9, A.9)', () => {
   it('starts at 87%, doubles, no rep-out', () => {
     const { s, date } = inMeso('M2', 100);
-    const p = prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', date);
+    const p = prescribeLift(s, OLD, 'front_squat', date);
     expect(p).toMatchObject({ kind: 'lift', mode: 'band_87_90', pct: 0.87, reps: 2, amrap: false, load: roundLoad(87, step) });
   });
   it('moves to 90% after two consecutive sessions at RIR 3 or more, and the TM does not move', () => {
@@ -33,7 +42,7 @@ describe('M2 band_87_90 (2.9, A.9)', () => {
     r = updateLift(r.state, PROGRAMME_CONFIG, heldLog(date, 'band_87_90', 87.5, 2, 4));
     expect(r.outcome.band_pct).toBe(0.9);
     expect(r.state.lifts.front_squat.tm).toBe(100);
-    expect(prescribeLift(r.state, PROGRAMME_CONFIG, 'front_squat', date)).toMatchObject({ pct: 0.9 });
+    expect(prescribeLift(r.state, OLD, 'front_squat', date)).toMatchObject({ pct: 0.9 });
   });
   it('a RIR 2 session breaks the streak', () => {
     const { s, date } = inMeso('M2', 100);
@@ -56,7 +65,7 @@ describe('M3/M4 primer and taper (2.9)', () => {
   it('M3 and M4: 2 × 2 at 90%; taper: 1 × 2 at 90%', () => {
     for (const [id, sets] of [['M3', 2], ['M4', 2], ['TAPER', 1]] as const) {
       const { s, date } = inMeso(id, 100);
-      const p = prescribeLift(s, PROGRAMME_CONFIG, 'front_squat', date);
+      const p = prescribeLift(s, OLD, 'front_squat', date);
       expect(p, id).toMatchObject({ kind: 'lift', pct: 0.9, sets, reps: 2, amrap: false, load: 90 });
     }
   });

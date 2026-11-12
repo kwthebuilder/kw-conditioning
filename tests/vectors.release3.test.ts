@@ -60,8 +60,8 @@ function check(s: State, e: VectorExpect & { accessory_unset?: string[] }): void
 
 describe('pinned configs (vectors v1.7 `pinned`)', () => {
   it('names the config each template-dependent block is read against', () => {
-    expect(V.pinned).toMatchObject({ golden_sessions: 'programme_config_v1_3.json', 'session.ladder': 'programme_config_v1_5.json', rounds: 'programme_config_v1_5.json', default: 'programme_config_v1_9.json' });
-    expect(cfg.version).toBe('1.9');
+    expect(V.pinned).toMatchObject({ golden_sessions: 'programme_config_v1_3.json', 'session.ladder': 'programme_config_v1_5.json', rounds: 'programme_config_v1_5.json', default: 'programme_config_v1_10.json' });
+    expect(cfg.version).toBe('1.10');
   });
 });
 
