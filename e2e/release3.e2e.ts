@@ -8,7 +8,8 @@ import { expect, test } from '@playwright/test';
 import { ATHLETE_SHAPED, entries, item, logJumpTest, open, openBlock, stored } from './helpers';
 
 const MON_19_OCT = '2026-10-19T18:00:00+08:00';
-const NOTE = 'Running long? First drop the upper pair to 2 rounds, then swap the split squat for the hack squat. Never cut the explosive work or the abduction.';
+// Config v1.11 (rationale v3.8): the Day 2 line drops the carry and row first, since Block 2 already runs the upper pair at 2 rounds.
+const NOTE = 'Running long? First drop the carry and row. Then swap the split squat for the hack squat. Never cut the explosive work, the deadlift or the abduction.';
 
 test('the session-start tendon question: one tap for No, never blocks logging', async ({ page }) => {
   await open(page, MON_19_OCT, ATHLETE_SHAPED);
@@ -43,7 +44,7 @@ test('the session-start question on Day 2 asks site and score only after Yes', a
 test('the running-long note and the minutes line show on every session', async ({ page }) => {
   await open(page, MON_19_OCT, ATHLETE_SHAPED);
   await expect(page.locator('.next-head h2')).toContainText('Day 1 · about 70 min, 80 max');
-  // Config v1.8 (ui §28): Day 1 has its own running-long line; Day 2 keeps the v1.6 line.
+  // Config v1.8 (ui §28): Day 1 has its own running-long line; Day 2 has its own from config v1.11.
   await expect(page.locator('.session-note')).toContainText('Running long? First drop the upper pair to 2 rounds, then leave it out.');
   await page.getByRole('button', { name: 'Day 2', exact: true }).click();
   await expect(page.locator('.next-head h2')).toContainText('Day 2 · about 63 min, 80 max');

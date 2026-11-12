@@ -500,3 +500,11 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** Athlete approved 10 and 12 Nov 2026: front squat and deadlift, earlier doubles 2 to 3 left, the last may go to 1 left, not 0; accessories, earlier sets 1 to 2 left, the last may go to technical failure (`rir_cap` 0 on every class B and C slot, including the split squat, which had 3); jumps and explosive lifts unchanged; test singles 1 to 2 left with the number logged; always log the reps actually left.
 - **Spec revision:** programme_config_v1_10.json `slots`, `text`; ui_spec_v1_8.md §34
+
+## Q63 — Block 2 Day 2 did not fit the 80-minute cap
+- **Raised:** 2026-11-12, athlete during the first Block 2 Day 2: about 50 minutes door to door before the deadlift, with the abduction and carry skipped
+- **Where:** programme_config_v1_10.json `templates.M2.day2`, `text.session_note_day2`
+- **Question:** The 68-minute estimate left out ramp-up sets and setup. Priced with them, Day 2 ran about 76 minutes door to door, about 81 on test-single days.
+- **Blocked:** Nothing.
+- **Ruling:** Athlete approved 12 Nov 2026 (design rationale v3.8 section 1): landmine clean and push press 2 × 3 per side, split squat 2 × 8 per side, seated abduction 2 sets, row 2 × 10, overhead carry 1 per side; the jump shrug stays its own item before the deadlift; target about 71 minutes. Day 2 running-long line: drop the carry and row first, then swap the split squat for the hack squat. Day 1, Blocks 3 and 4, the taper, slots and engine rules unchanged. The programme owner authorised the new versioned spec files for this release; no existing spec file was edited.
+- **Spec revision:** programme_config_v1_11.json; engine_test_vectors_v1_11.json `templates` (Block 2 Day 2) and `audit_trims` (first Day 2 of Block 2)
