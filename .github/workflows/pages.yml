@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright 1.56 cannot install a browser on.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
