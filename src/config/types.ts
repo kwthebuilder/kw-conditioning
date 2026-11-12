@@ -15,7 +15,7 @@ export type Site = 'patellar' | 'gluteal';
 export type SlotClass = 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 export type MesocycleId = 'M1' | 'M2' | 'M3' | 'M4' | 'TAPER' | 'INTENSIVE';
 export type TemplateId = 'M1' | 'M2' | 'M34' | 'TAPER';
-export type BarbellMode = 'wave' | 'band_87_90' | 'primer_2x2_90' | 'single_1x2_90';
+export type BarbellMode = 'wave' | 'band_87_90' | 'primer_2x2_90' | 'single_1x2_90' | 'heavy_doubles';
 export type CutGroup = 'prehab' | 'pull' | 'accessory_hinge_or_single_leg';
 export type LiftId = 'front_squat' | 'deadlift';
 /** Slot ids are open strings; the loader cross-checks references. */
@@ -527,6 +527,28 @@ export interface TestVectors {
   rir_step?: RirStepVector[];
   /** v1.7 (A.41): pre-session items by day on a both_days template. */
   taper_pre?: { name: string; date: IsoDate; day: 1 | 2; pre: string[] }[];
+  /** v1.10 (A.43): heavy doubles, prescribed and updated. */
+  heavy_doubles?: { prescribe: DoublesPrescribeVector[]; update: LogSequenceVector[] };
+  /** v1.10 (A.44): a test single read by its reps left. */
+  single_rir?: LogSequenceVector[];
+}
+
+/** v1.10: logs passed to update() in order from a patched initial state. */
+export interface LogSequenceVector {
+  name: string;
+  state_patch?: StatePatch;
+  /** AnyLog objects; the engine, not the loader, checks them. */
+  logs: unknown[];
+  expect: { lift: LiftId; tm?: number; rule?: string; single_scheduled?: boolean; refused?: boolean };
+}
+
+export interface DoublesPrescribeVector {
+  name: string;
+  state_patch?: StatePatch;
+  date: IsoDate;
+  day: 1 | 2;
+  lift: LiftId;
+  expect: { mode: BarbellMode; load: number; sets: number; sets_max: number | null; reps: number; single: boolean };
 }
 
 export interface RirStepVector {

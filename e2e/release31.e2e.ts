@@ -29,7 +29,7 @@ test('§23 the Plan card reads Block 2 in its own terms', async ({ page }) => {
   await open(page, '2026-11-09T18:00:00+08:00', ATHLETE_SHAPED);
   await page.locator('details.plan summary').click();
   const line = page.locator('.plan-now');
-  await expect(line).toContainText('Next front squat: test single, then 3 to 4 × 2 at');
+  await expect(line).toContainText('Next front squat: test single, then 3 × 2 at'); // config v1.10: 3 heavy doubles
   await expect(line).not.toContainText('heavy week');
 });
 

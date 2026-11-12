@@ -92,7 +92,7 @@ test('a past session is a record; a correction is previewed and kept', async ({ 
 
 test('an unchanged training max saves nothing', async ({ page }) => {
   await open(page, '2026-09-21T18:00:00+08:00');
-  await page.getByRole('button', { name: /Front squat max/ }).click();
+  await page.getByRole('button', { name: /Front squat estimated max/ }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText("That's the current max. Nothing to save.")).toBeVisible();
   expect(await entries(page, 'tm_override')).toHaveLength(0);

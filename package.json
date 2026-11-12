@@ -1,6 +1,6 @@
 {
   "name": "acro-base-sc",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "private": true,
   "type": "module",
   "description": "Acro Base S&C training app: phone-first, offline, two-day strength programme.",

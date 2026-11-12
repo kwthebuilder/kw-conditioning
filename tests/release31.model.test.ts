@@ -25,7 +25,8 @@ describe('§23 the Plan card line for each lift', () => {
   });
   it('reads the test single and the doubles on entering Block 2, never "heavy week"', () => {
     const t = planLiftText(INITIAL_STATE, 'front_squat', cfg, '2026-11-09');
-    expect(t).toMatch(/^test single, then 3 to 4 × 2 at \d+(\.5)? kg$/);
+    // Config v1.10 (release 3.4): Block 2 is 3 heavy doubles, no longer 3 to 4.
+    expect(t).toMatch(/^test single, then 3 × 2 at \d+(\.5)? kg$/);
     expect(t).not.toMatch(/week/);
   });
   it('reads 2 × 2 in Blocks 3 and 4, and 1 × 2 in the taper', () => {

@@ -51,7 +51,8 @@ test('unticked earlier sets ask; the live preview shows the change first', async
   await expect(page.locator('.restbar')).toContainText('Rest 0:0');
   for (let i = 0; i < 6; i++) await fs.getByRole('button', { name: 'Reps, last set: more' }).click(); // 3 to 8
   await fs.getByRole('radio', { name: '2' }).click();
-  await expect(fs.locator('.preview')).toContainText('If you log this: Max 92.0 → 93.0 kg (+1.0).');
+  // ui_spec v1.8 §33: the estimated max (TM ÷ 0.90) is the number shown.
+  await expect(fs.locator('.preview')).toContainText('If you log this: Estimated max 102.2 → 103.3 kg (+1.1).');
   await fs.getByRole('button', { name: 'Log', exact: true }).click();
   await expect(fs.getByText("Set 2 isn't ticked.")).toBeVisible();
   await fs.getByRole('button', { name: 'One fell short' }).click();
@@ -93,7 +94,7 @@ test('finish lists what is not logged; skipping the rest finishes with a summary
   expect(s.log.filter((e) => e.kind === 'session_end').length).toBe(1);
 });
 
-test('Block 2 doubles: plain sets, 3 to 4; the heavy lift logs the sets ticked (config v1.6: no contrast rounds)', async ({ page }) => {
+test('Block 2 doubles: plain sets, 3 heavy doubles (config v1.10); no contrast rounds', async ({ page }) => {
   await open(page, '2026-11-12T18:00:00+08:00');
   await page.getByRole('button', { name: 'Day 2', exact: true }).click();
   await expect(page.locator('.grid-row')).toHaveCount(0);
@@ -105,12 +106,13 @@ test('Block 2 doubles: plain sets, 3 to 4; the heavy lift logs the sets ticked (
   await dl.getByRole('button', { name: 'Skip single' }).click();
   // Skipping the single starts the session; the explosive block opens first, so open the lift again.
   await openBlock(page, 'Deadlift');
-  for (const n of [1, 2, 3]) await item(page, 'Deadlift').getByRole('button', { name: new RegExp(`^Set ${n}`) }).click();
+  await expect(item(page, 'Deadlift').getByRole('button', { name: /^Set 3/ })).toHaveCount(0);
+  for (const n of [1, 2]) await item(page, 'Deadlift').getByRole('button', { name: new RegExp(`^Set ${n}`) }).click();
   await item(page, 'Deadlift').getByRole('radio', { name: '3' }).click();
   await item(page, 'Deadlift').getByRole('button', { name: 'Log', exact: true }).click();
   const s = await stored(page);
   const last = s.log.filter((e) => e.kind === 'barbell').pop()!;
-  expect((last.log.prescribed as { sets: number }).sets).toBe(4);
+  expect(last.log).toMatchObject({ mode: 'heavy_doubles', prescribed: { sets: 3, reps: 2 } });
 });
 
 test('the flare protocol shows when a session-start score is above 3 (ui_spec_v1_4.md §20)', async ({ page }) => {

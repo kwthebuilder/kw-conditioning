@@ -158,6 +158,8 @@ export function prescribe(state: State, config: ProgrammeConfig, date: IsoDate, 
         if (Array.isArray(b.rounds) && b.rounds[1] !== b.rounds[0]) tf.sets_max = b.rounds[1];
       }
       const built = buildItem(state, config, slotId, date, tf);
+      // A.43 (v1.11): a main-lift item that gives its own sets (heavy doubles: 3, 2 or 1) sets the prescription's.
+      if (it.sets !== undefined && built.prescription.kind === 'lift') built.prescription.sets = it.sets;
       if (b.rounds !== undefined && it.sets === undefined && built.prescription.kind === 'lift') {
         built.prescription.sets = tf.sets!;
         if (tf.sets_max !== undefined) built.prescription.sets_max = tf.sets_max;

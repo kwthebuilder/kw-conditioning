@@ -46,7 +46,7 @@ describe('record of a past date (ui_spec §4.2, Q17)', () => {
     expect(row.status).toBe('done');
     expect(didText(row.step!.item.log, cfg)).toBe('80 kg · last set 7, 1 left');
     // 7 reps against 4 prescribed: more than 2 over, so the light-week line is added (ui_spec §14.7).
-    expect(outcomeLine(row.step!, cfg)).toBe("Light week: max unchanged at 93.0 kg. Light weeks are for recovery; extra reps here don't count towards your max.");
+    expect(outcomeLine(row.step!, cfg)).toBe("Light week: estimated max unchanged at 103.3 kg. Light weeks are for recovery; extra reps here don't count towards your max.");
     // The next Day 1 is a medium week; never shown under 5 Oct.
     const next = prescribe(state, cfg, '2026-10-12', 1) as Session;
     const p = planSnapshot(next, cfg).items.find((i) => i.slot === 'front_squat')!;
@@ -84,7 +84,7 @@ describe('outcome lines (ui_spec §12)', () => {
     const state = apply(LOGS.slice(0, 2));
     const h = buildHistory(INITIAL_STATE, state, cfg);
     const step = h.byDate.get('2026-09-21')!.find((s) => s.item.log.kind === 'barbell')!;
-    expect(outcomeLine(step, cfg)).toBe('Max 92.0 → 93.0 kg (+1.0).');
+    expect(outcomeLine(step, cfg)).toBe('Estimated max 102.2 → 103.3 kg (+1.1).' /* ui_spec v1.8 §33: the estimated max, TM ÷ 0.90 */);
   });
   it('accessory streak toward the next load', () => {
     const state = apply([{ kind: 'slot', slot: 'pull_up', date: '2026-09-21', load: 0, sets_done: 3, last_set: { reps: 7, rir: 2 } }]);
