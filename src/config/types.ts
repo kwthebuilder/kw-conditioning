@@ -248,6 +248,21 @@ export interface SlotItem {
   note?: string;
   /** v1.6: reps by programme-week span ("20-22"), overriding `reps` in those weeks. */
   reps_by_week?: Record<string, number>;
+  /** v1.12 (A.46): what changes on the listed programme weeks (the "B weeks"). */
+  alternate?: AlternateWeeks;
+}
+
+/** v1.12 (A.46): an item's B-week version. Applies only on `weeks`. */
+export interface AlternateWeeks {
+  weeks: number[];
+  /** Replaces the item's reps; on a main lift, the prescription's reps. */
+  reps?: number;
+  /** Main lifts only: the load is TM × the mode's percentage × this factor, then rounded. */
+  load_factor?: number;
+  /** Replaces the item's variant. */
+  variant?: string;
+  /** Replaces the item's note. */
+  note?: string;
 }
 
 /** A string item is a named warm-up block; an object item is a slot. */
@@ -531,6 +546,17 @@ export interface TestVectors {
   heavy_doubles?: { prescribe: DoublesPrescribeVector[]; update: LogSequenceVector[] };
   /** v1.10 (A.44): a test single read by its reps left. */
   single_rir?: LogSequenceVector[];
+  /** v1.12 (A.46): B-week versions of Block 2 items. */
+  alternate_weeks?: { prescribe: DoublesPrescribeVector[]; items: AlternateItemVector[]; update: LogSequenceVector[] };
+}
+
+/** v1.12 (A.46): one session item on a date; null means the field is absent. */
+export interface AlternateItemVector {
+  name: string;
+  date: IsoDate;
+  day: 1 | 2;
+  slot: SlotId;
+  expect: { reps: number | null; variant: string | null; note_prefix: string | null; alternate: boolean };
 }
 
 /** v1.10: logs passed to update() in order from a patched initial state. */
