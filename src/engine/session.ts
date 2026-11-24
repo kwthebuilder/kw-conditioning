@@ -7,12 +7,13 @@
 import type { IsoDate, LiftId, Mesocycle, ProgrammeConfig, SessionTemplate, SlotId, SlotItem, State, Template } from '../config/types';
 import { prescribeAccessory } from './accessory';
 import { isCarrySlot, prescribeExplosive } from './explosive';
-import { opensBlock, prescribeLift } from './barbell';
+import { opensBlock, prescribeLift, rampSets } from './barbell';
+import { roundLoad } from './rounding';
 import { mesocycleOn, programmeWeek } from './calendar';
 import { prescribeFixed, weekSpanValue } from './fixed';
 import { prescribeRdl } from './rdl';
 import { prescribeTempo } from './tempo';
-import type { Session, SessionBlock, SessionDay, SessionResult, SessionSlotItem, SessionTemplateFields } from './types';
+import type { LiftPrescription, Session, SessionBlock, SessionDay, SessionResult, SessionSlotItem, SessionTemplateFields } from './types';
 
 function later(a: IsoDate | undefined, b: IsoDate | undefined): IsoDate | undefined {
   if (a === undefined) return b;
@@ -69,7 +70,38 @@ function templateFields(it: SlotItem, week: number, path: string): SessionTempla
   if (it.variant !== undefined) tf.variant = it.variant;
   if (it.contacts !== undefined) tf.contacts = it.contacts;
   if (it.inside_rest !== undefined) tf.inside_rest = it.inside_rest;
+  // v1.12 (A.46): on the item's B weeks, its alternate replaces reps, variant and note.
+  const alt = alternateOn(it, week);
+  if (alt) {
+    if (alt.reps !== undefined) tf.reps = alt.reps;
+    if (alt.variant !== undefined) tf.variant = alt.variant;
+    if (alt.note !== undefined) tf.note = alt.note;
+    tf.alternate = true;
+  }
   return tf;
+}
+
+/** A.46: the item's alternate when the programme week is one of its B weeks. */
+export function alternateOn(it: SlotItem, week: number): NonNullable<SlotItem['alternate']> | undefined {
+  return it.alternate && it.alternate.weeks.includes(week) ? it.alternate : undefined;
+}
+
+/**
+ * A.46: a main lift's B-week version. Reps come from the alternate; the
+ * load is the TM × the mode's percentage × load_factor, rounded by the one
+ * barbell rule, and the warm-up ramp follows the new load (none after a
+ * test single, as before). Nothing in update() changes: the log carries the
+ * prescribed reps, and the last set is read as on any other day.
+ */
+function applyLiftAlternate(p: LiftPrescription, alt: NonNullable<SlotItem['alternate']>, config: ProgrammeConfig): void {
+  if (alt.reps !== undefined) p.reps = alt.reps;
+  if (alt.load_factor !== undefined) {
+    const step = config.equipment.barbell_round_kg;
+    p.pct = p.pct * alt.load_factor;
+    p.load = roundLoad(p.tm * p.pct, step);
+    if (p.ramp.length) p.ramp = rampSets(p.load, config);
+  }
+  p.notes.push(`B week: ${p.sets} × ${p.reps} at ${(p.pct * 90).toFixed(1)}% of the estimated max (load factor ${alt.load_factor ?? 1}).`);
 }
 
 function buildItem(state: State, config: ProgrammeConfig, slotId: SlotId, date: IsoDate, template: SessionTemplateFields): SessionSlotItem {
@@ -160,6 +192,8 @@ export function prescribe(state: State, config: ProgrammeConfig, date: IsoDate, 
       const built = buildItem(state, config, slotId, date, tf);
       // A.43 (v1.11): a main-lift item that gives its own sets (heavy doubles: 3, 2 or 1) sets the prescription's.
       if (it.sets !== undefined && built.prescription.kind === 'lift') built.prescription.sets = it.sets;
+      const alt = slotId === it.slot ? alternateOn(it, week) : undefined;
+      if (alt && built.prescription.kind === 'lift') applyLiftAlternate(built.prescription, alt, config);
       if (b.rounds !== undefined && it.sets === undefined && built.prescription.kind === 'lift') {
         built.prescription.sets = tf.sets!;
         if (tf.sets_max !== undefined) built.prescription.sets_max = tf.sets_max;

@@ -336,6 +336,8 @@ export interface SessionTemplateFields {
   note?: string;
   /** A.34: the sets the template gave before an audit-day cap. */
   trimmed_from?: number;
+  /** v1.12 (A.46): this is the item's B-week version. */
+  alternate?: true;
 }
 
 export interface SessionSlotItem {

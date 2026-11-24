@@ -508,3 +508,11 @@ Format:
 - **Blocked:** Nothing.
 - **Ruling:** Athlete approved 12 Nov 2026 (design rationale v3.8 section 1): landmine clean and push press 2 × 3 per side, split squat 2 × 8 per side, seated abduction 2 sets, row 2 × 10, overhead carry 1 per side; the jump shrug stays its own item before the deadlift; target about 71 minutes. Day 2 running-long line: drop the carry and row first, then swap the split squat for the hack squat. Day 1, Blocks 3 and 4, the taper, slots and engine rules unchanged. The programme owner authorised the new versioned spec files for this release; no existing spec file was edited.
 - **Spec revision:** programme_config_v1_11.json; engine_test_vectors_v1_11.json `templates` (Block 2 Day 2) and `audit_trims` (first Day 2 of Block 2)
+
+## Q64 — B weeks in Block 2
+- **Raised:** 2026-11-24, athlete: "week to week there's zero variations in sets, reps, exercises … boring as hell for the brain"; asked for variation within the block without losing training effect
+- **Where:** programme_config_v1_11.json `templates.M2`, `slots.cs_row`, `text`
+- **Question:** How can Block 2 vary from week to week without touching the tracked lifts, the tests or the progression rules?
+- **Blocked:** Nothing.
+- **Ruling:** Athlete approved 24 Nov 2026 (design rationale v3.9): weeks 12 and 14 are B weeks. Front squat and deadlift 3 triples at the doubles percentage × 0.9722 (same effort by the estimate formula), last set 1 to 2 left with no rep-out; weighted pull-up with a neutral grip in the same slot; overhead carry as the front-rack carry and row as the split-stance one-arm cable row, both logged as swaps; the row gains that swap. The split squat, seated abduction, Romanian deadlift, push press, jumps and explosive lifts are unchanged. `update` unchanged. The programme owner authorised the new versioned spec files for this release; no existing spec file was edited.
+- **Spec revision:** engine_spec_v1_12.md A.46; programme_config_v1_12.json; engine_test_vectors_v1_12.json `alternate_weeks`; ui_spec_v1_9.md §35

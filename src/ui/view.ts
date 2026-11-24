@@ -321,6 +321,8 @@ interface Spec {
   note?: string;
   /** v1.4: sets cut on the test-single day (engine A.34). */
   trimmedFrom?: number;
+  /** v1.12 (engine A.46): the item's B-week version. */
+  alternate?: boolean;
 }
 
 const LIFT_IDS = new Set(['front_squat', 'deadlift']);
@@ -336,6 +338,7 @@ function specFromLive(item: SessionSlotItem, date: IsoDate, config: ProgrammeCon
   if (t.inside_rest) base.inside_rest = true;
   if (t.note !== undefined) base.note = t.note;
   if (t.trimmed_from !== undefined) base.trimmedFrom = t.trimmed_from;
+  if (t.alternate) base.alternate = true;
   const landings = config.slots[item.slot]?.landings;
   if (landings) base.landings = [landings[0], landings[1]];
   if (item.log_kind === 'phase_test') return { ...base, type: 'phase_test' };
@@ -516,6 +519,8 @@ function instruction(spec: Spec, config: ProgrammeConfig): string {
       if (spec.position === 1) return lightWeekText(config, spec.sets ?? 3, spec.reps ?? 4);
       // v1.8 §34 (rationale v3.7): the heavy-doubles effort rule.
       if (spec.mode === 'heavy_doubles') {
+        // v1.12 (engine A.46): a B-week main lift reads the triples line.
+        if (spec.alternate && config.text?.triples) return config.text.triples;
         return (spec.sets ?? 0) <= 1
           ? config.text?.double_one ?? 'One double with 2 to 3 left. Log the reps you really had left.'
           : config.text?.doubles ?? 'Earlier doubles: stop with 2 to 3 left. The last double may go to 1 left, never to 0. Log the reps you really had left.';

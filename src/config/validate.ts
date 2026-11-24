@@ -11,6 +11,7 @@
 import type {
   AccessoryState,
   AmendVector,
+  DoublesPrescribeVector,
   FirstLoadVector,
   RepOverrideVector,
   SessionCaseVector,
@@ -48,6 +49,7 @@ import type {
   Slot,
   SlotClass,
   SlotItem,
+  AlternateWeeks,
   State,
   Template,
   TemplateBlock,
@@ -474,6 +476,30 @@ function weekSpans(v: unknown, path: string): Record<string, number> {
   return m;
 }
 
+/** v1.12 (A.46): an item's B-week version. */
+function alternateWeeks(v: unknown, path: string): AlternateWeeks {
+  const o = obj(v, path);
+  const weeks = req(o, 'weeks', path, listOf(int));
+  if (weeks.length === 0) fail(`${path}.weeks`, 'expected at least one programme week');
+  const out: AlternateWeeks = { weeks };
+  const reps = optional(o, 'reps', path, int);
+  if (reps !== undefined) {
+    if (reps < 1) fail(`${path}.reps`, 'expected a whole number of at least 1');
+    out.reps = reps;
+  }
+  const lf = optional(o, 'load_factor', path, num);
+  if (lf !== undefined) {
+    if (!(lf > 0 && lf <= 1)) fail(`${path}.load_factor`, 'expected a number above 0 and at most 1');
+    out.load_factor = lf;
+  }
+  const variant = optional(o, 'variant', path, str);
+  if (variant !== undefined) out.variant = variant;
+  const note = optional(o, 'note', path, str);
+  if (note !== undefined) out.note = note;
+  for (const k of Object.keys(o)) if (!['weeks', 'reps', 'load_factor', 'variant', 'note'].includes(k)) fail(`${path}.${k}`, 'unknown alternate field');
+  return out;
+}
+
 function slotItem(v: unknown, path: string): SlotItem {
   const o = obj(v, path);
   const item: SlotItem = { slot: req(o, 'slot', path, str) };
@@ -493,7 +519,8 @@ function slotItem(v: unknown, path: string): SlotItem {
   opt('day', oneOf([1, 2] as const));
   opt('note', str);
   opt('reps_by_week', weekSpans);
-  const known = new Set(['slot', 'sets', 'reps', 'secs', 'per_side', 'mode', 'variant', 'inside_rest', 'until_week', 'contacts', 'day', 'note', 'reps_by_week']);
+  opt('alternate', alternateWeeks);
+  const known = new Set(['slot', 'sets', 'reps', 'secs', 'per_side', 'mode', 'variant', 'inside_rest', 'until_week', 'contacts', 'day', 'note', 'reps_by_week', 'alternate']);
   for (const k of Object.keys(o)) if (!known.has(k)) fail(`${path}.${k}`, 'unknown template item field');
   return item;
 }
@@ -1157,33 +1184,61 @@ export function parseTestVectors(input: unknown, path = 'vectors'): TestVectors 
     ['heavy_doubles', (x, p) => {
       const r = obj(x, p);
       return {
-        prescribe: req(r, 'prescribe', p, listOf((y, q) => {
-          const c = obj(y, q);
-          const e = req(c, 'expect', q, obj);
-          const qe = `${q}.expect`;
-          const out: NonNullable<TestVectors['heavy_doubles']>['prescribe'][number] = {
-            name: req(c, 'name', q, str),
-            date: req(c, 'date', q, isoDate),
-            day: req(c, 'day', q, oneOf([1, 2] as const)),
-            lift: req(c, 'lift', q, oneOf(LIFT_IDS)),
-            expect: {
-              mode: req(e, 'mode', qe, barbellMode),
-              load: req(e, 'load', qe, num),
-              sets: req(e, 'sets', qe, int),
-              sets_max: req(e, 'sets_max', qe, (z, w) => nullable(z, w, int)),
-              reps: req(e, 'reps', qe, int),
-              single: req(e, 'single', qe, bool),
-            },
-          };
-          const patch = optional(c, 'state_patch', q, obj);
-          if (patch !== undefined) out.state_patch = patch;
-          return out;
-        })),
+        prescribe: req(r, 'prescribe', p, listOf(doublesPrescribeVector)),
         update: req(r, 'update', p, listOf(logSequenceVector)),
       };
     }],
     ['single_rir', listOf(logSequenceVector)],
+    // v1.12 block.
+    ['alternate_weeks', (x, p) => {
+      const r = obj(x, p);
+      return {
+        prescribe: req(r, 'prescribe', p, listOf(doublesPrescribeVector)),
+        items: req(r, 'items', p, listOf((y, q) => {
+          const c = obj(y, q);
+          const e = req(c, 'expect', q, obj);
+          const qe = `${q}.expect`;
+          return {
+            name: req(c, 'name', q, str),
+            date: req(c, 'date', q, isoDate),
+            day: req(c, 'day', q, oneOf([1, 2] as const)),
+            slot: req(c, 'slot', q, str),
+            expect: {
+              reps: req(e, 'reps', qe, (z, w) => nullable(z, w, int)),
+              variant: req(e, 'variant', qe, (z, w) => nullable(z, w, str)),
+              note_prefix: req(e, 'note_prefix', qe, (z, w) => nullable(z, w, str)),
+              alternate: req(e, 'alternate', qe, bool),
+            },
+          };
+        })),
+        update: req(r, 'update', p, listOf(logSequenceVector)),
+      };
+    }],
   ]);
+}
+
+/** v1.10: a heavy-doubles prescription vector (also used by v1.12 alternate_weeks). */
+function doublesPrescribeVector(y: unknown, q: string): DoublesPrescribeVector {
+  const c = obj(y, q);
+  const e = req(c, 'expect', q, obj);
+  const qe = `${q}.expect`;
+  const out: DoublesPrescribeVector = {
+    name: req(c, 'name', q, str),
+    date: req(c, 'date', q, isoDate),
+    day: req(c, 'day', q, oneOf([1, 2] as const)),
+    lift: req(c, 'lift', q, oneOf(LIFT_IDS)),
+    expect: {
+      mode: req(e, 'mode', qe, barbellMode),
+      load: req(e, 'load', qe, num),
+      sets: req(e, 'sets', qe, int),
+      sets_max: req(e, 'sets_max', qe, (z, w) => nullable(z, w, int)),
+      reps: req(e, 'reps', qe, int),
+      single: req(e, 'single', qe, bool),
+    },
+  };
+  const patch = optional(c, 'state_patch', q, obj);
+  if (patch !== undefined) out.state_patch = patch;
+  return out;
 }
 
 // ---------------------------------------------------------------------

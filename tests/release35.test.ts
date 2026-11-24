@@ -6,7 +6,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import v110 from '../spec/programme_config_v1_10.json';
-import { PROGRAMME_CONFIG as cfg } from '../src/config/load';
+import v111 from '../spec/programme_config_v1_11.json';
+import { parseProgrammeConfig } from '../src/config/validate';
+
+// Pinned to config v1.11, the release it checks (v1.12 adds B weeks; see release36.test.ts).
+const cfg = parseProgrammeConfig(v111 as unknown);
 
 type Item = string | { slot: string; sets?: number };
 type Day = { target_min: number; blocks: { items: Item[] }[] };
